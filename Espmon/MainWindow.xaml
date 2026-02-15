@@ -35,7 +35,7 @@
                                         <TextBlock Grid.Column="0" x:Name="nameDisplayDefault" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" Visibility="Collapsed"/>
                                         <TextBox Grid.Column="0" x:Name="nameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="NameEdit_LostFocus" KeyDown="NameEdit_KeyDown"/>
                                         <Button Grid.Column="1" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Save" Click="SaveButton_Click">
-                                            <FontIcon Glyph="&#xE74E;" FontSize="14"/>
+                                             <FontIcon Glyph="&#xE74E;" FontSize="14"/>
                                         </Button>
                                         <Button Grid.Column="2" x:Name="deleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="DeleteButton_Click">
                                             <FontIcon Glyph="&#xE74D;" FontSize="14"/>
@@ -46,7 +46,7 @@
                         </ListView>
                     </Border>
                     <ScrollViewer Grid.Column="2" VerticalScrollMode="Auto" HorizontalScrollMode="Auto">
-                        <local:ScreenEditor x:Name="preview" />
+                        <local:ScreenEditor x:Name="preview" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                     </ScrollViewer>
                 </Grid>
                 <Grid x:Name="devicesPanel" Visibility="Collapsed">

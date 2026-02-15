@@ -24,6 +24,7 @@ public sealed partial class ScreenEditor : UserControl
     public ScreenEditor()
     {
         InitializeComponent();
+        screenView.ScalingMode = ScreenViewScalingMode.None;
         _suppressChange = true;
         screenPartComboBox.SelectedIndex = 0;
         _suppressChange = false;

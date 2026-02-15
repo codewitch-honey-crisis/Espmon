@@ -500,8 +500,17 @@ public partial class ScreenView : Canvas
         double x = position.X;
         double y = position.Y;
 
-        // Convert DIPs to physical pixels for hit test
-        double scaling = XamlRoot?.RasterizationScale ?? 1.0;
+         // Get the scaling factor based on ScalingMode
+        double scaling = 1.0;
+        if (ScalingMode == ScreenViewScalingMode.DpiAware)
+        {
+            // Get XamlRoot rasterization scale (WinUI3's DPI scaling)
+            if (XamlRoot != null)
+            {
+                scaling = XamlRoot.RasterizationScale;
+                _lastRasterizationScale = scaling;
+            }
+        }
         int pixelX = (int)(x * scaling);
         int pixelY = (int)(y * scaling);
 
@@ -535,7 +544,7 @@ public partial class ScreenView : Canvas
         // else ScalingMode.None uses scaling = 1.0 (pixel-perfect)
 
         // DIPs to pixels
-        int width = (int)Math.Ceiling(actualWidth * scaling);
+        int width = (int)Math.Ceiling(actualWidth *scaling);
         int height = (int)Math.Ceiling(actualHeight * scaling);
 
         if (_bitmap != null)
