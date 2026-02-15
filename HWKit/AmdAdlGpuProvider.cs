@@ -15,6 +15,16 @@ namespace HWKit
         }
         class LogAccessor
         {
+            static float ReadSensor(uint[] ulValues, ADL_PMLOG_SENSORS sensor)
+            {
+                // ulValues is interleaved: [sensorId, value, sensorId, value, ...]
+                for (int i = 0; i < ulValues.Length - 1; i += 2)
+                {
+                    if (ulValues[i] == (uint)sensor)
+                        return ulValues[i + 1];
+                }
+                return float.NaN; // not found / unsupported
+            }
             IntPtr _loggingAddress;
             public LogAccessor(IntPtr loggingAddrss)
             {
@@ -30,7 +40,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_GFXCLK];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_GFXCLK);
                 }
             }
             public float Temperature
@@ -38,7 +48,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX);
                 }
             }
             public float FanSpeed
@@ -46,7 +56,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM);
                 }
             }
 
@@ -55,7 +65,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE);
                 }
             }
             public float Load
@@ -63,7 +73,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX);
                 }
             }
             public float RamLoad
@@ -71,7 +81,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM);
                 }
             }
             public float CpuTemperature
@@ -79,7 +89,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_CPU];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_CPU);
                 }
             }
             public float RamTemperature
@@ -87,7 +97,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM);
                 }
             }
             public float PackageTemperature
@@ -95,7 +105,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_SOC];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_SOC);
                 }
             }
             public float RamClock
@@ -103,7 +113,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_MEMCLK];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_MEMCLK);
                 }
             }
             public float SocClock
@@ -111,7 +121,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_SOCCLK];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_SOCCLK);
                 }
             }
             public float CpuClock
@@ -119,7 +129,7 @@ namespace HWKit
                 get
                 {
                     var data = GetData();
-                    return data.ulValues[(int)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK];
+                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK);
                 }
             }
         }
