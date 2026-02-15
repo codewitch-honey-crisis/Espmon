@@ -1,0 +1,74 @@
+{
+    "name": "htcw_uix",
+    "version": "1.8.14",
+    "description": "A UI/UX library for embedded and IoT devices, for use with htcw_gfx",
+    "keywords": ["tft", "UX","UI","GUI","user-experience","user-interface", "graphics", "spi", "parallel", "i2c", "drawing", "jpg", "ttf", "font"],
+    "authors": {
+        "name":"honey the codewitch",
+        "homepage": "https://www.codeproject.com/Members/code-witch"
+    },
+    "license": "MIT",
+    "frameworks": "*",
+    "platforms": "*",
+    "build": {
+        "unflags": "-std=gnu++11",
+        "flags": "-std=gnu++17"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/codewitch-honey-crisis/uix.git"
+    },
+    "examples": [
+        {
+            "name": "benchmark",
+            "base": "examples/benchmark",
+            "files": [
+                "platformio.ini",
+                "include/lcd_config.h",
+                "include/assets/architects_daughter.h",
+                "src/main.cpp"
+            ]
+        },
+        {
+            "name": "core2_color_picker",
+            "base": "examples/core2_color_picker",
+            "files": [
+                "platformio.ini",
+                "include/lcd_config.h",
+                "include/assets/architects_daughter.h",
+                "src/main.cpp"
+            ]
+        },
+        {
+            "name": "core2_audio_monitor",
+            "base": "examples/core2_audio_monitor",
+            "files": [
+                "platformio.ini",
+                "include/hamming_window.hpp",
+                "include/i2s_sampler.hpp",
+                "include/kiss_fft_log.h",
+                "include/kiss_fft.h",
+                "include/kiss_fftr.h",
+                "include/lcd_config.h",
+                "include/palette.hpp",
+                "include/processor.hpp",
+                "include/ui.hpp",
+                "src/_kiss_fft_guts.h",
+                "src/kiss_fft.c",
+                "src/kiss_fftr.c",
+                "src/main.cpp"
+            ]
+        }
+    ],
+    "dependencies": {
+        "codewitch-honey-crisis/htcw_gfx": "^2.2.16"
+    },
+    "export": {
+        "exclude":
+        [
+            "build/*.*",
+            ".vscode/*.*",
+            "lib/*.*"
+        ]
+    }
+}

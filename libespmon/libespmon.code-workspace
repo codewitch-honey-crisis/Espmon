@@ -1,0 +1,27 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../common"
+		}
+	],
+    "settings": {
+        "files.associations": {
+            "random": "cpp",
+            "limits": "cpp",
+            "*.tcc": "cpp",
+            "plutovg-ft-types.h": "c",
+            "plutovg-ft-math.h": "c",
+            "plutovg-private.h": "c",
+            "plutovg.h": "c",
+            "plutovg-ft-raster.h": "c",
+            "setjmp.h": "c",
+            "chess.h": "c"
+        },
+        "chat.viewSessions.enabled": false,
+        "chat.viewWelcome.enabled": false,
+        "chat.tools.todos.showWidget": false
+    }
+}

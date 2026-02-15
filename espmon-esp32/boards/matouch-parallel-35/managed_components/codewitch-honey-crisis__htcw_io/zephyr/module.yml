@@ -1,0 +1,4 @@
+name: htcw_io
+build:
+  depends: 
+    - htcw_bits

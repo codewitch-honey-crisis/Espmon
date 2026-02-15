@@ -1,0 +1,30 @@
+<Solution>
+   <Configurations>
+      <Platform Name="Any CPU" />
+      <Platform Name="x64" />
+   </Configurations>
+   <Folder Name="/Solution Items/">
+      <File Path="espmon-esp32/LICENSE" />
+      <File Path="README.md" />
+   </Folder>
+   <Project Path="EspLinkLib/EspLinkLib.csproj">
+      <BuildDependency Project="EspLinkStubGen/EspLinkStubGen.csproj" />
+      <Platform Solution="Debug|x64" Project="x64" />
+   </Project>
+   <Project Path="EspLinkStubGen/EspLinkStubGen.csproj">
+      <Platform Solution="Debug|x64" Project="x64" />
+   </Project>
+   <Project Path="Espmon.Json/Espmon.Json.csproj" Id="b8295616-db0b-4e83-927e-0e429deb7b41">
+      <Platform Solution="Debug|x64" Project="x64" />
+   </Project>
+   <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj" Id="4eaac851-4c8f-45ae-a205-f0a801d3f191">
+      <Platform Solution="Debug|x64" Project="x64" />
+   </Project>
+   <Project Path="Espmon/Espmon.csproj" Id="f728e2dd-d182-4941-877b-27e766112757">
+      <Platform Project="x64" />
+      <Deploy />
+   </Project>
+   <Project Path="HWKit/HWKit.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+   </Project>
+</Solution>

@@ -1,0 +1,5 @@
+dependencies:
+  codewitch-honey-crisis/htcw_data: ^1.4.5
+  codewitch-honey-crisis/htcw_ml: ^0.2.9
+  idf: '>=5.0.0'
+version: 2.2.16

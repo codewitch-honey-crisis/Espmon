@@ -1,0 +1,11 @@
+# Build artifacts
+boards/*/build/
+boards/*/sdkconfig
+boards/*/sdkconfig.old
+
+# Generated firmware
+firmware/
+
+# IDE
+.vscode/
+*.code-workspace

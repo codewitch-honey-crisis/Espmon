@@ -1,0 +1,108 @@
+<UserControl
+    x:Class="Espmon.QuerySelector"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ValidationErrorBrush" Color="#C42B1C"/>
+        <SolidColorBrush x:Key="ValidationSuccessBrush" Color="#107C10"/>
+    </UserControl.Resources>
+
+    <Grid ColumnSpacing="4">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <AutoSuggestBox
+            
+            x:Name="SuggestBox"
+            Grid.Column="0"
+            Grid.Row="1"
+            Text="{x:Bind PathPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            ItemsSource="{x:Bind MatchingPaths, Mode=OneWay}"
+            PlaceholderText="Enter an expression..."
+            TextChanged="SuggestBox_TextChanged"
+            SuggestionChosen="SuggestBox_SuggestionChosen"
+            QuerySubmitted="SuggestBox_QuerySubmitted"
+            UpdateTextOnSelect="False">
+
+            <AutoSuggestBox.QueryIcon>
+                <FontIcon 
+                    Glyph="{x:Bind ValidationIcon, Mode=OneWay}"
+                    Foreground="{x:Bind ValidationBrush, Mode=OneWay}"/>
+            </AutoSuggestBox.QueryIcon>
+
+            <AutoSuggestBox.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                    <Grid Padding="4,2">
+                        <TextBlock 
+                            Text="{x:Bind}"
+                            FontFamily="Consolas"
+                            FontSize="12"/>
+                    </Grid>
+                </DataTemplate>
+            </AutoSuggestBox.ItemTemplate>
+
+            <AutoSuggestBox.Header>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Grid.Row="0" Visibility="{x:Bind MatchVisibility,Mode=OneWay}">
+                        <TextBlock
+                        Text="Matches"
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock 
+                        Text="{x:Bind MatchCountText, Mode=OneWay}"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Grid.Row="1">
+                    <TextBlock 
+                        Text="Evaluated to"
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock 
+                        Text="{x:Bind EvaluatedText, Mode=OneWay}"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+
+            </AutoSuggestBox.Header>
+        </AutoSuggestBox>
+        <Button 
+            x:Name="ChevronButton"
+            Grid.Row="1"
+            Grid.Column="1"
+            VerticalAlignment="Center" Height="34"
+            Padding="8,0">
+            <FontIcon Glyph="&#xE76C;" FontSize="12" Width="20"/>
+            <Button.Flyout>
+                <MenuFlyout x:Name="ChevronFlyout" Opening="ChevronFlyout_Opening"/>
+            </Button.Flyout>
+        </Button>
+        <TextBlock 
+            Grid.Row="0"
+            Grid.Column="0"
+            Grid.ColumnSpan="2"
+            Text="{x:Bind ValidationErrorMessage, Mode=OneWay}"
+            Foreground="{StaticResource ValidationErrorBrush}"
+            FontSize="11"
+            Margin="0,0,0,4"
+            TextWrapping="Wrap"/>
+
+    </Grid>
+</UserControl>

@@ -1,0 +1,37 @@
+{
+    "name": "htcw_ml",
+    "version": "0.2.9",
+    "description": "Provides classes for reading markup",
+    "keywords": ["io","markup","html","xml"],
+    "authors": {
+        "name":"honey the codewitch",
+        "homepage": "https://www.codeproject.com/Members/code-witch"
+    },
+    "license": "MIT",
+    "frameworks": "*",
+    "platforms": "*",
+    "build": {
+        "unflags": "-std=gnu++11",
+        "flags": "-std=gnu++14"
+    },
+    "repository":
+    {
+        "type": "git",
+        "url": "https://github.com/codewitch-honey-crisis/htcw_ml.git"
+    },
+    "dependencies": {
+        "codewitch-honey-crisis/htcw_io": "^1.4.1"
+    },
+    "examples": [
+        {
+            "name": "Demo",
+            "base": "examples/demo",
+            "files": [
+                "platformio.ini",
+                "data/books.xml",
+                "src/main.cpp"
+            ]
+        }
+    ]
+
+}

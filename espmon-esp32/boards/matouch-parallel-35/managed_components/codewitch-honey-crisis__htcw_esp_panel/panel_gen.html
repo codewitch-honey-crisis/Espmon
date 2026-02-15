@@ -1,0 +1,2569 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Configuration Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+            color: #222;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            margin-bottom: 15px;
+            color: #444;
+            font-size: 1.3em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .field-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 0.9em;
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: #555;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95em;
+            background: white;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+        }
+
+        input::placeholder {
+            color: #999;
+            font-style: italic;
+        }
+
+        .checkbox-field {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+
+        .checkbox-field input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .checkbox-field label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+
+        .bus-panel {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .bus-panel.active {
+            display: block;
+        }
+
+        .bus-panel h3 {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .subsection {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+        }
+
+        .subsection h3 {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        .hint {
+            font-size: 0.85em;
+            color: #777;
+            font-style: italic;
+            margin-top: 3px;
+        }
+
+        .pin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .pin-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pin-field label {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        /* New styles for hiding properties */
+        .properties-container {
+            display: block;
+        }
+
+        .properties-container.hidden {
+            display: none;
+        }
+        .validation-indicator {
+            display: flex;
+            color: red;
+        }
+
+        .validation-indicator.hidden {
+            display: none;
+        }
+        textarea {
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: scroll;
+        }
+    </style>
+</head>
+
+<body>
+    <datalist id="spi_hosts">
+        <option value="SPI_1">
+        <option value="SPI_2">
+        <option value="SPI_3">
+        <option value="SPI_4">
+    </datalist>
+    <datalist id="i2c_hosts">
+        <option value="I2C_1">
+        <option value="I2C_2">
+    </datalist>
+    <datalist id="mmc_hosts">
+        <option value="MMC_1">
+        <option value="MMC_2">
+    </datalist>
+    <datalist id="bool_choice">
+        <option value="0">
+        <option value="1">
+    </datalist>
+    <datalist id="color_spaces">
+        <option value="LCD_COLOR_RGB">
+        <option value="LCD_COLOR_BGR">
+        <option value="LCD_COLOR_GSC">
+    </datalist>
+    <datalist id="lcd_builtins">
+        <option value="esp_lcd_new_panel_ssd1306"></option>
+        <option value="esp_lcd_new_panel_st7789"></option>
+        <option value="esp_lcd_new_panel_nt35510"></option>
+    </datalist>
+    <h1>Panel Configuration Generator</h1>
+    <form id="panelConfigForm">
+        <!-- LCD Configuration Section -->
+        <div class="section">
+            <h2>LCD Display Configuration</h2>
+
+            <div class="field-group">
+                <div class="field">
+                    <label for="lcd_bus_type">Bus Type</label>
+                    <select id="lcd_bus_type" name="lcd_bus_type">
+                        <option value="">No LCD</option>
+                        <option value="spi">SPI</option>
+                        <option value="i2c">I2C</option>
+                        <option value="i8080">I8080 Parallel</option>
+                        <option value="rgb">RGB</option>
+                        <option value="mipi">MIPI DSI</option>
+                    </select>
+                </div>
+            </div>
+            <div id="lcd_settings" class="properties-container hidden">
+                <div class="field">
+                    <label for="LCD_INCLUDES">Include Code</label>
+                    <textarea id="LCD_INCLUDES" name="LCD_INCLUDES" rows="3"
+                        placeholder="e.g.: #include &quot;esp_lcd_panel_ili9341&quot;"></textarea>
+                    <span class="validation-indicator hidden"></span>
+                </div>
+                <div class="field">
+                    <label for="LCD_RESET">Extra Reset Procedure</label>
+                    <textarea id="LCD_RESET" name="LCD_RESET" rows="5" placeholder="{code}"></textarea>
+                </div>
+                <div class="field">
+                    <label for="LCD_VENDOR_CONFIG">Vendor Specific Configuration</label>
+                    <textarea id="LCD_VENDOR_CONFIG" name="LCD_VENDOR_CONFIG" rows="5" placeholder="{code}"></textarea>
+                </div>
+                <div class="field">
+                    <label for="LCD_TRANSLATE">Transfer Buffer Translation</label>
+                    <textarea id="LCD_TRANSLATE" name="LCD_TRANSLATE" rows="5" placeholder="{code}"></textarea>
+                </div>
+            </div>
+            <div id="lcd_properties" class="properties-container hidden">
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_INIT">Panel Initialization</label>
+                        <input type="text" id="LCD_INIT" name="LCD_INIT" placeholder="e.g.: esp_lcd_new_panel_ili9341" list="lcd_builtins">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_HRES">Horizontal Resolution</label>
+                        <input type="text" id="LCD_HRES" name="LCD_HRES" placeholder="e.g.: 320">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VRES">Vertical Resolution</label>
+                        <input type="text" id="LCD_VRES" name="LCD_VRES" placeholder="e.g.: 240">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_COLOR_SPACE">Color Space</label>
+                        <input type="text" id="LCD_COLOR_SPACE" name="LCD_COLOR_SPACE" placeholder="e.g.: LCD_COLOR_RGB" list="color_spaces">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_SWAP_COLOR_BYTES">Swap Color Bytes</label>
+                        <input type="text" id="LCD_SWAP_COLOR_BYTES" name="LCD_SWAP_COLOR_BYTES" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_INVERT_COLOR">Invert Color (Common for IPS)</label>
+                        <input type="text" id="LCD_INVERT_COLOR" name="LCD_INVERT_COLOR" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_BIT_DEPTH">Color Bit Depth</label>
+                        <input type="text" id="LCD_BIT_DEPTH" name="LCD_BIT_DEPTH" placeholder="e.g.: 16">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_GAP_X">X Offset (Gap)</label>
+                        <input type="text" id="LCD_GAP_X" name="LCD_GAP_X" placeholder="e.g.: 0">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_GAP_Y">Y Offset (Gap)</label>
+                        <input type="text" id="LCD_GAP_Y" name="LCD_GAP_Y" placeholder="e.g.: 0">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_X_ALIGN">X Flush Alignment</label>
+                        <input type="text" id="LCD_X_ALIGN" name="LCD_X_ALIGN" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_Y_ALIGN">Y Flush Alignment</label>
+                        <input type="text" id="LCD_Y_ALIGN" name="LCD_Y_ALIGN" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_SWAP_XY">Swap X and Y</label>
+                        <input type="text" id="LCD_SWAP_XY" name="LCD_SWAP_XY" placeholder="e.g.: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIRROR_X">Mirror X</label>
+                        <input type="text" id="LCD_MIRROR_X" name="LCD_MIRROR_X" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIRROR_Y">Mirror Y</label>
+                        <input type="text" id="LCD_MIRROR_Y" name="LCD_MIRROR_Y" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PIN_NUM_RST">Reset Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_RST" name="LCD_PIN_NUM_RST" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_RST_ON_LEVEL">Reset On Level</label>
+                        <input type="text" id="LCD_RST_ON_LEVEL" name="LCD_RST_ON_LEVEL" placeholder="1" list="bool_choice">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PIN_NUM_BCKL">Backlight Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_BCKL" name="LCD_PIN_NUM_BCKL" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_BCKL_ON_LEVEL">Backlight On Level</label>
+                        <input type="text" id="LCD_BCKL_ON_LEVEL" name="LCD_BCKL_ON_LEVEL" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DIVISOR">Transfer Divisor</label>
+                        <input type="text" id="LCD_DIVISOR" name="LCD_DIVISOR" placeholder="e.g.: 10">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_TRANSFER_SIZE">Transfer Buffer Size</label>
+                        <input type="text" id="LCD_TRANSFER_SIZE" name="LCD_TRANSFER_SIZE"
+                            placeholder="(derived from divisor - 0 disables)">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_TRANSFER_PALETTE">Transfer Buffer Has Palette</label>
+                        <input type="text" id="LCD_TRANSFER_PALETTE" name="LCD_TRANSFER_PALETTE"
+                            placeholder="(derived from color properties)" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_TRANSFER_PALETTE_SIZE">Transfer Buffer Palette Size</label>
+                        <input type="text" id="LCD_TRANSFER_PALETTE_SIZE" name="LCD_TRANSFER_PALETTE_SIZE"
+                            placeholder="(derived from color properties)">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_TRANSFER_IN_SPIRAM">Transfer Buffer in PSRAM</label>
+                        <input type="text" id="LCD_TRANSFER_IN_SPIRAM" name="LCD_TRANSFER_IN_SPIRAM" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_FULLSCREEN_TRANSFER">Use Fullscreen Transfers</label>
+                        <input type="text" id="LCD_FULLSCREEN_TRANSFER" name="LCD_FULLSCREEN_TRANSFER" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_SYNC_TRANSFER">Use Synchronous Transfers</label>
+                        <input type="text" id="LCD_SYNC_TRANSFER" name="LCD_SYNC_TRANSFER" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                </div>
+            </div>
+
+            <!-- LCD SPI Panel -->
+            <div id="lcd_spi_panel" class="bus-panel">
+                <h3>SPI Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_SPI_HOST">SPI Host</label>
+                        <input type="text" id="LCD_SPI_HOST" name="LCD_SPI_HOST" placeholder="e.g.: SPI_3" list="spi_hosts">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CLOCK_HZ_SPI">Clock (MHz)</label>
+                        <input type="text" id="LCD_CLOCK_HZ_SPI" name="LCD_CLOCK_HZ_SPI" placeholder="e.g.: 20">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CMD_BITS_SPI">Command Bits</label>
+                        <input type="text" id="LCD_CMD_BITS_SPI" name="LCD_CMD_BITS_SPI" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PARAM_BITS_SPI">Param Bits</label>
+                        <input type="text" id="LCD_PARAM_BITS_SPI" name="LCD_PARAM_BITS_SPI" placeholder="e.g.: 8">
+                    </div>
+                </div>
+
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D00_SPI">MOSI/Data 0 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D00_SPI" name="LCD_PIN_NUM_D00_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D01_SPI">MISO/Data 1 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D01_SPI" name="LCD_PIN_NUM_D01_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D02_SPI">QuadWP/Data 2 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D02_SPI" name="LCD_PIN_NUM_D02_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_DO3_SPI">QuadHD/Data 3 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D03_SPI" name="LCD_PIN_NUM_D03_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D04_SPI">Data 4 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D04_SPI" name="LCD_PIN_NUM_D04_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D05_SPI">Data 5 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D05_SPI" name="LCD_PIN_NUM_D05_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D06_SPI">Data 6 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D06_SPI" name="LCD_PIN_NUM_D06_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D07_SPI">Data 7 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D07_SPI" name="LCD_PIN_NUM_D07_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_CLK_SPI">Clock Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_CLK_SPI" name="LCD_PIN_NUM_CLK_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_CS_SPI">Chip Select Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_CS_SPI" name="LCD_PIN_NUM_CS_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_DC_SPI">Data/Command Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_DC_SPI" name="LCD_PIN_NUM_DC_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LCD I2C Panel -->
+            <div id="lcd_i2c_panel" class="bus-panel">
+                <h3>I2C Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_I2C_HOST">I2C Host</label>
+                        <input type="text" id="LCD_I2C_HOST" name="LCD_I2C_HOST" placeholder="e.g.: I2C_1" list="i2c_hosts">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CLOCK_HZ_I2C">Clock (KHz)</label>
+                        <input type="text" id="LCD_CLOCK_HZ_I2C" name="LCD_CLOCK_HZ_I2C" placeholder="e.g.: 200">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_I2C_ADDRESS_I2C">I2C Address</label>
+                        <input type="text" id="LCD_I2C_ADDRESS_I2C" name="LCD_I2C_ADDRESS_I2C" placeholder="e.g.: 0x3C">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_I2C_PULLUP_I2C">Use Internal Pullups</label>
+                        <input type="text" id="LCD_I2C_PULLUP_I2C" name="LCD_I2C_PULLUP_I2C" placeholder="e.g.: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CMD_BITS_I2C">Command Bits</label>
+                        <input type="text" id="LCD_CMD_BITS_I2C" name="LCD_CMD_BITS_I2C" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PARAM_BITS_I2C">Param Bits</label>
+                        <input type="text" id="LCD_PARAM_BITS_I2C" name="LCD_PARAM_BITS_I2C" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DC_BIT_OFFSET_I2C">DC Bit Offset</label>
+                        <input type="text" id="LCD_DC_BIT_OFFSET_I2C" name="LCD_DC_BIT_OFFSET_I2C" placeholder="e.g.: 6">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CONTROL_PHASE_BYTES_I2C">Control Phase Bytes</label>
+                        <input type="text" id="LCD_CONTROL_PHASE_BYTES_I2C" name="LCD_CONTROL_PHASE_BYTES_I2C" placeholder="e.g.: 1">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DISABLE_CONTROL_PHASE_I2C">Disable Control Phase</label>
+                        <input type="text" id="LCD_DISABLE_CONTROL_PHASE_I2C" name="LCD_DISABLE_CONTROL_PHASE_I2C" placeholder="e.g.: 1" list="bool_choice">
+                    </div>
+                </div>
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_SDA">SDA Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_SDA_I2C" name="LCD_PIN_NUM_SDA_I2C" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_SCL">SCL Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_SCL_I2C" name="LCD_PIN_NUM_SCL_I2C" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- I8080 Bus Panel -->
+            <div id="lcd_i8080_panel" class="bus-panel">
+                <h3>I8080 Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_CLOCK_HZ_I8080">Clock (MHz)</label>
+                        <input type="text" id="LCD_CLOCK_HZ_I8080" name="LCD_CLOCK_HZ_I8080" placeholder="e.g.: 6">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CMD_BITS_I8080">Command Bits</label>
+                        <input type="text" id="LCD_CMD_BITS_I8080" name="LCD_CMD_BITS_I8080" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PARAM_BITS_I8080">Param Bits</label>
+                        <input type="text" id="LCD_PARAM_BITS_I8080" name="LCD_PARAM_BITS_I8080" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CS_ON_LEVEL_I8080">CS On Level</label>
+                        <input type="text" id="LCD_CS_ON_LEVEL_I8080" name="LCD_CS_ON_LEVEL_I8080" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DC_ON_LEVEL_I8080">DC/RS On Level</label>
+                        <input type="text" id="LCD_DC_ON_LEVEL_I8080" name="LCD_DC_ON_LEVEL_I8080" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_REVERSE_COLOR_BITS_I8080">Reverse Color Bits</label>
+                        <input type="text" id="LCD_REVERSE_COLOR_BITS_I8080" name="LCD_REVERSE_COLOR_BITS_I8080" placeholder="e.g.: 0" list="bool_choice">
+                    </div>
+                </div>
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D00_I8080">Data 0 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D00_I8080" name="LCD_PIN_NUM_D00_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D01_I8080">Data 1 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D01_I8080" name="LCD_PIN_NUM_D01_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D02_I8080">Data 2 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D02_I8080" name="LCD_PIN_NUM_D02_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D03_I8080">Data 3 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D03_I8080" name="LCD_PIN_NUM_D03_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D04_I8080">Data 4 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D04_I8080" name="LCD_PIN_NUM_D04_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D05_I8080">Data 5 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D05_I8080" name="LCD_PIN_NUM_D05_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D06_I8080">Data 6 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D06_I8080" name="LCD_PIN_NUM_D06_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D07_I8080">Data 7 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D07_I8080" name="LCD_PIN_NUM_D07_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D08_I8080">Data 8 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D08_I8080" name="LCD_PIN_NUM_D08_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D09_I8080">Data 9 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D09_I8080" name="LCD_PIN_NUM_D09_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D10_I8080">Data 10 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D10_I8080" name="LCD_PIN_NUM_D10_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D11_I8080">Data 11 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D11_I8080" name="LCD_PIN_NUM_D11_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D12_I8080">Data 12 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D12_I8080" name="LCD_PIN_NUM_D12_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D13_I8080">Data 13 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D13_I8080" name="LCD_PIN_NUM_D13_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D14_I8080">Data 14 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D14_I8080" name="LCD_PIN_NUM_D14_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D15_I8080">Data 15 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D15_I8080" name="LCD_PIN_NUM_D15_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_CS_I8080">Chip Select Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_CS_I8080" name="LCD_PIN_NUM_CS_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_DC_I8080">Data/Command/RS Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_DC_I8080" name="LCD_PIN_NUM_DC_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_WR_I8080">Write Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_WR_I8080" name="LCD_PIN_NUM_WR_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_RD_I8080">Read Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_RD_I8080" name="LCD_PIN_NUM_RD_I8080" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LCD RGB Panel -->
+            <div id="lcd_rgb_panel" class="bus-panel">
+                <h3>RGB Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_CLOCK_HZ_RGB">Clock (MHz)</label>
+                        <input type="text" id="LCD_CLOCK_HZ_RGB" name="LCD_CLOCK_HZ_RGB" placeholder="e.g: 16">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DATA_ENDIAN_LITTLE_RGB">Little Endian Data</label>
+                        <input type="text" id="LCD_DATA_ENDIAN_LITTLE_RGB" name="LCD_DATA_ENDIAN_LITTLE_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CLK_ON_LEVEL_RGB">Clock On Level</label>
+                        <input type="text" id="LCD_CLK_ON_LEVEL_RGB" name="LCD_CLK_ON_LEVEL_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CLK_ACTIVE_NEG_RGB">Clock Active Negative</label>
+                        <input type="text" id="LCD_CLK_ACTIVE_NEG_RGB" name="LCD_CLK_ACTIVE_NEG_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_FRAMEBUFFER_COUNT_RGB">Framebuffer Count</label>
+                        <input type="text" id="LCD_FRAMEBUFFER_COUNT_RGB" name="LCD_FRAMEBUFFER_COUNT_RGB"
+                            placeholder="e.g.: 2">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DE_ON_LEVEL_RGB">Data Enable On Level</label>
+                        <input type="text" id="LCD_DE_ON_LEVEL_RGB" name="LCD_DE_ON_LEVEL_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_ON_LEVEL_RGB">VSYNC On Level</label>
+                        <input type="text" id="LCD_VSYNC_ON_LEVEL_RGB" name="LCD_VSYNC_ON_LEVEL_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_DISP_ON_LEVEL_RGB">Display Command On Level</label>
+                        <input type="text" id="LCD_DISP_ON_LEVEL_RGB" name="LCD_DISP_ON_LEVEL_RGB" placeholder="e.g: 1" list="bool_choice">
+                    </div>
+                </div>
+
+                <h3>Timing Parameters</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_HSYNC_PULSE_WIDTH_RGB">HSYNC Pulse Width</label>
+                        <input type="text" id="LCD_HSYNC_PULSE_WIDTH_RGB" name="LCD_HSYNC_PULSE_WIDTH_RGB"
+                            placeholder="e.g.: 1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_HSYNC_BACK_PORCH_RGB">HSYNC Back Porch</label>
+                        <input type="text" id="LCD_HSYNC_BACK_PORCH_RGB" name="LCD_RGB_HSYNC_BACK_PORCH_RGB"
+                            placeholder="e.g.: 40">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_HSYNC_FRONT_PORCH_RGB">HSYNC Front Porch</label>
+                        <input type="text" id="LCD_HSYNC_FRONT_PORCH_RGB" name="LCD_HSYNC_FRONT_PORCH_RGB"
+                            placeholder="e.g.: 20">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_PULSE_WIDTH_RGB">VSYNC Pulse Width</label>
+                        <input type="text" id="LCD_VSYNC_PULSE_WIDTH_RGB" name="LCD_VSYNC_PULSE_WIDTH_RGB"
+                            placeholder="e.g.: 1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_BACK_PORCH_RGB">VSYNC Back Porch</label>
+                        <input type="text" id="LCD_VSYNC_BACK_PORCH_RGB" name="LCD_VSYNC_BACK_PORCH_RGB"
+                            placeholder="e.g.: 8">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_FRONT_PORCH_RGB">VSYNC Front Porch</label>
+                        <input type="text" id="LCD_VSYNC_FRONT_PORCH_RGB" name="LCD_VSYNC_FRONT_PORCH_RGB"
+                            placeholder="e.g.: 8">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D00_RGB">Data 0 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D00_RGB" name="LCD_PIN_NUM_D00_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D01_RGB">Data 1 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D01_RGB" name="LCD_PIN_NUM_D01_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D02_RGB">Data 2 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D02_RGB" name="LCD_PIN_NUM_D02_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D03_RGB">Data 3 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D03_RGB" name="LCD_PIN_NUM_D03_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D04_RGB">Data 4 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D04_RGB" name="LCD_PIN_NUM_D04_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D05_RGB">Data 5 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D05_RGB" name="LCD_PIN_NUM_D05_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D06_RGB">Data 6 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D06_RGB" name="LCD_PIN_NUM_D06_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D07_RGB">Data 7 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D07_RGB" name="LCD_PIN_NUM_D07_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D08_RGB">Data 8 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D08_RGB" name="LCD_PIN_NUM_D08_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D09_RGB">Data 9 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D09_RGB" name="LCD_PIN_NUM_D09_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D10_RGB">Data 10 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D10_RGB" name="LCD_PIN_NUM_D10_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D11_RGB">Data 11 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D11_RGB" name="LCD_PIN_NUM_D11_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D12_RGB">Data 12 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D12_RGB" name="LCD_PIN_NUM_D12_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D13_RGB">Data 13 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D13_RGB" name="LCD_PIN_NUM_D13_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D14_RGB">Data 14 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D14_RGB" name="LCD_PIN_NUM_D14_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_D15_RGB">Data 15 Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_D15_RGB" name="LCD_PIN_NUM_D15_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_DISP_RGB">Display Command Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_DISP_RGB" name="LCD_PIN_NUM_DISP_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_HSYNC_RGB">HSYNC Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_HSYNC_RGB" name="LCD_PIN_NUM_HSYNC_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_VSYNC_RGB">VSYNC Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_VSYNC_RGB" name="LCD_PIN_NUM_VSYNC_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_DE_RGB">Data Enable Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_DE_RGB" name="LCD_PIN_NUM_DE_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_CLK">Clock Pin</label>
+                        <input type="text" id="LCD_PIN_NUM_CLK_RGB" name="LCD_PIN_NUM_CLK_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_SDA_RGB">SDA Pin (for initialization)</label>
+                        <input type="text" id="LCD_PIN_NUM_SDA_RGB" name="LCD_PIN_NUM_SDA_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="LCD_PIN_NUM_SCL_RGB">SCL Pin (for initialization)</label>
+                        <input type="text" id="LCD_PIN_NUM_SCL_RGB" name="LCD_PIN_NUM_SCL_RGB" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    
+                </div>
+            </div>
+
+            <!-- LCD MIPI Panel -->
+            <div id="lcd_mipi_panel" class="bus-panel">
+                <h3>MIPI DSI Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_MIPI_BUS_ID_MIPI">Bus ID</label>
+                        <input type="text" id="LCD_MIPI_BUS_ID_MIPI" name="LCD_MIPI_BUS_ID_MIPI" placeholder="0">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIPI_CHANNEL_MIPI">Channel</label>
+                        <input type="text" id="LCD_MIPI_CHANNEL_MIPI" name="LCD_MIPI_CHANNEL_MIPI" placeholder="0">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIPI_LANES_MIPI">Lanes</label>
+                        <input type="text" id="LCD_MIPI_LANES_MIPI" name="LCD_MIPI_LANES_MIPI" placeholder="2">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CLOCK_HZ_MIPI">Clock (MHz)</label>
+                        <input type="text" id="LCD_CLOCK_HZ_MIPI" name="LCD_CLOCK_HZ_MIPI" placeholder="e.g.: 46">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIPI_DMA2D_MIPI">Use MIPI DMA2D</label>
+                        <input type="text" id="LCD_MIPI_DMA2D_MIPI" name="LCD_MIPI_DMA2D_MIPI" placeholder="1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIPI_DSI_PHY_PWR_LDO_CHAN_MIPI">Power LDO Channel</label>
+                        <input type="text" id="LCD_MIPI_DSI_PHY_PWR_LDO_CHAN_MIPI" name="LCD_MIPI_DSI_PHY_PWR_LDO_CHAN_MIPI" placeholder="e.g.: 3">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV_MIPI">Power LDO Millivolts</label>
+                        <input type="text" id="LCD_MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV_MIPI" name="LCD_MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV_MIPI" placeholder="e.g.: 2500">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_FRAMEBUFFER_COUNT_MIPI">Framebuffer Count</label>
+                        <input type="text" id="LCD_FRAMEBUFFER_COUNT_MIPI" name="LCD_FRAMEBUFFER_COUNT_MIPI"
+                            placeholder="e.g.: 2">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_CMD_BITS_MIPI">Command Bits</label>
+                        <input type="text" id="LCD_CMD_BITS_MIPI" name="LCD_CMD_BITS_MIPI" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="LCD_PARAM_BITS_MIPI">Param Bits</label>
+                        <input type="text" id="LCD_PARAM_BITS_MIPI" name="LCD_PARAM_BITS_MIPI" placeholder="e.g.: 8">
+                    </div>
+                </div>
+                <h3>Timing Parameters</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="LCD_HSYNC_PULSE_WIDTH_MIPI">HSYNC Pulse Width</label>
+                        <input type="text" id="LCD_HSYNC_PULSE_WIDTH_MIPI" name="LCD_HSYNC_PULSE_WIDTH_MIPI"
+                            placeholder="e.g.: 1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_HSYNC_BACK_PORCH_MIPI">HSYNC Back Porch</label>
+                        <input type="text" id="LCD_HSYNC_BACK_PORCH_MIPI" name="LCD_MIPI_HSYNC_BACK_PORCH_MIPI"
+                            placeholder="e.g.: 40">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_HSYNC_FRONT_PORCH_MIPI">HSYNC Front Porch</label>
+                        <input type="text" id="LCD_HSYNC_FRONT_PORCH_MIPI" name="LCD_HSYNC_FRONT_PORCH_MIPI"
+                            placeholder="e.g.: 20">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_PULSE_WIDTH_MIPI">VSYNC Pulse Width</label>
+                        <input type="text" id="LCD_VSYNC_PULSE_WIDTH_MIPI" name="LCD_VSYNC_PULSE_WIDTH_MIPI"
+                            placeholder="e.g.: 1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_BACK_PORCH_MIPI">VSYNC Back Porch</label>
+                        <input type="text" id="LCD_VSYNC_BACK_PORCH_MIPI" name="LCD_VSYNC_BACK_PORCH_MIPI"
+                            placeholder="e.g.: 8">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="LCD_VSYNC_FRONT_PORCH_MIPI">VSYNC Front Porch</label>
+                        <input type="text" id="LCD_VSYNC_FRONT_PORCH_MIPI" name="LCD_VSYNC_FRONT_PORCH_MIPI"
+                            placeholder="e.g.: 8">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Touch Configuration Section -->
+        <div class="section">
+            <h2>Touch Configuration</h2>
+            <div class="field-group">
+                <div class="field">
+                    <label for="touch_bus_type">Bus Type</label>
+                    <select id="touch_bus_type" name="touch_bus_type">
+                        <option value="">No Touch</option>
+                        <option value="spi">SPI</option>
+                        <option value="i2c">I2C</option>
+                    </select>
+                </div>
+            </div>
+            <div id="touch_settings" class="properties-container hidden">
+                <div class="field">
+                    <label for="TOUCH_INCLUDES">Include Code</label>
+                    <textarea id="TOUCH_INCLUDES" name="TOUCH_INCLUDES" rows="3"
+                        placeholder="e.g.: #include &quot;esp_lcd_touch_gt911&quot;"></textarea>
+                    <span class="validation-indicator hidden"></span>
+                </div>
+                <div class="field">
+                    <label for="TOUCH_RESET">Extra Reset Procedure</label>
+                    <textarea id="TOUCH_RESET" name="TOUCH_RESET" rows="5" placeholder="{code}"></textarea>
+                </div>
+                <div class="field">
+                    <label for="TOUCH_VENDOR_CONFIG">Vendor Specific Configuration</label>
+                    <textarea id="TOUCH_VENDOR_CONFIG" name="TOUCH_VENDOR_CONFIG" rows="5" placeholder="{code}"></textarea>
+                </div>
+            </div>
+            <div id="touch_properties" class="properties-container hidden">
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_INIT">Panel Initialization</label>
+                        <input type="text" id="TOUCH_INIT" name="TOUCH_INIT" placeholder="e.g.: esp_lcd_touch_new_panel_gt911">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_HRES">Horizontal Resolution</label>
+                        <input type="text" id="TOUCH_HRES" name="TOUCH_HRES" placeholder="e.g.: 320 (defaults to LCD_HRES)">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+
+                    <div class="field">
+                        <label for="TOUCH_VRES">Vertical Resolution</label>
+                        <input type="text" id="TOUCH_VRES" name="TOUCH_VRES" placeholder="e.g.: 240 (defaults to LCD_VRES)">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_LEFT_OVERHANG">Left Overhang</label>
+                        <input type="text" id="TOUCH_LEFT_OVERHANG" name="TOUCH_LEFT_OVERHANG" placeholder="e.g.: 10">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_TOP_OVERHANG">Top Overhang</label>
+                        <input type="text" id="TOUCH_TOP_OVERHANG" name="TOUCH_TOP_OVERHANG" placeholder="e.g.: 10">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_RIGHT_OVERHANG">Right Overhang</label>
+                        <input type="text" id="TOUCH_RIGHT_OVERHANG" name="TOUCH_RIGHT_OVERHANG" placeholder="e.g.: 10">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_BOTTOM_OVERHANG">Bottom Overhang</label>
+                        <input type="text" id="TOUCH_BOTTOM_OVERHANG" name="TOUCH_BOTTOM_OVERHANG" placeholder="e.g.: 10">
+                    </div>
+
+                </div>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_SWAP_XY">Swap X and Y</label>
+                        <input type="text" id="TOUCH_SWAP_XY" name="TOUCH_SWAP_XY" placeholder="e.g. 1 (default same as LCD)" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_MIRROR_X">Mirror X</label>
+                        <input type="text" id="TOUCH_MIRROR_X" name="TOUCH_MIRROR_X" placeholder="e.g. 1 (default same as LCD)" list="bool_choice">
+                        
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_MIRROR_Y">Mirror Y</label>
+                        <input type="text" id="TOUCH_MIRROR_Y" name="TOUCH_MIRROR_Y" placeholder="e.g. 1 (default same as LCD)" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_UPDATE_LIMIT_MS">Update Rate Limit (milliseconds)</label>
+                        <input type="text" id="TOUCH_UPDATE_LIMIT_MS" name="TOUCH_UPDATE_LIMIT_MS" placeholder="e.g.: 13">
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_INT">Interrupt Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_INT" name="TOUCH_PIN_NUM_INT" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_INT_ON_LEVEL">Interrupt On Level</label>
+                        <input type="text" id="TOUCH_INT_ON_LEVEL" name="TOUCH_INT_ON_LEVEL" placeholder="1" list="bool_choice">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_RST">Reset Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_RST" name="TOUCH_PIN_NUM_RST" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_RST_ON_LEVEL">Reset On Level</label>
+                        <input type="text" id="TOUCH_RST_ON_LEVEL" name="TOUCH_RST_ON_LEVEL" placeholder="e.g.: 1" list="bool_choice">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Touch SPI Panel -->
+            <div id="touch_spi_panel" class="bus-panel">
+                <h3>SPI Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_SPI_HOST">SPI Host</label>
+                        <input type="text" id="TOUCH_SPI_HOST" name="TOUCH_SPI_HOST" placeholder="e.g.: SPI_3" list="spi_hosts">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_CLOCK_HZ_SPI">Clock (MHz)</label>
+                        <input type="text" id="TOUCH_CLOCK_HZ_SPI" name="TOUCH_CLOCK_HZ" placeholder="e.g.: 20">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_CMD_BITS_SPI">Command Bits</label>
+                        <input type="text" id="TOUCH_CMD_BITS_SPI" name="TOUCH_CMD_BITS_SPI" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_PARAM_BITS_SPI">Param Bits</label>
+                        <input type="text" id="TOUCH_PARAM_BITS_SPI" name="TOUCH_PARAM_BITS_SPI" placeholder="e.g.: 8">
+                    </div>
+                </div>
+
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D00_SPI">MOSI/Data 0 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D00_SPI" name="TOUCH_PIN_NUM_D00_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D01_SPI">MISO/Data 1 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D01_SPI" name="TOUCH_PIN_NUM_D01_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D02_SPI">QuadWP/Data 2 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D02_SPI" name="TOUCH_PIN_NUM_D02_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_DO3_SPI">QuadHD/Data 3 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D03_SPI" name="TOUCH_PIN_NUM_D03_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D04_SPI">Data 4 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D04_SPI" name="TOUCH_PIN_NUM_D04_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D05_SPI">Data 5 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D05_SPI" name="TOUCH_PIN_NUM_D05_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D06_SPI">Data 6 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D06_SPI" name="TOUCH_PIN_NUM_D06_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_D07_SPI">Data 7 Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_D07_SPI" name="TOUCH_PIN_NUM_D07_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_CLK_SPI">Clock Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_CLK_SPI" name="TOUCH_PIN_NUM_CLK_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_CS_SPI">Chip Select Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_CS_SPI" name="TOUCH_PIN_NUM_CS_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Touch I2C Panel -->
+            <div id="touch_i2c_panel" class="bus-panel">
+                <h3>I2C Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="TOUCH_I2C_HOST">I2C Host</label>
+                        <input type="text" id="TOUCH_I2C_HOST" name="TOUCH_I2C_HOST" placeholder="e.g.: I2C_1" list="i2c_hosts">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_CLOCK_HZ_I2C">Clock (KHz)</label>
+                        <input type="text" id="TOUCH_CLOCK_HZ_I2C" name="TOUCH_CLOCK_HZ_I2C" placeholder="e.g.: 200">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_I2C_ADDRESS_I2C">I2C Address</label>
+                        <input type="text" id="TOUCH_I2C_ADDRESS_I2C" name="TOUCH_I2C_ADDRESS_I2C" placeholder="e.g.: 0x3C">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_I2C_PULLUP_I2C">Use Internal Pullups</label>
+                        <input type="text" id="TOUCH_I2C_PULLUP_I2C" name="TOUCH_I2C_PULLUP_I2C" placeholder="e.g.: 1" list="bool_choice">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_CMD_BITS_I2C">Command Bits</label>
+                        <input type="text" id="TOUCH_CMD_BITS_I2C" name="TOUCH_CMD_BITS_I2C" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_PARAM_BITS_I2C">Param Bits</label>
+                        <input type="text" id="TOUCH_PARAM_BITS_I2C" name="TOUCH_PARAM_BITS_I2C" placeholder="e.g.: 8">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_DC_BIT_OFFSET_I2C">DC Bit Offset</label>
+                        <input type="text" id="TOUCH_DC_BIT_OFFSET_I2C" name="TOUCH_DC_BIT_OFFSET_I2C" placeholder="e.g.: 6">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_CONTROL_PHASE_BYTES_I2C">Control Phase Bytes</label>
+                        <input type="text" id="TOUCH_CONTROL_PHASE_BYTES_I2C" name="TOUCH_CONTROL_PHASE_BYTES_I2C" placeholder="e.g.: 1">
+                    </div>
+                    <div class="field">
+                        <label for="TOUCH_DISABLE_CONTROL_PHASE_I2C">Disable Control Phase</label>
+                        <input type="text" id="TOUCH_DISABLE_CONTROL_PHASE_I2C" name="TOUCH_DISABLE_CONTROL_PHASE_I2C" placeholder="e.g.: 1" list="bool_choice">
+                    </div>
+                </div>
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_SDA_I2C">SDA Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_SDA_I2C" name="TOUCH_PIN_NUM_SDA_I2C" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="TOUCH_PIN_NUM_SCL_I2C">SCL Pin</label>
+                        <input type="text" id="TOUCH_PIN_NUM_SCL_I2C" name="TOUCH_PIN_NUM_SCL_I2C" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Power Configuration Section -->
+        <div class="section">
+            <h2>Power Configuration</h2>
+            <div class="field-group">
+                <div class="field">
+                    <label for="power_bus_type">Bus Type</label>
+                    <select id="power_bus_type" name="power_bus_type">
+                        <option value="">No Power</option>
+                        <option value="spi">SPI</option>
+                        <option value="i2c">I2C</option>
+                    </select>
+                </div>
+            </div>
+            <div id="power_settings" class="properties-container hidden">
+                <div class="field">
+                    <label for="POWER_INCLUDES">Include Code</label>
+                    <textarea id="POWER_INCLUDES" name="POWER_INCLUDES" rows="3"
+                        placeholder="e.g.: #include &quot;m5_stack_core2_power.h&quot;"></textarea>
+                    <span class="validation-indicator hidden"></span>
+                </div>
+            </div>
+            <div id="power_properties" class="properties-container hidden">
+                <!-- Power Init Panel -->
+                <div id="power_init_panel" class="bus-panel">
+                    <h3>Power Initialization Sequence</h3>
+                    <div class="field-group">
+                        <div class="field">
+                            <label for="POWER_INIT">Init code</label>
+                            <input type="text" id="POWER_INIT" name="POWER_INIT" placeholder="{code}">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Power SPI Panel -->
+                <div id="power_spi_panel" class="bus-panel">
+                    <h3>SPI Configuration</h3>
+                    <div class="field-group">
+                        <div class="field">
+                            <label for="POWER_SPI_HOST">SPI Host</label>
+                            <input type="text" id="POWER_SPI_HOST" name="POWER_SPI_HOST" placeholder="e.g.: SPI_3" list="spi_hosts">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="field">
+                            <label for="POWER_CLOCK_HZ_SPI">Clock (MHz)</label>
+                            <input type="text" id="POWER_CLOCK_HZ_SPI" name="POWER_CLOCK_HZ" placeholder="e.g.: 20">
+                        </div>
+                    </div>
+
+                    <h3>Pin Configuration</h3>
+                    <div class="pin-grid">
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D00_SPI">MOSI/Data 0 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D00_SPI" name="POWER_PIN_NUM_D00_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D01_SPI">MISO/Data 1 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D01_SPI" name="POWER_PIN_NUM_D01_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D02_SPI">QuadWP/Data 2 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D02_SPI" name="POWER_PIN_NUM_D02_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_DO3_SPI">QuadHD/Data 3 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D03_SPI" name="POWER_PIN_NUM_D03_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D04_SPI">Data 4 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D04_SPI" name="POWER_PIN_NUM_D04_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D05_SPI">Data 5 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D05_SPI" name="POWER_PIN_NUM_D05_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D06_SPI">Data 6 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D06_SPI" name="POWER_PIN_NUM_D06_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_D07_SPI">Data 7 Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_D07_SPI" name="POWER_PIN_NUM_D07_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_CLK_SPI">Clock Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_CLK_SPI" name="POWER_PIN_NUM_CLK_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_CS_SPI">Chip Select Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_CS_SPI" name="POWER_PIN_NUM_CS_SPI" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Power I2C Panel -->
+                <div id="power_i2c_panel" class="bus-panel">
+                    <h3>I2C Power Management</h3>
+                    <div class="field-group">
+                        <div class="field">
+                            <label for="POWER_I2C_HOST">I2C Host</label>
+                            <input type="text" id="POWER_I2C_HOST" name="POWER_I2C_HOST" placeholder="I2C_1" list="i2c_hosts">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="field">
+                            <label for="POWER_I2C_ADDRESS">I2C Address</label>
+                            <input type="text" id="POWER_I2C_ADDRESS_I2C" name="POWER_I2C_ADDRESS_I2C" placeholder="e.g.: 0x34">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="field">
+                            <label for="POWER_CLOCK_HZ_I2C">Clock (KHz)</label>
+                            <input type="text" id="POWER_CLOCK_HZ_I2C" name="POWER_CLOCK_HZ_I2C" placeholder="e.g.: 100">
+                        </div>
+                        <div class="field">
+                            <label for="POWER_I2C_PULLUP_I2C">Use Internal Pullups</label>
+                            <input type="text" id="POWER_I2C_PULLUP_I2C" name="POWER_I2C_PULLUP_I2C" placeholder="e.g.: 1" list="bool_choice">
+                        </div>
+                    </div>
+
+                    <h3>Pin Configuration</h3>
+                    <div class="pin-grid">
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_SDA_I2C">SDA Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_SDA_I2C" name="POWER_PIN_NUM_SDA_I2C" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                        <div class="pin-field">
+                            <label for="POWER_PIN_NUM_SCL_I2C">SCL Pin</label>
+                            <input type="text" id="POWER_PIN_NUM_SCL_I2C" name="POWER_PIN_NUM_SCL_I2C" placeholder="-1">
+                            <span class="validation-indicator hidden"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- SD Card Configuration Section -->
+        <div class="section">
+            <h2>SD Card Configuration</h2>
+            <div class="field-group">
+                <div class="field">
+                    <label for="sd_bus_type">Bus Type</label>
+                    <select id="sd_bus_type" name="sd_bus_type">
+                        <option value="">No SD</option>
+                        <option value="spi">SPI</option>
+                        <option value="mmc">MMC</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="sd_properties" class="properties-container hidden">
+                <div class="field">
+                    <label for="SD_MOUNT_POINT">Mount Point</label>
+                    <input type="text" id="SD_MOUNT_POINT" name="SD_MOUNT_POINT" placeholder="/sdcard">
+                </div>
+                <div class="pin-field">
+                    <label for="SD_PIN_NUM_CD">Change Detect Pin</label>
+                    <input type="text" id="SD_PIN_NUM_CD" name="SD_PIN_NUM_CD" placeholder="-1">
+                    <span class="validation-indicator hidden"></span>
+                </div>
+                <div class="pin-field">
+                    <label for="SD_PIN_NUM_WP">Write Protect Pin</label>
+                    <input type="text" id="SD_PIN_NUM_WP" name="SD_PIN_NUM_WP" placeholder="-1">
+                    <span class="validation-indicator hidden"></span>
+                </div>
+                <div class="field">
+                    <label for="SD_WP_ON_LEVEL">Write Protect On Level</label>
+                    <input type="text" id="SD_WP_ON_LEVEL" name="SD_WP_ON_LEVEL" placeholder="1" list="bool_choice">
+                    <span class="validation-indicator hidden"></span>
+                </div>
+            </div>
+
+            <!-- SD SPI Panel -->
+            <div id="sd_spi_panel" class="bus-panel">
+                <h3>SPI Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="SD_SPI_HOST">SPI Host</label>
+                        <input type="text" id="SD_SPI_HOST" name="SD_SPI_HOST" placeholder="e.g.: SPI_3" list="spi_hosts">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="SD_CLOCK_HZ_SPI">Clock (MHz)</label>
+                        <input type="text" id="SD_CLOCK_HZ_SPI" name="SD_CLOCK_HZ_SPI" placeholder="e.g.: 20">
+                    </div>
+                </div>
+
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D00_SPI">MOSI/Data 0 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D00_SPI" name="SD_PIN_NUM_D00_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D01_SPI">MISO/Data 1 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D01_SPI" name="SD_PIN_NUM_D01_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D02_SPI">QuadWP/Data 2 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D02_SPI" name="SD_PIN_NUM_D02_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D03_SPI">QuadHD/Data 3 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D03_SPI" name="SD_PIN_NUM_D03_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D04_SPI">Data 4 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D04_SPI" name="SD_PIN_NUM_D04_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D05_SPI">Data 5 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D05_SPI" name="SD_PIN_NUM_D05_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D06_SPI">Data 6 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D06_SPI" name="SD_PIN_NUM_D06_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D07_SPI">Data 7 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D07_SPI" name="SD_PIN_NUM_D07_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_CLK_SPI">Clock Pin</label>
+                        <input type="text" id="SD_PIN_NUM_CLK_SPI" name="SD_PIN_NUM_CLK_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_CS_SPI">Chip Select Pin</label>
+                        <input type="text" id="SD_PIN_NUM_CS_SPI" name="SD_PIN_NUM_CS_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_INT_SPI">Interrupt Pin</label>
+                        <input type="text" id="SD_PIN_NUM_INT_SPI" name="SD_PIN_NUM_INT_SPI" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SD MMC Panel -->
+            <div id="sd_mmc_panel" class="bus-panel">
+                <h3>MMC Configuration</h3>
+                <div class="field-group">
+                    <div class="field">
+                        <label for="SD_MMC_HOST">MMC Host</label>
+                        <input type="text" id="SD_MMC_HOST" name="SD_MMC_HOST" placeholder="e.g.: MMC_2" list="mmc_hosts">
+                    </div>
+                    <div class="field">
+                        <label for="SD_CLOCK_HZ_MMC">Clock (MHz)</label>
+                        <input type="text" id="SD_CLOCK_HZ_MMC" name="SD_CLOCK_HZ_MMC" placeholder="e.g.: 20">
+                    </div>
+                </div>
+
+                <h3>Pin Configuration</h3>
+                <div class="pin-grid">
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D00_MMC">Data 0 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D00_MMC" name="SD_PIN_NUM_D00_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D01_MMC">Data 1 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D01_MMC" name="SD_PIN_NUM_D01_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D02_MMC">Data 2 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D02_MMC" name="SD_PIN_NUM_D02_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D03_MMC">Data 3 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D03_MMC" name="SD_PIN_NUM_D03_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D04_MMC">Data 4 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D04_MMC" name="SD_PIN_NUM_D04_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D05_MMC">Data 5 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D05_MMC" name="SD_PIN_NUM_D05_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D06_MMC">Data 6 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D06_MMC" name="SD_PIN_NUM_D06_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_D07_MMC">Data 7 Pin</label>
+                        <input type="text" id="SD_PIN_NUM_D07_MMC" name="SD_PIN_NUM_D07_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_CLK_MMC">Clock Pin</label>
+                        <input type="text" id="SD_PIN_NUM_CLK_MMC" name="SD_PIN_NUM_CLK_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="pin-field">
+                        <label for="SD_PIN_NUM_CMD_MMC">Command Pin</label>
+                        <input type="text" id="SD_PIN_NUM_CMD_MMC" name="SD_PIN_NUM_CMD_MMC" placeholder="-1">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                    <div class="field">
+                        <label for="SD_PULLUP_MMC">Use Internal Pullup</label>
+                        <input type="text" id="SD_PULLUP_MMC" name="SD_PULLUP_MMC" placeholder="0" list="bool_choice">
+                        <span class="validation-indicator hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Button Configuration Section -->
+        <div class="section">
+            <h2>Button Configuration</h2>
+
+            <div class="field-group">
+                <div class="field">
+                    <label for="BUTTON_MASK">Button Pins</label>
+                    <input type="text" id="BUTTON_MASK" name="BUTTON_MASK" placeholder="e.g.: 0 35">
+                    <span class="validation-indicator hidden"></span>
+                </div>
+                <div class="field">
+                    <label for="BUTTON_ON_LEVEL">Button On Level</label>
+                    <input type="text" id="BUTTON_ON_LEVEL" name="BUTTON_ON_LEVEL" placeholder="1" list="bool_choice">
+                </div>
+            </div>
+        </div>
+        <div class="section">
+            <h2>Generated Code</h2>
+            <a href="#" onclick="navigator.clipboard.writeText(document.getElementById('generated_code').innerHTML)">Copy to Clipboard</a><br>
+            <textarea id="generated_code" rows="20" cols="80" name="generated_code"></textarea>
+        </div>
+    </form>
+
+    <script>
+        function doFieldChange(e) {
+            const formData = new FormData(document.getElementById('panelConfigForm'));
+            const config = {};
+
+            // Collect all form values
+            for (let [key, value] of formData.entries()) {
+                if (value && value !== '') {
+                    if(key!="generated_code") {
+                        // Handle checkboxes - convert to 0 or 1
+                        const element = document.querySelector(`[name="${key}"]`);
+                        if (element && element.type === 'checkbox') {
+                            config[key] = element.checked ? '1' : '0';
+                        } else {
+                            config[key] = value;
+                        }
+                    }
+                }
+            }
+            const device_by_host = new Map();
+            if(config.lcd_bus_type!==undefined && config.lcd_bus_type!=="") {
+                const bt = config.lcd_bus_type.toUpperCase();
+                const host = config["LCD_"+bt+"_HOST"];
+                if(!device_by_host.has(host+"_"+bt)) {
+                    const newVal = [];
+                    newVal.push("LCD");
+                    device_by_host.set(host+"_"+bt,newVal);
+                } else {
+                    const newVal = [...device_by_host.get(host)];
+                    newVal.push("LCD");
+                    device_by_host.set(host+"_"+bt,newVal);
+                }
+            }
+            if(config.touch_bus_type!==undefined&&config.touch_bus_type!="") {
+                const bt = config.touch_bus_type.toUpperCase();
+                const host = config["TOUCH_"+bt+"_HOST"];
+                if(!device_by_host.has(host+"_"+bt)) {
+                    const newVal = [];
+                    newVal.push("TOUCH");
+                    device_by_host.set(host+"_"+bt,newVal);
+                } else {
+                    const newVal = [...device_by_host.get(host+"_"+bt)];
+                    newVal.push("TOUCH");
+                    device_by_host.set(host+"_"+bt,newVal);
+                }
+            }
+            if(config.power_bus_type!==undefined&&config.power_bus_type!=="") {
+                const bt = config.power_bus_type.toUpperCase();
+                const host = config["POWER_"+bt+"_HOST"];
+                if(!device_by_host.has(host+"_"+bt)) {
+                    const newVal = [];
+                    newVal.push("POWER");
+                    device_by_host.set(host+"_"+bt,newVal);
+                } else {
+                    const newVal = [...device_by_host.get(host+"_"+bt)];
+                    newVal.push("POWER");
+                    device_by_host.set(host+"_"+bt,newVal);
+                }
+            }
+            if(config.sd_bus_type!==undefined&&config.sd_bus_type!=="") {
+                const bt = config.sd_bus_type.toUpperCase();
+                const host = config["SD_"+bt+"_HOST"];
+                if(!device_by_host.has(host+"_"+bt)) {
+                    const newVal = [];
+                    newVal.push("SD");
+                    device_by_host.set(host+"_"+bt,newVal);
+                } else {
+                    const newVal = [...device_by_host.get(host+"_"+bt)];
+                    newVal.push("SD");
+                    device_by_host.set(host+"_"+bt,newVal);
+                }
+            }
+            config["device_by_host"] = device_by_host;
+            if(validateConfig(config)) {
+                generateConfig(config);
+            } else {
+                document.getElementById("generated_code").innerHTML="";
+            }
+        }
+        for (let el of document.getElementsByClassName('field')) {
+            el.addEventListener('change', doFieldChange);
+        }
+        for (let el of document.getElementsByClassName('pin-field')) {
+            el.addEventListener('change', doFieldChange);
+        }
+        // Bus type change handlers
+        document.getElementById('lcd_bus_type').addEventListener('change', function (e) {
+            // Hide all LCD bus panels
+            document.querySelectorAll('#lcd_spi_panel, #lcd_i2c_panel, #lcd_i8080_panel, #lcd_rgb_panel, #lcd_mipi_panel').forEach(el => {
+                el.classList.remove('active');
+            });
+            // Handle properties visibility
+            const propertiesContainer = document.getElementById('lcd_properties');
+            const busType = e.target.value;
+            if (busType === '') {
+                // No LCD selected - hide properties
+                propertiesContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                propertiesContainer.classList.remove('hidden');
+                // Show the selected bus panel
+                const panelMap = {
+                    'spi': 'lcd_spi_panel',
+                    'i2c': 'lcd_i2c_panel',
+                    'i8080': 'lcd_i8080_panel',
+                    'rgb': 'lcd_rgb_panel',
+                    'mipi': 'lcd_mipi_panel'
+                };
+
+                if (panelMap[busType]) {
+                    document.getElementById(panelMap[busType]).classList.add('active');
+                }
+            }
+
+            // Handle settings visibility
+            const settingsContainer = document.getElementById('lcd_settings');
+            if (busType === '') {
+                // No LCD selected - hide properties
+                settingsContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                settingsContainer.classList.remove('hidden');
+            }
+
+        });
+
+        document.getElementById('touch_bus_type').addEventListener('change', function (e) {
+            document.querySelectorAll('#touch_spi_panel, #touch_i2c_panel').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Handle properties visibility
+            const propertiesContainer = document.getElementById('touch_properties');
+            const busType = e.target.value;
+
+            if (busType === '') {
+                // No Touch selected - hide properties
+                propertiesContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                propertiesContainer.classList.remove('hidden');
+
+                const panelMap = {
+                    'spi': 'touch_spi_panel',
+                    'i2c': 'touch_i2c_panel'
+                };
+
+                if (panelMap[busType]) {
+                    document.getElementById(panelMap[busType]).classList.add('active');
+                }
+            }
+
+            // Handle settings visibility
+            const settingsContainer = document.getElementById('touch_settings');
+            if (busType === '') {
+                // No touch selected - hide properties
+                settingsContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                settingsContainer.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('power_bus_type').addEventListener('change', function (e) {
+            document.querySelectorAll('#power_spi_panel, #power_i2c_panel, #power_init_panel').forEach(el => {
+                el.classList.remove('active');
+            });
+            const propertiesContainer = document.getElementById('power_properties');
+            const busType = e.target.value;
+            const panelMap = {
+                'spi': 'power_spi_panel',
+                'i2c': 'power_i2c_panel',
+                'init': 'power_init_panel'
+            };
+
+            if (panelMap[busType]) {
+                document.getElementById(panelMap[busType]).classList.add('active');
+            }
+            // Handle properties visibility
+            if (busType === '') {
+                // No power selected - hide properties
+                propertiesContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                propertiesContainer.classList.remove('hidden');
+
+                const panelMap = {
+                    'spi': 'power_spi_panel',
+                    'i2c': 'power_i2c_panel',
+                    'init': 'power_init_panel'
+                };
+
+                if (panelMap[busType]) {
+                    document.getElementById(panelMap[busType]).classList.add('active');
+                }
+                document.getElementById(panelMap['init']).classList.add('active');
+            }
+
+            // Handle settings visibility
+            const settingsContainer = document.getElementById('power_settings');
+            if (busType === '') {
+                // No Power selected - hide properties
+                settingsContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                settingsContainer.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('sd_bus_type').addEventListener('change', function (e) {
+            document.querySelectorAll('#sd_spi_panel, #sd_mmc_panel').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Handle properties visibility
+            const propertiesContainer = document.getElementById('sd_properties');
+            const busType = e.target.value;
+
+            if (busType === '') {
+                // No SD selected - hide properties
+                propertiesContainer.classList.add('hidden');
+            } else {
+                // Valid bus type selected - show properties
+                propertiesContainer.classList.remove('hidden');
+
+                const panelMap = {
+                    'spi': 'sd_spi_panel',
+                    'mmc': 'sd_mmc_panel'
+                };
+
+                if (panelMap[busType]) {
+                    document.getElementById(panelMap[busType]).classList.add('active');
+                }
+            }
+        });
+        function makeValue(value) {
+            const valueLines = value.trim().split("\n");
+            const lines = [];
+            for(let i = 0;i<valueLines.length;++i) {
+                let line = valueLines[i].trimEnd();
+                if(line.endsWith("\\")) {
+                    line = line.slice(0,-1);
+                }
+                if(i<valueLines.length-1) {
+                    line += " \\";
+                }
+                if(i>0) {
+                    lines.push("    "+line);
+                } else {
+                    lines.push(line);
+                }
+            }
+            return lines.join("\n");
+        }
+        function aliasPin(config, prefix, suffix, name, type) {
+            if(type.toUpperCase()==="SPI") {
+                const stringForFour = config[prefix+"D04"+suffix];
+                if(stringForFour!=undefined && stringForFour.length>0) {
+                    return name.slice(0,-suffix.length);
+                } else {
+                    const val = name.slice(prefix.length+1,-suffix.length);
+                    const num = parseInt(val,10);
+                    if(num===0) {
+                        return prefix+"MOSI";
+                    }
+                    if(num===1) {
+                        return prefix+"MISO";
+                    }
+                    if(num===2) {
+                        return prefix+"QUADWP";
+                    }
+                    if(num===3) {
+                        return prefix+"QUADHD";
+                    }
+                }
+            }
+            return name.slice(0,-suffix.length);
+        }
+        function doNonPins(config, lines, device, type) {
+            const prefix = device.toUpperCase()+"_";
+            const nonPrefix = prefix + "PIN_NUM_";
+            for (const [key, value] of Object.entries(config)) {
+                console.log(key);
+                if(key===prefix+"MOUNT_POINT" && !isFieldHidden(key)) {
+                    lines.push(`#define ${key} "${value}"`);
+                } else if(!key.endsWith("_INCLUDES")) {
+                    if (!key.startsWith(nonPrefix) && key.startsWith(prefix) && !isFieldHidden(key)) {
+                        if(key.slice(prefix.length)==="CLOCK_HZ_"+type.toUpperCase()) {
+                            if(type.toUpperCase()=="I2C") {
+                                lines.push(`#define ${key.slice(0,-(type.length+1))} ((uint32_t)(${value}*(1000)))`);
+                            } else {
+                                lines.push(`#define ${key.slice(0,-(type.length+1))} ((uint32_t)(${value}*(1000*1000)))`);
+                            }
+                        } else if(!(key.endsWith("_I2C") || key.endsWith("_SPI") || key.endsWith("_I8080") || key.endsWith("_RGB")|| key.endsWith("_MIPI") || key.endsWith("_MMC"))) {
+                            const cmp = `${prefix}`+type.toUpperCase()+"_HOST";
+                            if(cmp===key || !(key.startsWith(prefix) && key.endsWith("_HOST"))) {
+                                lines.push(`#define ${key} ${makeValue(value)}`);
+                            }
+                        } else if(key.endsWith("_"+type.toUpperCase())) {
+                            if(!key.startsWith(`${prefix}CLOCK_HZ_`) && key!==prefix+"MOUNT_POINT") {
+                                lines.push(`#define ${key.slice(0,key.lastIndexOf("_"))} ${makeValue(value)}`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        function doPins(config, lines,device) {
+            
+            const prefix = device.toUpperCase() + "_PIN_NUM_";
+            for (const [key, value] of Object.entries(config)) {
+                if (key.startsWith(prefix) && !(key.endsWith("_I2C") || key.endsWith("_SPI") || key.endsWith("_I8080") || key.endsWith("_RGB")|| key.endsWith("_MIPI") || key.endsWith("_MMC")) && !isFieldHidden(key)) {
+                    lines.push(`#define ${key} ${value}`);
+                }
+            }
+        }
+        function doBusPins(config, lines, device, type) {
+            const prefix = device.toUpperCase() + "_PIN_NUM_";
+            const suffix = "_" + type.toUpperCase();
+            for (const [key, value] of Object.entries(config)) {
+                if (key.startsWith(prefix) && key.endsWith(suffix) && !isFieldHidden(key)) {
+                    lines.push(`#define ${aliasPin(config,prefix,suffix,key,type)} ${value}`);
+                }
+            }
+        }
+        function crackButtonPins(list) {
+            const buttonPins = [];
+            if(list.indexOf(",")>-1) {
+                const splitArray = list.split(",");
+                for(let i = 0;i<splitArray.length;++i) {
+                    const pin = splitArray[i].trim();
+                    if(pin.length>0)
+                        buttonPins.push(pin);
+                }
+            } else {
+                const splitArray = list.split(" ");
+                for(let i = 0;i<splitArray.length;++i) {
+                    const pin = splitArray[i].trim();
+                    if(pin.length>0) {
+                        buttonPins.push(pin);
+                    }
+                }
+            }
+            return buttonPins;
+        }
+        function getValOrDef(val, def) {
+            if(val===undefined||val===null) {
+                return def;
+            }
+            return val;
+        }
+        function isPinDefault(pinVal) {
+            let res = getValOrDef(pin,"-1").trim();
+            if(res.length==0) return true;
+            if(res=="-1") return true;
+            return false;
+
+        }
+        function isFieldHidden(key) {
+            const elem = document.getElementById(key);
+            return elem.offsetParent === null;
+        }
+        function getPinBusType(pin) {
+            const  elem = document.getElementById(pin);
+            const idx = pin.lastIndexOf("_");
+            if(idx>-1) {
+                const busType = pin.slice(idx+1).toUpperCase();
+                if(busType==="I2C"||busType=="SPI"||busType=="I8080"||busType=="RGB"||busType=="MIPI"||busType=="MMC") {
+                    return busType;
+                }
+            }
+            return null;
+        }
+        function getFieldHost(key) {
+            const  elem = document.getElementById(key);
+            const idx = key.indexOf("_");
+            const lastIdx = key.lastIndexOf("_");
+            if(idx<lastIdx && idx>-1) {
+                const busType = key.slice(lastIdx+1).toUpperCase();
+                const devType = key.slice(0,idx).toUpperCase();
+                const host = `${devType}_${busType}_HOST`;
+                const target = document.getElementById(host);
+                if(target!==undefined && target!==null) {
+                    return target.value;
+                }
+            }
+            return null;
+        }
+        function getPinName(pin) {
+            const  elem = document.getElementById(pin);
+            const lastIdx = pin.lastIndexOf("PIN_NUM_");
+            const lastIdx2 = pin.lastIndexOf("_");
+            if(lastIdx>-1 && lastIdx2>-1) {
+                const busType = pin.slice(lastIdx2+1).toUpperCase();
+                if(busType==="I2C"||busType=="SPI"||busType=="I8080"||busType=="RGB"||busType=="MIPI"||busType=="MMC") {
+                    if(lastIdx<lastIdx2 && lastIdx>-1) {
+                        return pin.slice(lastIdx+8,lastIdx2);
+                    }
+                }
+            }
+            if(lastIdx>-1) {
+                return pin.slice(lastIdx+8);
+            }
+        }
+        function getFieldDeviceType(key) {
+            const  elem = document.getElementById(key);
+            const idx = key.indexOf("_");
+            if(idx>-1) {
+                const devType = key.slice(0,idx).toUpperCase();
+                if(devType==="LCD"||devType=="TOUCH"||devType=="POWER"||devType=="SD") {
+                    return devType;
+                }
+            }
+            return null;
+        }
+        function getValueForKey(key) {
+            const  elem = document.getElementById(key);
+            if(elem===null || elem===undefined) return undefined
+            const res = elem.value.trim();
+            if(res.length==0) return undefined;
+            return res;
+        }
+        function validateConfig(config) {
+            const validators = new Map();
+            for (let el of document.getElementsByClassName('validation-indicator')) {
+                el.classList.add("hidden");
+                el.innerHTML="";
+                const inp = el.parentElement.getElementsByTagName("input")[0];
+                if(inp===undefined) {
+                   validators.set(el.parentElement.getElementsByTagName("textarea")[0].id,el);     
+                } else {
+                    validators.set(inp.id,el);
+                }
+            }
+            const noConflicts = validateConflicts(config,validators);
+            const hasRequired = validateRequired(config,validators);
+            return noConflicts && hasRequired;
+        }
+        function validateRequired(config,validators) {
+            let result = true;
+            for(let [key, value] of validators) {
+                if(!isFieldHidden(key)) {
+                    if(key==="LCD_HRES" || key=="LCD_VRES") {
+                        const v = getValueForKey(key);
+                        if(v===undefined || v===0) {
+                            if(value.classList.contains("hidden")) {
+                                value.classList.remove("hidden");
+                                value.innerHTML="Required field";   
+                            }
+                            result = false;
+                        }
+                    }
+                    if(isFieldHidden("LCD_HRES")) {
+                        if(key==="TOUCH_HRES" || key=="TOUCH_VRES") {
+                            const v = getValueForKey(key);
+                            if(v===undefined || v.trim()=="" || v.trim()==="0") {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }
+                        }
+                    }
+                    if(key=="LCD_INCLUDES") {
+                        const v = getValOrDef(getValueForKey("LCD_INIT"),"").trim();
+                        if(v.length>0) {
+                            // builtins, no includes necessary
+                            if(v!=="esp_lcd_new_panel_ssd1306" &&
+                                v!=="esp_lcd_new_panel_st7789" &&
+                                v!=="esp_lcd_new_panel_nt35510") {
+                                    const inc = getValOrDef(getValueForKey("LCD_INCLUDES"),"");
+                                    if(inc==="") {
+                                        if(value.classList.contains("hidden")) {
+                                        value.classList.remove("hidden");
+                                        value.innerHTML="Required field";   
+                                    }
+                                    result = false;
+                                }
+                            }
+                        }
+                    }
+                    if(key==="TOUCH_INCLUDES" || key==="POWER_INCLUDES") {
+                        const v = getValueForKey(key);
+                        if(v===undefined || v===0) {
+                            if(value.classList.contains("hidden")) {
+                                value.classList.remove("hidden");
+                                value.innerHTML="Required field";   
+                            }
+                            result = false;
+                        }
+                    }
+                    if(key==="LCD_INIT") {
+                        if(config.lcd_bus_type!=="rgb") {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }
+                        }
+                    }
+                    if(key==="TOUCH_INIT") {
+                        if(document.getElementById(key).value.trim().length==0) {
+                            if(value.classList.contains("hidden")) {
+                                value.classList.remove("hidden");
+                                value.innerHTML="Required field";   
+                            }
+                            result = false;
+                        }
+                    }
+                    if(key==="POWER_INIT") {
+                        if(document.getElementById(key).value.trim().length==0) {
+                            if(value.classList.contains("hidden")) {
+                                value.classList.remove("hidden");
+                                value.innerHTML="Required field";   
+                            }
+                            result = false;
+                        }
+                    }
+                    if(key.endsWith("_SPI_HOST") || key.endsWith("_I2C_HOST")) {
+                        if(document.getElementById(key).value.trim().length==0) {
+                            if(value.classList.contains("hidden")) {
+                                value.classList.remove("hidden");
+                                value.innerHTML="Required field";   
+                            }
+                            result = false;
+                        }
+                    }
+                    const dev = getFieldDeviceType(key);
+                    if(key.startsWith(dev+"_PIN_NUM_DC_")) {
+                        if(key.endsWith("_SPI") || key.endsWith("_I8080")) {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }
+                        }
+                    }
+                    if(key.endsWith("_RGB")) {
+                        if(key.startsWith(dev+"_PIN_NUM_D")) {
+                            const bitDepth = getValOrDef(parseInt(getValOrDef(getValueForKey("LCD_BIT_DEPTH"),"16"),10),16);
+                            const pinNum = getValOrDef(parseInt(getPinName(key).slice(1),10),-1);
+                            if(pinNum<bitDepth) {
+                                if(getValOrDef(getValueForKey(key),"-1")=="-1") {
+                                    if(value.classList.contains("hidden")) {
+                                        value.classList.remove("hidden");
+                                        value.innerHTML="Required field";   
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if(key===dev+"_I2C_ADDRESS_I2C") {
+                        if(dev!=="POWER") {
+                            if(getValOrDef(getValueForKey(key),"")=="") {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                            }
+                        }
+                    }
+                    if(key.endsWith("_I8080")) {
+                        if(key.startsWith(dev+"_PIN_NUM_D00_")||
+                            key.startsWith(dev+"_PIN_NUM_D01_")||
+                            key.startsWith(dev+"_PIN_NUM_D02_")||
+                            key.startsWith(dev+"_PIN_NUM_D03_")||
+                            key.startsWith(dev+"_PIN_NUM_D04_")||
+                            key.startsWith(dev+"_PIN_NUM_D05_")||
+                            key.startsWith(dev+"_PIN_NUM_D06_")||
+                            key.startsWith(dev+"_PIN_NUM_D07_")||
+                            key.startsWith(dev+"_PIN_NUM_WR_")||
+                            key.startsWith(dev+"_PIN_NUM_RD_")||
+                            key.startsWith(dev+"_CLOCK_HZ_")
+                        ) {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }    
+                        }
+                        
+                        if(key.startsWith(dev+"_PIN_NUM_D") && key!=dev+"_PIN_NUM_DC_I8080" && key.endsWith("_I8080")) {
+                            const n = getPinName(key);
+                            if(n==="D08"||n==="D09"||n==="D10"||n==="D11"||n==="D12"||n==="D13"||n==="D14"||n==="D15") {
+                                const v = getValueForKey(key);
+                                if(!(v===null || v===undefined || v==="-1")) {
+                                    for(let i = 8;i<10;++i) {
+                                        const chk = `${dev}_PIN_NUM_D0${i}_I8080`;
+                                        const vcmp=getValueForKey(chk);
+                                        if(vcmp===undefined||vcmp==="-1") {
+                                            const cmp = validators.get(chk);
+                                            if(cmp.classList.contains("hidden")) {
+                                                cmp.classList.remove("hidden");
+                                                cmp.innerHTML="Required field";   
+                                            }           
+                                            result = false;
+                                        }
+                                    }
+                                    for(let i = 10;i<16;++i) {
+                                        const chk = `${dev}_PIN_NUM_D${i}_I8080`;
+                                        const vcmp=getValueForKey(chk);
+                                        if(vcmp===undefined||vcmp==="-1") {
+                                            const cmp = validators.get(chk);
+                                            if(cmp.classList.contains("hidden")) {
+                                                cmp.classList.remove("hidden");
+                                                cmp.innerHTML="Required field";   
+                                            }           
+                                            result = false;
+                                        }
+                                    }
+                                }
+                            }       
+                        } 
+                    }
+                    if(key.endsWith("_MMC")) {
+                        if(key.startsWith(dev+"_PIN_NUM_D00_")||
+                            key.startsWith(dev+"_PIN_NUM_CMD_")||
+                            key.startsWith(dev+"_PIN_NUM_CLK_")||
+                            key.startsWith(dev+"_CLOCK_HZ_")
+                        ) {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }    
+                        }
+                        
+                        if(key.startsWith(dev+"_PIN_NUM_D") && key!=dev+"_PIN_NUM_DC_MMC" && key.endsWith("_MMC")) {
+                            const n = getPinName(key);
+                            if(n==="D01"||n==="D02"||n==="D03") {
+                                const v = getValueForKey(key);
+                                if(!(v===null || v===undefined || v==="-1")) {
+                                    for(let i = 1;i<4;++i) {
+                                        const chk = `${dev}_PIN_NUM_D0${i}_MMC`;
+                                        const vcmp=getValueForKey(chk);
+                                        if(vcmp===undefined||vcmp==="-1") {
+                                            const cmp = validators.get(chk);
+                                            if(cmp.classList.contains("hidden")) {
+                                                cmp.classList.remove("hidden");
+                                                cmp.innerHTML="Required field";   
+                                            }           
+                                            result = false;
+                                        }
+                                    }
+                                }
+                            }       
+                            if(n==="D04"||n==="D05"||n==="D06"||n==="D07") {
+                                const v = getValueForKey(key);
+                                if(!(v===null || v===undefined || v==="-1")) {
+                                    for(let i = 1;i<8;++i) {
+                                        const chk = `${dev}_PIN_NUM_D0${i}_MMC`;
+                                        const vcmp=getValueForKey(chk);
+                                        if(vcmp===undefined||vcmp==="-1") {
+                                            const cmp = validators.get(chk);
+                                            if(cmp.classList.contains("hidden")) {
+                                                cmp.classList.remove("hidden");
+                                                cmp.innerHTML="Required field";   
+                                            }           
+                                            result = false;
+                                        }
+                                    }
+                                }
+                            }       
+                        } 
+                    }
+                    if(key.endsWith("_RGB")) {
+                        if(key.startsWith(dev+"_PIN_NUM_CLK_")||
+                            key.startsWith(dev+"_PIN_NUM_DE_")||
+                            key.startsWith(dev+"_CLOCK_HZ_")||
+                            key.startsWith(dev+"_PIN_NUM_HSYNC_")||
+                            key.startsWith(dev+"_PIN_NUM_VSYNC_")||
+                            key.startsWith(dev+"_HSYNC_PULSE_WIDTH_")||
+                            key.startsWith(dev+"_VSYNC_PULSE_WIDTH_")||
+                            key.startsWith(dev+"_HSYNC_FRONT_PORCH_")||
+                            key.startsWith(dev+"_HSYNC_BACK_PORCH_")||
+                            key.startsWith(dev+"_VSYNC_FRONT_PORCH_")||
+                            key.startsWith(dev+"_VSYNC_BACK_PORCH_")
+                            ) {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }
+                        }
+                    }
+                    if(key.endsWith("_MIPI")) {
+                        if(key.startsWith(dev+"_CLOCK_HZ_")||
+                            key.startsWith(dev+"_HSYNC_PULSE_WIDTH_")||
+                            key.startsWith(dev+"_VSYNC_PULSE_WIDTH_")||
+                            key.startsWith(dev+"_HSYNC_FRONT_PORCH_")||
+                            key.startsWith(dev+"_HSYNC_BACK_PORCH_")||
+                            key.startsWith(dev+"_VSYNC_FRONT_PORCH_")||
+                            key.startsWith(dev+"_VSYNC_BACK_PORCH_")
+                        ) {
+                            if(document.getElementById(key).value.trim().length==0) {
+                                if(value.classList.contains("hidden")) {
+                                    value.classList.remove("hidden");
+                                    value.innerHTML="Required field";   
+                                }
+                                result = false;
+                            }    
+                        }
+                    }
+                }
+                
+                // now this is rough. we have to coallate the pins for shared I2C and SPI buses and then validate that they are filled in
+                if(!isFieldHidden(key)) {
+                    const devType = getFieldDeviceType(key);
+                    if(devType!==undefined && devType!==null && key.indexOf("_PIN_NUM_")>-1) {
+                        const v = getValOrDef(getValueForKey(key),"-1").trim();
+                        if(v==="-1") { // we need a value
+                            const busType = getPinBusType(key);
+                            if(busType==="SPI"||busType==="I2C") {
+                                const name = getPinName(key);
+                                if(name!==undefined && name!=="CS" && name!=="DC" && name!=="INT") {
+                                    const host = getFieldHost(key);
+                                    if(host!==undefined && host!==null) {
+                                        const devices = config.device_by_host.get(host+"_"+busType);
+                                        if(devices!==undefined&&devices!==null && devices.length>0) {
+                                            let found = false;
+                                            let valOther;
+                                            for(const dev of devices) {
+                                                if(dev!==devType) {
+                                                    const cmp = `${dev}_PIN_NUM_${name}_${busType}`;
+                                                    const vcmp = getValOrDef(getValueForKey(cmp),"-1").trim();
+                                                    if(vcmp!=="-1") {
+                                                        found = true;
+                                                        break;
+                                                    } 
+                                                }
+                                            }
+                                            if(!found) {
+                                                if(devType=="LCD" || devType=="POWER") {
+                                                    if(name==="D01" || name=="D02" || name==="D03" || name=="D04" || name==="D05" || name=="D06" || name==="D07") {
+                                                        found = true; // LCD/POWER doesn't need these
+                                                    }
+                                                } else if (devType=="TOUCH") {
+                                                    if(name=="D00" || name=="D02" || name==="D03" || name=="D04" || name==="D05" || name=="D06" || name==="D07") {
+                                                        found = true; // TOUCH doesn't need these
+                                                    }
+                                                } else if (devType=="SD") {
+                                                    if(name=="D02" || name==="D03" || name=="D04" || name==="D05" || name=="D06" || name==="D07") {
+                                                        found = true; // SD doesn't need these
+                                                    }
+                                                } 
+                                            }
+                                            if(!found) {
+                                                const value = validators.get(key);
+                                                if(value.classList.contains("hidden")) {
+                                                    value.classList.remove("hidden");
+                                                    value.innerHTML="Required Field";   
+                                                    result = false;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+        function validateConflicts(config,validators) {
+            let result = true;
+            const pins = new Map();
+            const buttons = getValOrDef(config["BUTTON_MASK"],"");
+            if(buttons.length>0) {
+                const buttonPins = crackButtonPins(buttons);
+                if(buttonPins.length>0) {
+                    for(const pin of buttonPins) {
+                        pins.set(pin,"BUTTON_MASK");
+                    }
+                }
+            }
+            for(let [key, value] of validators) {
+                if(key.indexOf("_PIN_NUM_")>-1) {
+                    if(!isFieldHidden(key)) {
+                        const v = document.getElementById(key).value.trim();
+                        if(v!==undefined && v.length>0 && v!=="-1") {
+                            const conflict = pins.get(v);
+                            if(conflict !== undefined) {
+                                const valOther = validators.get(conflict);
+                                const bt = getPinBusType(key);
+                                let ok = false;
+                                if(!key.endsWith("_CS_"+bt)) {
+                                    if(getPinName(key)===getPinName(conflict)) {
+                                        if(getFieldDeviceType(key)!==getFieldDeviceType(conflict)) {
+                                            if(bt===getPinBusType(conflict)) {        
+                                                ok=true;
+                                            }
+                                        }
+                                    }
+                                }
+                                if(!ok) {
+                                    if(value.classList.contains("hidden")) {
+                                        value.classList.remove("hidden");
+                                        value.innerHTML="Pin Conflict";   
+                                    }
+                                    if(valOther.classList.contains("hidden")) {
+                                        valOther.classList.remove("hidden");
+                                        valOther.innerHTML="Pin Conflict";
+                                    }
+                                    result = false;
+                                }
+                            } else {
+                                if(!pins.has(v)) {
+                                    pins.set(v,key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            const addresses = new Map();
+            for(let [key, value] of validators) {
+                if(key.endsWith("_I2C_ADDRESS_I2C")) {
+                    if(!isFieldHidden(key)) {
+                        let v = document.getElementById(key).value.trim();
+                        if(v!==undefined && v.length>0) {
+                            if(v.toUpperCase().startsWith("0X")) {
+                                v=v.toUpperCase();
+                            }
+                            const conflict = addresses.get(v);
+                            if(conflict !== undefined) {
+                                const valOther = validators.get(conflict);
+                                if(getValOrDef(getFieldHost(key),"")!=="" && getFieldHost(key)==getFieldHost(conflict)) {
+                                    if(value.classList.contains("hidden")) {
+                                        value.classList.remove("hidden");
+                                        value.innerHTML="Address Conflict";   
+                                    }
+                                    if(valOther.classList.contains("hidden")) {
+                                        valOther.classList.remove("hidden");
+                                        valOther.innerHTML="Address Conflict";
+                                    }
+                                    result = false;
+                                }
+                            } else {
+                                if(!addresses.has(v)) {
+                                    addresses.set(v,key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for(let [key, value] of validators) {
+                if(key.indexOf("_PIN_NUM_")>-1) {
+                    if(!isFieldHidden(key)) {
+                        const bus = getPinBusType(key);
+                        if(bus!==undefined && bus!==null) { 
+                            const dev = getFieldDeviceType(key);
+                            const name = getPinName(key);
+                            if(name!="CS") {
+                                const part = "_PIN_NUM_"+name+"_"+bus;
+                                const v1 = document.getElementById(key).value.trim();
+                                let cmps =  ["LCD"+part,"TOUCH"+part,"POWER"+part,"SD"+part];
+                                for(const cmp of cmps) {
+                                    if(cmp !=key) {
+                                        const valOther=validators.get(cmp);
+                                        if(valOther!==undefined&&valOther!==null) {
+                                            if(!isFieldHidden(cmp)) {
+                                                const vcmp = document.getElementById(cmp).value.trim();
+                                                if(vcmp!="-1" && v1!="-1" && v1!="" && vcmp!="") {
+                                                    if(vcmp!==v1 && getFieldHost(key)===getFieldHost(cmp)) {
+                                                        if(value.classList.contains("hidden")) {
+                                                            value.classList.remove("hidden");
+                                                            value.innerHTML="Pin Conflict";   
+                                                        }
+                                                        if(valOther.classList.contains("hidden")) {
+                                                            valOther.classList.remove("hidden");
+                                                            valOther.innerHTML="Pin Conflict";
+                                                        }
+                                                        result = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // this is non bus associated pin
+                            const dev = getFieldDeviceType(key);
+                            const name = getPinName(key);
+                            if(name!=="CS") {
+                                const part = "_PIN_NUM_"+name;
+                                const v1 = getValOrDef(getValueForKey(key),"-1").trim();
+                                let cmps =  ["LCD"+part,"TOUCH"+part,"POWER"+part,"SD"+part];
+                                for(const cmp of cmps) {
+                                    if(cmp !=key) {
+                                        const valOther=validators.get(cmp);
+                                        if(valOther!==undefined&&valOther!==null) {
+                                            if(!isFieldHidden(cmp)) {
+                                                const vcmp = getValOrDef(getValueForKey(cmp),"-1").trim();
+                                                if(vcmp!="-1" && v1!="-1" && v1!="" && vcmp!="") {
+                                                    if(vcmp===v1) {
+                                                        if(value.classList.contains("hidden")) {
+                                                            value.classList.remove("hidden");
+                                                            value.innerHTML="Pin Conflict";   
+                                                        }
+                                                        if(valOther.classList.contains("hidden")) {
+                                                            valOther.classList.remove("hidden");
+                                                            valOther.innerHTML="Pin Conflict";
+                                                        }
+                                                        result = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return result;
+        }
+        // Function to generate configuration (placeholder)
+        function generateConfig(config) {
+            
+            const code = document.getElementById('generated_code');
+            const lines = [];
+            lines.push("#ifndef CUSTOM_PANEL_H");
+            lines.push("#define CUSTOM_PANEL_H");
+            lines.push("");
+            if (config.lcd_bus_type != undefined && config.lcd_bus_type != "") {
+                lines.push("// BEGIN LCD configuration");
+                if (config['LCD_INCLUDES'] && config['LCD_INCLUDES'] != "") {
+                    const includes = config['LCD_INCLUDES']
+                    lines.push("#ifdef PANEL_DEPENDENCIES");
+                    lines.push("    " + includes.split("\n").join("\n    ").trimEnd());
+                    lines.push("#endif // PANEL_DEPENDENCIES");
+                }
+                doNonPins(config,lines,"lcd",config.lcd_bus_type);
+                doPins(config,lines,"lcd");
+                doBusPins(config, lines, "lcd", config.lcd_bus_type);
+                lines.push("// END LCD configuration");
+                lines.push("");
+            }
+            if (config.touch_bus_type != undefined && config.touch_bus_type != "") {
+                lines.push("// BEGIN Touch configuration");
+                if (config['TOUCH_INCLUDES'] && config['TOUCH_INCLUDES'] != "") {
+                    const includes = config['TOUCH_INCLUDES']
+                    lines.push("#ifdef PANEL_DEPENDENCIES");
+                    lines.push("    " + includes.split("\n").join("\n    ").trimEnd());
+                    lines.push("#endif // PANEL_DEPENDENCIES");
+                }
+                doNonPins(config,lines,"touch",config.touch_bus_type);
+                doPins(config,lines,"touch");
+                doBusPins(config, lines, "touch", config.touch_bus_type);
+                lines.push("// END Touch configuration");
+                lines.push("");
+            }
+
+            if (config.power_bus_type != undefined && config.power_bus_type != "") {
+                lines.push("// BEGIN Power configuration");
+                if (config['POWER_INCLUDES'] && config['POWER_INCLUDES'] != "") {
+                    const includes = config['POWER_INCLUDES']
+                    lines.push("#ifdef PANEL_DEPENDENCIES");
+                    lines.push("    " + includes.split("\n").join("\n    ").trimEnd());
+                    lines.push("#endif // PANEL_DEPENDENCIES");
+                }
+                doNonPins(config,lines,"power",config.power_bus_type);
+                doPins(config,lines,"power");
+                doBusPins(config, lines, "power", config.power_bus_type);
+                lines.push("// END Power configuration");
+                lines.push("");
+            }
+
+            if (config.sd_bus_type != undefined && config.sd_bus_type != "") {
+                lines.push("// BEGIN SD configuration");
+                doNonPins(config,lines,"sd",config.sd_bus_type);
+                doPins(config,lines,"sd");
+                doBusPins(config, lines, "sd", config.sd_bus_type);
+                lines.push("// END SD configuration");
+                lines.push("");
+            }
+
+            const buttonPinsRaw= config.BUTTON_MASK!=undefined?config.BUTTON_MASK:"";
+            let buttonPins = crackButtonPins(buttonPinsRaw);
+            
+            if(buttonPins.length>0) {
+                lines.push("// BEGIN Button configuration");
+                let concat = `(BUTTON_PIN(${buttonPins[0]})`;
+                for(let i = 1;i<buttonPins.length;++i) {
+                    concat += ` | BUTTON_PIN(${buttonPins[i]})`;
+                }
+                lines.push(`#define BUTTON_MASK ${concat})`);
+                const buttonLevel = config.BUTTON_ON_LEVEL!=undefined?config.BUTTON_ON_LEVEL:"";
+                if(buttonLevel.trim().length>0) {
+                    lines.push(`#define BUTTON_ON_LEVEL ${buttonLevel.trim()}`);
+                }
+                lines.push("// End Button configuration");
+                lines.push("");
+            }
+
+            lines.push("#endif // CUSTOM_PANEL_H");
+            code.innerHTML = lines.join("\n");
+        }
+    </script>
+</body>
+</html>

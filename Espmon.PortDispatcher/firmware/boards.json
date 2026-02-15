@@ -1,0 +1,91 @@
+{
+    "dependencies": [
+        {
+            "id": "codewitch-honey-crisis/htcw_uix",
+            "version": "1.8.14"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_esp_panel",
+            "version": "^0.7.5"
+        }
+    ],
+    "boards": [
+        {
+            "name": "Matouch ESP32-S3 Parallel 3.5\"",
+            "id": 1,
+            "slug": "matouch-parallel-35",
+            "diagonal_inches": 3.5,
+            "target": "esp32s3",
+            "defines": [
+                "HTCW_GFX_NO_SWAP",
+                "MATOUCH_ESP_DISPLAY_PARALLEL_35",
+                "LCD_DIVISOR=20"
+            ],
+            "dependencies": [
+                {
+                    "id": "cfscn/esp_lcd_touch_ft6x36",
+                    "version": "^1.0.8"
+                },
+                {
+                    "id": "codewitch-honey-crisis/esp_lcd_panel_ili9488",
+                    "version": "^0.1.1"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Matouch ESP32-S3 Parallel 4\"",
+            "id": 2,
+            "slug": "matouch-parallel-4",
+            "diagonal_inches": 4,
+            "target": "esp32s3",
+            "defines": [
+                "MATOUCH_ESP_DISPLAY_PARALLEL_4"
+            ],
+            "dependencies": [
+                {
+                    "id": "espressif/esp_lcd_touch_gt911",
+                    "version": "^1.2.0~1"
+                },
+                {
+                    "id": "espressif/esp_lcd_panel_io_additions",
+                    "version": "^1.0.1"
+                },
+                {
+                    "id": "espressif/esp_lcd_st7701",
+                    "version": "^2.0.2"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Matouch ESP32-S3 Parallel 4.3\"",
+            "id": 3,
+            "slug": "matouch-parallel-43",
+            "diagonal_inches": 4.3,
+            "target": "esp32s3",
+            "defines": [
+                "MATOUCH_ESP_DISPLAY_PARALLEL_43"
+            ],
+            "dependencies": [
+                {
+                    "id": "espressif/esp_lcd_touch_gt911",
+                    "version": "^1.2.0~1"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        }
+    ]
+}

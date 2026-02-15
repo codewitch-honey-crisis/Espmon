@@ -1,0 +1,5 @@
+dependencies:
+  codewitch-honey-crisis/htcw_gfx: ^2.2.16
+  idf: '>=5.0.0'
+description: A UI/UX library for embedded and IoT devices, for use with htcw_gfx
+version: 1.8.14

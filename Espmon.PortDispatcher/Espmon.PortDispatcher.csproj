@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platform>x64</Platform>
+    <RootNamespace>Espmon</RootNamespace>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Include="firmware\boards.json" />
+    <EmbeddedResource Include="firmware\boards.zip" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="9.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="firmware\boards.json" />
+    <Page Include="firmware\boards.zip" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EspLinkLib\EspLinkLib.csproj" />
+    <ProjectReference Include="..\Espmon.Json\Espmon.Json.csproj" />
+    <ProjectReference Include="..\HWKit\HWKit.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Device.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="Screen.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ScreenEntry.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Update="ScreenValueEntry.cs">
+      <SubType>Component</SubType>
+    </Compile>
+  </ItemGroup>
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-esp32.ps1&quot;" />
+  </Target>
+</Project>

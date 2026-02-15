@@ -1,0 +1,5 @@
+dependencies:
+  idf:
+    version: '>=5.0.0'
+description: Provides an lcd panel driver for the ILI9488 display controller
+version: 0.1.1

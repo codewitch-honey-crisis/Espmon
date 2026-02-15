@@ -1,0 +1,6 @@
+dependencies:
+  codewitch-honey-crisis/htcw_bits: ^1.0.17
+  idf:
+    version: '>=5.0.0'
+description: Provides STL free stream io
+version: 1.4.1

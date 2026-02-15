@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Espmon (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Espmon (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

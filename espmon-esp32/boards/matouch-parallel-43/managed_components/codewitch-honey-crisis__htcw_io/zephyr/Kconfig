@@ -1,0 +1,7 @@
+menu "htcw_io configuration"
+  config HTCW_IO
+    bool "Enable HTCW_IO"
+    depends on CPP
+    select REQUIRES_FULL_LIBC
+    default n
+endmenu

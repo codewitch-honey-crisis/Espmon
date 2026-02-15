@@ -1,0 +1,225 @@
+<UserControl
+    x:Class="Espmon.ScreenEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Espmon"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <StackPanel>
+        <local:ScreenView x:Name="screenView" Screen="{x:Bind Screen, Mode=OneWay}" Hit="screenView_Hit" MinWidth="640" MinHeight="480" MaxHeight="600" MaxWidth="1024" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <Border MinHeight="200" BorderBrush="Gray" BorderThickness="1" Padding="8">
+            <StackPanel Spacing="8">
+                <StackPanel x:Name="screenPartPanel" Spacing="16">
+                    <ComboBox x:Name="screenPartComboBox" Header="Screen Part:" 
+                      IsEditable="false"
+                      SelectionChanged="screenPartComboBox_SelectionChanged">
+                        <x:String>(None)</x:String>
+                        <x:String>Top Label</x:String>
+                        <x:String>Top Value 1</x:String>
+                        <x:String>Top Value 1 Bar</x:String>
+                        <x:String>Top Value 2</x:String>
+                        <x:String>Top Value 2 Bar</x:String>
+                        <x:String>Bottom Label</x:String>
+                        <x:String>Bottom Value 1</x:String>
+                        <x:String>Bottom Value 1 Bar</x:String>
+                        <x:String>Bottom Value 2</x:String>
+                        <x:String>Bottom Value 2 Bar</x:String>
+                        <x:String>Graph</x:String>
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel x:Name="topLabelEditorPanel" Spacing="8">
+                    <TextBox x:Name="toplabelTextBox" 
+                         Header="Label Text" 
+                         Text="{x:Bind Screen.Top.Label, Mode=TwoWay}"
+                         PlaceholderText="Enter label text"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="topLabelColorSelector" SelectedColorValue="{x:Bind Screen.Top.Color, Mode=TwoWay}"/>
+                    </Grid>
+                    
+                </StackPanel>
+
+                <StackPanel x:Name="topValue1EditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Value</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1QuerySelector" Expression="{x:Bind Screen.Top.Value1.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="topValue2EditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Value</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2QuerySelector" Expression="{x:Bind Screen.Top.Value2.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="topValue1BarEditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value1.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="topValue1BarColorSelector" SelectedColorValue="{x:Bind Screen.Top.Value1.Color, Mode=TwoWay}"/>
+                    </Grid>
+                    <CheckBox x:Name="topValue1BarHasGradientCheckBox" Content="Has Gradient" IsChecked="{x:Bind Screen.Top.Value1.HasGradient, Mode=TwoWay}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="topValue2BarEditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value2.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="topValue2BarColorSelector" SelectedColorValue="{x:Bind Screen.Top.Value2.Color, Mode=TwoWay}"/>
+                    </Grid>
+                    
+
+                    <CheckBox x:Name="topValue2BarHasGradientCheckBox" Content="Has Gradient"  IsChecked="{x:Bind Screen.Top.Value2.HasGradient, Mode=TwoWay}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="bottomLabelEditorPanel" Spacing="8">
+                    <TextBox x:Name="bottomLabelTextBox" 
+                         Header="Label Text"
+                         Text="{x:Bind Screen.Bottom.Label, Mode=TwoWay}"
+                         PlaceholderText="Enter label text"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="bottomLabelColorSelector" SelectedColorValue="{x:Bind Screen.Bottom.Color, Mode=TwoWay}"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="bottomValue1EditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Value</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1QuerySelector" Expression="{x:Bind Screen.Bottom.Value1.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="bottomValue2EditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Value</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2QuerySelector" Expression="{x:Bind Screen.Bottom.Value2.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="bottomValue1BarEditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="bottomValue1BarColorSelector" SelectedColorValue="{x:Bind Screen.Bottom.Value1.Color, Mode=TwoWay}"/>
+                    </Grid>
+                    
+
+                    <CheckBox x:Name="bottomValue1BarHasGradientCheckBox" Content="Has Gradient"  IsChecked="{x:Bind Screen.Bottom.Value1.HasGradient, Mode=TwoWay}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="bottomValue2BarEditorPanel" Spacing="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0">Color</TextBlock>
+                        <local:ColorSelector Grid.Column= "1" x:Name="bottomValue2BarColorSelector" SelectedColorValue="{x:Bind Screen.Bottom.Value2.Color, Mode=TwoWay}"/>
+                    </Grid>
+                    <CheckBox x:Name="bottomValue2BarHasGradientCheckBox"  IsChecked="{x:Bind Screen.Bottom.Value2.HasGradient, Mode=TwoWay}" Content="Has Gradient"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

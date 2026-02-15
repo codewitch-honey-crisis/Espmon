@@ -1,0 +1,22 @@
+#ifndef HTCW_GFX
+#define HTCW_GFX
+#define HTCW_GFX_CPP14
+#include "gfx_core.hpp"
+#include "gfx_canvas.hpp"
+#include "gfx_encoding.hpp"
+#include "gfx_math.hpp"
+#include "gfx_pixel.hpp"
+#include "gfx_color_cpp14.hpp"
+#include "gfx_positioning.hpp"
+#include "gfx_palette.hpp"
+#include "gfx_font.hpp"
+#include "gfx_win_font.hpp"
+#include "gfx_vlw_font.hpp"
+#include "gfx_tt_font.hpp"
+#include "gfx_image.hpp"
+#include "gfx_bitmap.hpp"
+#include "gfx_sprite.hpp"
+#include "gfx_jpg_image.hpp"
+#include "gfx_png_image.hpp"
+#include "gfx_draw.hpp"
+#endif // HTCW_GFX

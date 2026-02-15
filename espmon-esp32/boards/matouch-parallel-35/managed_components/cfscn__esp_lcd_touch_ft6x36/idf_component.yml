@@ -1,0 +1,12 @@
+dependencies:
+  esp_lcd_touch:
+    public: true
+    version: ^1.0.4
+  idf: '>=4.4.2'
+description: ESP LCD Touch FT6x36 - touch controller FT6x36
+repository: git://github.com/cfscn/esp_lcd_touch_ft6x36.git
+repository_info:
+  commit_sha: c2772def5d1168bb3ba85c1334dd07ea99b977ec
+  path: components/esp_lcd_touch_ft6x36
+url: https://github.com/espressif/esp-bsp/tree/master/components/lcd_touch
+version: 1.0.8
