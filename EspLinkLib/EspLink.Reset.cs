@@ -135,7 +135,7 @@ namespace EL
 			port.DtrEnable = true;
 			port.RtsEnable = false;
 			port.DtrEnable = port.DtrEnable;
-			await Task.Delay(550,cancellationToken);
+			await Task.Delay(350,cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.DtrEnable = false;
 			return true;
