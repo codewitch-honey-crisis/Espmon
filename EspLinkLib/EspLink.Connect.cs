@@ -133,7 +133,7 @@ namespace EL
 					Debug.WriteLine("ESP Link: Boot log detected");
 					bootLogDetected = true;
 
-					if (match.Groups.Count > 2)
+					if (match.Groups.Count > 2 && match.Groups[2].Success)
 					{
                         Debug.WriteLine("ESP Link: Download mode detected");
                         downloadMode = true;
