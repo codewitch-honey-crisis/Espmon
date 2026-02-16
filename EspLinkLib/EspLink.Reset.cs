@@ -127,39 +127,23 @@ namespace EL
 		static async Task<bool> ClassicResetImplAsync(SerialPort port, CancellationToken cancellationToken)
 		{
 			if (port == null || !port.IsOpen) { return false; }
-			port.DtrEnable = false;
-			port.RtsEnable = true;
-			//port.DtrEnable = port.DtrEnable;
-			await Task.Delay(50,cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			port.DtrEnable = true;
-			port.RtsEnable = false;
-			//port.DtrEnable = port.DtrEnable;
-			await Task.Delay(350,cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			port.DtrEnable = false;
-			return true;
+            port.DtrEnable = false;
+            port.RtsEnable = true;
+            await Task.Delay(100, cancellationToken);  // was 50, match esptool
+            port.DtrEnable = true;
+            port.RtsEnable = false;
+            await Task.Delay(50, cancellationToken);
+            return true;
 		}
         static bool SerialJtagResetImpl(SerialPort port)
         {
             if (port == null || !port.IsOpen) { return false; }
-            port.RtsEnable = false;
-            //port.DtrEnable = port.DtrEnable;
             port.DtrEnable = false;
-            Task.Delay(100).Wait();
+            port.RtsEnable = true;
+            Task.Delay(100).Wait();  // was 50, match esptool
             port.DtrEnable = true;
             port.RtsEnable = false;
-            //port.DtrEnable = port.DtrEnable;
-            Task.Delay(100).Wait();
-            port.RtsEnable = true;
-            //port.DtrEnable = port.DtrEnable;
-            port.DtrEnable = false;
-            port.RtsEnable = true;
-            //port.DtrEnable = port.DtrEnable;
-            Task.Delay(100).Wait();
-            port.DtrEnable = false;
-            port.RtsEnable = false;
-            //port.DtrEnable = port.DtrEnable;
+            Task.Delay(50).Wait();
             return true;
         }
         static bool HardResetImplInt(SerialPort port, bool isUsb)
