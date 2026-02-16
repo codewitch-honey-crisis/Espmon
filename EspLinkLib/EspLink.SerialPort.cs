@@ -50,8 +50,8 @@ namespace EL
 			if (_port == null)
 			{
 				_port = new SerialPort(_portName, 115200, Parity.None, 8, StopBits.One);
-				_port.ReceivedBytesThreshold = 1;
-				_port.DataReceived += _port_DataReceived;
+				//_port.ReceivedBytesThreshold = 1;
+				//_port.DataReceived += _port_DataReceived;
 				_port.ErrorReceived += _port_ErrorReceived;				
 			}
 			if (!_port.IsOpen)
@@ -75,26 +75,24 @@ namespace EL
 			{
 				port.DiscardInBuffer();
 			}
-			lock (_serialReadLock)
-			{
-				_serialIncoming.Clear();
-			}
 		}
-		async Task<byte[]> ReadExistingInputAsync()
+		byte[] ReadExistingInput()
 		{
 			var port = GetOrOpenPort(false);
-			while (port != null && port.IsOpen && port.BytesToRead>0)
+			//while (port != null && port.IsOpen && port.BytesToRead>0)
+			//{
+			//	await Task.Delay(10);
+			//}
+			if (port != null)
 			{
-				await Task.Delay(10);
+				var len = port.BytesToRead;
+				if (len > 0)
+				{
+					var ba = new byte[len];
+                    port.Read(ba, 0, len);
+                }
 			}
-			byte[] result;
-			lock (_serialReadLock)
-			{
-				result = new byte[_serialIncoming.Count];
-				_serialIncoming.CopyTo(result, 0);
-				_serialIncoming.Clear();
-			}
-			return result;
+			return Array.Empty<byte>();
 		}
 		void _port_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
 		{
@@ -103,16 +101,14 @@ namespace EL
 
 		int ReadByteNoBlock()
 		{
-			lock(_serialReadLock)
+            var port = GetOrOpenPort(false);
+            if (port!=null && port.IsOpen && port.BytesToRead>0)
 			{
-				if(_serialIncoming.Count>0)
-				{
-					return _serialIncoming.Dequeue();
-				}
+				return port.ReadByte();
 			}
 			return -1;
 		}
-		void _port_DataReceived(object sender, SerialDataReceivedEventArgs e)
+		/*void _port_DataReceived(object sender, SerialDataReceivedEventArgs e)
 		{
 			if(e.EventType==SerialData.Chars)
 			{
@@ -138,7 +134,7 @@ namespace EL
 					}
 				}
 			}
-		}
+		}*/
 		/// <summary>
 		/// Asynchronously changes the baud rate
 		/// </summary>

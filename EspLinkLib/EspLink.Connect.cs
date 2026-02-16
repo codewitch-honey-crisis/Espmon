@@ -119,8 +119,8 @@ namespace EL
 				DiscardInput();
 				strategy.ResetStrategyAsync?.Invoke(port,cancellationToken);
 				progress?.Report(prog++);
-
-				var str = Encoding.ASCII.GetString(await ReadExistingInputAsync());
+				await Task.Delay(1000);
+				var str = Encoding.ASCII.GetString(ReadExistingInput());
 				var match = _bootloaderRegex.Match(str);
 				if (match.Success && ushort.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture.NumberFormat, out bootMode))
 				{
