@@ -72,7 +72,8 @@ namespace EL
 		
 		async Task<byte[]> ReadFrameAsync(int timeout = -1, CancellationToken cancellationToken = default)
         {
-			long _start = DateTimeOffset.UtcNow.Ticks;
+			long start = DateTimeOffset.UtcNow.Ticks;
+			long tout = timeout > -1 ? TimeSpan.FromMilliseconds(timeout).Ticks +start: -1;
 			var port = GetOrOpenPort(true)!;
 			var bytes = new List<byte>();
 			var foundStart = false;
@@ -85,7 +86,8 @@ namespace EL
 				if (0 > i)
 				{
 					await Task.Delay(5);
-					if (timeout > -1 && TimeSpan.FromTicks( DateTimeOffset.UtcNow.Ticks-_start).Milliseconds >= timeout)
+					var now = DateTimeOffset.UtcNow.Ticks;
+					if (now>= tout)
 					{
 						throw new TimeoutException("The read operation timed out");
 					}
