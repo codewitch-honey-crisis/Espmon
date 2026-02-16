@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -56,6 +58,7 @@ namespace EL
 				cancellationToken.ThrowIfCancellationRequested();
 				port.WriteTimeout = timeout;
 				await port.BaseStream.WriteAsync(toWrite, 0, toWrite.Length);
+				//port.Write(toWrite,0,toWrite.Length);
 				cancellationToken.ThrowIfCancellationRequested();
 				await port.BaseStream.FlushAsync();
 				
@@ -69,19 +72,20 @@ namespace EL
 		
 		async Task<byte[]> ReadFrameAsync(int timeout = -1, CancellationToken cancellationToken = default)
         {
+			long _start = DateTimeOffset.UtcNow.Ticks;
+			var port = GetOrOpenPort(true)!;
 			var bytes = new List<byte>();
-			var time = 0;
 			var foundStart = false;
 			// start grabbing frame data
+			var log = new StringBuilder();
 			while (true)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
-				var i = ReadByteNoBlock();
+				var i = port.BytesToRead>0? port.ReadByte():-1;
 				if (0 > i)
 				{
-					await Task.Delay(10);
-					time += 10;
-					if (timeout > -1 && time >= timeout)
+					await Task.Delay(5);
+					if (timeout > -1 && TimeSpan.FromTicks( DateTimeOffset.UtcNow.Ticks-_start).Milliseconds >= timeout)
 					{
 						throw new TimeoutException("The read operation timed out");
 					}
@@ -94,6 +98,14 @@ namespace EL
 						foundStart = true;
 						continue;
 						
+					} else
+					{
+						log.Append((char)i);
+						if (i == '\n')
+						{
+							Debug.Write(log.ToString());
+							log.Clear();
+						}
 					}
 				} else
 				{
@@ -103,6 +115,10 @@ namespace EL
 					}
 					bytes.Add((byte)i);
 				}
+			}
+			if (log.Length > 0)
+			{
+				Debug.WriteLine(log.ToString());
 			}
 			int count = bytes.Count;
 			for (var i = 0; i < bytes.Count; i++)

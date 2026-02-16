@@ -50,6 +50,8 @@ namespace EL
 			if (_port == null)
 			{
 				_port = new SerialPort(_portName, 115200, Parity.None, 8, StopBits.One);
+				_port.ReadBufferSize = 8192;
+				_port.WriteBufferSize = 8192;
 				//_port.ReceivedBytesThreshold = 1;
 				//_port.DataReceived += _port_DataReceived;
 				_port.ErrorReceived += _port_ErrorReceived;				
@@ -90,6 +92,7 @@ namespace EL
 				{
 					var ba = new byte[len];
                     port.Read(ba, 0, len);
+					return ba;
                 }
 			}
 			return Array.Empty<byte>();
@@ -104,7 +107,8 @@ namespace EL
             var port = GetOrOpenPort(false);
             if (port!=null && port.IsOpen && port.BytesToRead>0)
 			{
-				return port.ReadByte();
+				var result = port.ReadByte();
+				return result;
 			}
 			return -1;
 		}

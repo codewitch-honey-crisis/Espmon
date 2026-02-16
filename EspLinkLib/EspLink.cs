@@ -52,7 +52,7 @@ namespace EL
 		/// <summary>
 		/// The default timeout in milliseconds
 		/// </summary>
-		public int DefaultTimeout { get; set; } = 5000;
+		public int DefaultTimeout { get; set; } = 10000;
 		
 
 	}

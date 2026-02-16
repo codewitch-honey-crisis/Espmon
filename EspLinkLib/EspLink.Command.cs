@@ -1,4 +1,6 @@
-﻿namespace EL
+﻿using System.Diagnostics;
+
+namespace EL
 {
 	partial class EspLink
 	{
@@ -10,11 +12,13 @@
 				byte[] ba = new byte[8 + data.Length];
 				PackOpPacket((byte)op, data, chk, ba, 0);
 				await WriteFrameAsync(ba, 0, ba.Length, timeout, cancellationToken);
-			}
+                Debug.WriteLine("ESP Link: Wrote command frame");
+            }
 			for (var i = 0; i < 100; ++i)
 			{
 				var frame = await ReadFrameAsync(timeout, cancellationToken);
-				if (frame.Length == 4 && frame[0] == 0x4f && frame[1] == 0x48 && frame[2] == 0x41 && frame[3] == 0x49)
+                Debug.WriteLine("ESP Link: Read response frame");
+                if (frame.Length == 4 && frame[0] == 0x4f && frame[1] == 0x48 && frame[2] == 0x41 && frame[3] == 0x49)
 				{
 					// stub loaded frame. ignore.
 					continue;

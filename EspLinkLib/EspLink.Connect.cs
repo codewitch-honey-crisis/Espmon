@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace EL
@@ -52,7 +53,8 @@ namespace EL
 		async Task SyncAsync(int timeout, int prog, IProgress<int>? progress, CancellationToken cancellationToken = default)
         {
 			var cmdRet = await CommandAsync(0x08, _syncPacket, 0, timeout, cancellationToken);
-			progress?.Report(prog++);
+            Debug.WriteLine("ESP Link: Sent sync command");
+            progress?.Report(prog++);
 			int stubDetected = cmdRet.Value == 0 ? 1 : 0;
 			Exception? lastEx = null;
 			for (var i = 0; i < 7; ++i)
@@ -95,9 +97,9 @@ namespace EL
 			// Serial JTAG USB
 			if(connectMode==EspConnectMode.UsbReset || IsUsbSerialJtag)
 			{
-				return new StrategyEntry[] { new StrategyEntry(SerialJtagResetStrategyAsync) };
+				return [new StrategyEntry(SerialJtagResetStrategyAsync)];
 			}
-			return new StrategyEntry[] { new StrategyEntry(ClassicResetStrategyAsync, defaultResetDelay), new StrategyEntry(ClassicResetStrategyAsync, extraDelay) };
+			return [new StrategyEntry(ClassicResetStrategyAsync, defaultResetDelay), new StrategyEntry(ClassicResetStrategyAsync, extraDelay)];
 
 		}
 		async Task ConnectAttemptAsync(StrategyEntry strategy, EspConnectMode mode, int prog, int timeout = -1, IProgress<int>? progress=null, CancellationToken cancellationToken = default)
@@ -119,16 +121,19 @@ namespace EL
 				DiscardInput();
 				strategy.ResetStrategyAsync?.Invoke(port,cancellationToken);
 				progress?.Report(prog++);
-				await Task.Delay(1000);
+				while(port.BytesToRead<10)
+					await Task.Delay(100);
 				var str = Encoding.ASCII.GetString(ReadExistingInput());
 				var match = _bootloaderRegex.Match(str);
 				if (match.Success && ushort.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture.NumberFormat, out bootMode))
 				{
+					Debug.WriteLine("ESP Link: Boot log detected");
 					bootLogDetected = true;
 
 					if (match.Groups.Count > 2)
 					{
-						downloadMode = true;
+                        Debug.WriteLine("ESP Link: Download mode detected");
+                        downloadMode = true;
 					}
 				}
 			}
@@ -139,7 +144,8 @@ namespace EL
 				try
 				{
 					DiscardInput();
-					await SyncAsync(timeout, prog, progress, cancellationToken);
+                    Debug.WriteLine("ESP Link: Sync attempt");
+                    await SyncAsync(timeout, prog, progress, cancellationToken);
 					return;
 				}
 				catch (Exception e)
