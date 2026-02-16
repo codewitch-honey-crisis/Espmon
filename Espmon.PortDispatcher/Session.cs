@@ -370,7 +370,7 @@ public partial class Session : Component, INotifyPropertyChanged
             Update();
         }
     }
-    public async Task FlashAsync(FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
+    public async Task FlashAsync(bool noReset,FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
     {
         using var stm = Assembly.GetExecutingAssembly()?.GetManifestResourceStream("Espmon.firmware.boards.zip");
         if(stm==null)
@@ -412,7 +412,7 @@ public partial class Session : Component, INotifyPropertyChanged
         var innerProgress = InnerOpenFlashProgress.Wrap(progress);
         cancellationToken.ThrowIfCancellationRequested();
         innerProgress?.SetAction("Connecting...");
-        await espLink.ConnectAsync(EspConnectMode.Default, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
+        await espLink.ConnectAsync(noReset?EspConnectMode.NoReset:EspConnectMode.Default, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         innerProgress?.SetAction("Running stub...");
         await espLink.RunStubAsync(espLink.DefaultTimeout, innerProgress, cancellationToken);

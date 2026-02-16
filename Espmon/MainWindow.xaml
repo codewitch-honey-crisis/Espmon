@@ -118,6 +118,7 @@
                                 </ScrollViewer>
                                 <Button x:Name="flashButton" Content="Flash" HorizontalAlignment="Center" Click="flashButton_Click" />
                                 <Button x:Name="retryConnectButton" Content="Retry Connection" HorizontalAlignment="Center" Click="retryConnectButton_Click"/>
+                                <Button x:Name="manualFlashButton" Content="Manual Flash" HorizontalAlignment="Center" Click="manualFlashButton_Click"/>
                             </StackPanel>
                         </Grid>
                     </ScrollViewer>

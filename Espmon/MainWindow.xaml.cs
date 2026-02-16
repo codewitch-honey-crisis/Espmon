@@ -351,7 +351,7 @@ public sealed partial class MainWindow : Window
             {
                 ViewModel.Log.Clear();
                 var reporter = new OpenFlashProgressReporter(ViewModel.Log);
-                await session.FlashAsync(ViewModel.FirmwareEntries[idx], reporter);
+                await session.FlashAsync(false,ViewModel.FirmwareEntries[idx], reporter);
                 ViewModel.Log.Clear();
             }
 
@@ -408,6 +408,23 @@ public sealed partial class MainWindow : Window
         if(ViewModel.SelectedScreen==null && ViewModel.ScreenItems.Count>0)
         {
             ViewModel.SelectedScreenIndex = 0;
+        }
+    }
+
+    private async void manualFlashButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel != null && ViewModel.SelectedSession != null)
+        {
+            var session = ViewModel.SelectedSession;
+            var idx = flashCombo.SelectedIndex;
+            if (idx > -1)
+            {
+                ViewModel.Log.Clear();
+                var reporter = new OpenFlashProgressReporter(ViewModel.Log);
+                await session.FlashAsync(true,ViewModel.FirmwareEntries[idx], reporter);
+                ViewModel.Log.Clear();
+            }
+
         }
     }
 }
