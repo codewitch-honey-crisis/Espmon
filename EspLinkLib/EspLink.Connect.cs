@@ -119,7 +119,10 @@ namespace EL
 			if (mode != EspConnectMode.NoReset)
 			{
 				DiscardInput();
-				strategy.ResetStrategyAsync?.Invoke(port,cancellationToken);
+				if (strategy.ResetStrategyAsync != null)
+				{
+					await strategy.ResetStrategyAsync.Invoke(port, cancellationToken);
+				}
 				progress?.Report(prog++);
 				while(port.BytesToRead<10)
 					await Task.Delay(100);

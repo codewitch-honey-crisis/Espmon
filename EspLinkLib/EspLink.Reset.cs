@@ -64,25 +64,25 @@ namespace EL
 		{
 			if (port == null || !port.IsOpen) { return false; }
 			port.RtsEnable = false;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			port.DtrEnable = false;
 			await Task.Delay(100, cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.DtrEnable = true;
 			port.RtsEnable = false;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			await Task.Delay(100, cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.RtsEnable = true;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			port.DtrEnable = false;
 			port.RtsEnable = true;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			await Task.Delay(100, cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.DtrEnable = false;
 			port.RtsEnable = false;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 
 			return true;
 		}
@@ -90,13 +90,13 @@ namespace EL
 		{
 			if (port == null || !port.IsOpen) { return false; }
 			port.RtsEnable = true;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			if (isUsb)
 			{
 				await Task.Delay(200,cancellationToken);
 				cancellationToken.ThrowIfCancellationRequested();
 				port.RtsEnable = false;
-				port.DtrEnable = port.DtrEnable;
+				//port.DtrEnable = port.DtrEnable;
 				await Task.Delay(200,cancellationToken);
 				cancellationToken.ThrowIfCancellationRequested();
 			}
@@ -105,7 +105,7 @@ namespace EL
 				await Task.Delay(100,cancellationToken);
 				cancellationToken.ThrowIfCancellationRequested();
 				port.RtsEnable = false;
-				port.DtrEnable = port.DtrEnable;
+				//port.DtrEnable = port.DtrEnable;
 
 			}
 
@@ -129,12 +129,12 @@ namespace EL
 			if (port == null || !port.IsOpen) { return false; }
 			port.DtrEnable = false;
 			port.RtsEnable = true;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			await Task.Delay(50,cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.DtrEnable = true;
 			port.RtsEnable = false;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			await Task.Delay(350,cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			port.DtrEnable = false;
@@ -144,41 +144,41 @@ namespace EL
         {
             if (port == null || !port.IsOpen) { return false; }
             port.RtsEnable = false;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             port.DtrEnable = false;
             Task.Delay(100).Wait();
             port.DtrEnable = true;
             port.RtsEnable = false;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             Task.Delay(100).Wait();
             port.RtsEnable = true;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             port.DtrEnable = false;
             port.RtsEnable = true;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             Task.Delay(100).Wait();
             port.DtrEnable = false;
             port.RtsEnable = false;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             return true;
         }
         static bool HardResetImplInt(SerialPort port, bool isUsb)
         {
             if (port == null || !port.IsOpen) { return false; }
             port.RtsEnable = true;
-            port.DtrEnable = port.DtrEnable;
+            //port.DtrEnable = port.DtrEnable;
             if (isUsb)
             {
                 Task.Delay(200).Wait();
                 port.RtsEnable = false;
-                port.DtrEnable = port.DtrEnable;
+                //port.DtrEnable = port.DtrEnable;
                 Task.Delay(200).Wait();
             }
             else
             {
                 Task.Delay(100).Wait();
                 port.RtsEnable = false;
-                port.DtrEnable = port.DtrEnable;
+                //port.DtrEnable = port.DtrEnable;
 
             }
 
@@ -201,12 +201,12 @@ namespace EL
 			if (port == null || !port.IsOpen) { return false; }
 			port.DtrEnable = false;
 			port.RtsEnable = true;
-			port.DtrEnable = port.DtrEnable;
+			//port.DtrEnable = port.DtrEnable;
 			Task.Delay(50).Wait();
 			port.DtrEnable = true;
 			port.RtsEnable = false;
-			port.DtrEnable = port.DtrEnable;
-			Task.Delay(550).Wait();
+			//port.DtrEnable = port.DtrEnable;
+			Task.Delay(350).Wait();
 			port.DtrEnable = false;
 			return true;
 		}
