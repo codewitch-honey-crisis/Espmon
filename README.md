@@ -1,5 +1,7 @@
 # Espmon
 
+DO NOT USE YET. I will announce when it is ready.
+
 A fully configurable ESP32 based PC hardware monitoring dashboard
 
 This project is ESP32 firmware and a PC companion application that allows you to monitor your PCs vital statistics and present them on one of many supported ESP32 development kits connected to it via USB Serial.
