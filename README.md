@@ -63,11 +63,7 @@ espmon/
 ### Build All Boards
 ```bash
 # Windows
-build_all.bat
-
-# Or manually
-cmake -P build_all.cmake
-```
+build_all.ps1
 
 ### Build Single Board (for development)
 ```bash
@@ -75,29 +71,6 @@ cd boards/matouch-parallel-35
 idf.py set-target esp32s3
 idf.py build
 idf.py flash
-```
-
-### Using VS Code ESP-IDF Extension
-1. Open the specific board folder (e.g., `boards/matouch-parallel-35`)
-2. Use the extension normally - it will work as a standalone ESP-IDF project
-
-## Adding a New Board
-
-1. **Add entry to boards.json**:
-```json
-{
-  "name": "My New Board",
-  "slug": "my-new-board",
-  "define": "MY_BOARD_DEFINE",
-  "target": "esp32s3",
-  "components": [
-    "esp_lcd_panel_xxx",
-    "esp_lcd_touch_yyy"
-  ],
-  "flash_mode": "dio",
-  "flash_freq": "80m",
-  "flash_size": "4MB"
-}
 ```
 
 2. **Create board directory**:
@@ -113,17 +86,6 @@ add_compile_definitions(MY_BOARD_DEFINE)
 4. **Copy sdkconfig.defaults** and update target if needed
 
 5. **Add required components** to your main project's component dependencies
-
-## boards.json Reference
-
-- **name**: Friendly name shown in C# app dropdown
-- **slug**: Filesystem-safe folder name
-- **define**: C preprocessor define for htcw_esp_panel profile
-- **target**: ESP32 chip variant (esp32, esp32s3, esp32c3, esp32p4, etc.)
-- **components**: List of ESP-IDF components needed for this board
-- **flash_mode**: DIO/QIO/DOUT/QOUT
-- **flash_freq**: Flash frequency (40m/80m)
-- **flash_size**: Flash size (2MB/4MB/8MB/16MB)
 
 ## Flash Offsets
 

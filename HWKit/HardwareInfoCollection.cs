@@ -100,7 +100,7 @@ namespace HWKit
             provider.Published += Provider_Published;
             provider.Revoked += Provider_Revoked;
         }
-
+        
         private void Provider_StateChanged(object? sender, EventArgs e)
         {
             if(sender is IHardwareInfoProvider provider)
