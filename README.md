@@ -20,7 +20,7 @@ The application also allows your dashboard to be persisted as a service so it's 
 
 To build it - at least using the instructions I give you,  you'll need a windows machine, and you must go here https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/windows-setup.html and install the ESP-IDF using the Windows Installer. Install at least 5.4.3, exporting all the environment variables. You may need to log off and log on to Windows again to refresh everything.
 
-You'll need Visual Studio (2022 or 2026 should work) installed as well.
+You'll need Visual Studio (2026 or newer should work) installed as well.
 
 
 
