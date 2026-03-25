@@ -1,9 +1,9 @@
 #pragma once
 #include <stdint.h>
-#include <interface.h>
-
-bool serial_init();
-void serial_write(const request_ident_t& req);
-void serial_write(int8_t cmd,uint8_t screen_index);
-void serial_write_identity();
-int8_t serial_read_packet(response_t* out_resp);
+#include <stdbool.h>
+#include <stddef.h>
+bool serial_init(size_t max_payload);
+bool serial_update();
+bool serial_try_get_frame(uint8_t* out_cmd,void** out_ptr, size_t* out_length);
+bool serial_put_frame(uint8_t cmd, void* frame, size_t frame_length);
+bool serial_discard_frame();

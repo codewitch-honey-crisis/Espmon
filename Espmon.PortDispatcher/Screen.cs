@@ -262,8 +262,11 @@ public partial class Screen : Component, INotifyPropertyChanged
         }
         set
         {
-            _hardwareInfo = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HardwareInfo)));
+            if (_hardwareInfo != value)
+            {
+                _hardwareInfo = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HardwareInfo)));
+            }
         }
     }
     private Device? _parent = null;
@@ -397,6 +400,36 @@ public partial class Screen : Component, INotifyPropertyChanged
         json.Add("bottom", Bottom.ToJson());
         return json;
     }
+    internal ResponseScreen ToResponseScreen()
+    {
+        if (Top == null) throw new System.InvalidOperationException("Trying to serialize when Top is null");
+        if (Bottom == null) throw new System.InvalidOperationException("Trying to serialize when Bottom is null");
+        if (Top.Value1 == null) throw new System.InvalidOperationException("Trying to serialize when Top.Value1 is null");
+        if (Top.Value2 == null) throw new System.InvalidOperationException("Trying to serialize when Top.Value2 is null");
+        if (Bottom.Value1 == null) throw new System.InvalidOperationException("Trying to serialize when Bottom.Value1 is null");
+        if (Bottom.Value2 == null) throw new System.InvalidOperationException("Trying to serialize when Bottom.Value2 is null");
+        var result = new ResponseScreen();
+        var header = new ResponseScreenHeader();
+        header.Flags = (byte)(Top.Value1.HasGradient ? 1 : 0);
+        header.Flags |= (byte)(Top.Value2.HasGradient ? 1 << 1 : 0);
+        header.Flags |= (byte)(Bottom.Value1.HasGradient ? 1 << 2 : 0);
+        header.Flags |= (byte)(Bottom.Value2.HasGradient ? 1 << 3 : 0);
+        header.Index = 0;
+        result.Header = header;
+        result.Top = Top.ToResponse();
+        result.Bottom = Bottom.ToResponse();
+        return result;
+    }
+    internal ResponseData ToResponseData()
+    {
+        var result = new ResponseData();
+        if (Top == null) throw new System.InvalidOperationException("Trying to serialize when Top is null");
+        if (Bottom == null) throw new System.InvalidOperationException("Trying to serialize when Bottom is null");
+        result.Top = Top.ToResponseData();
+        result.Bottom = Bottom.ToResponseData();
+        return result;
+    }
+
     internal static Screen FromJson(Device? parent,JsonObject json)
     {
         var result = new Screen(parent);

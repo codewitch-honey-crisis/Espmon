@@ -8,15 +8,17 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Reflection;
+using System.IO.Pipes;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Espmon;
 
-public class MainViewModel : INotifyPropertyChanged
+public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
+    private Elevator _elevator;
     private ScreenWatcher _watcher;
     public event PropertyChangedEventHandler? PropertyChanged;
     private PortDispatcher _portDispatcher;
@@ -106,7 +108,23 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<string> ValidationLog { get; } = new();
     public void Refresh()
     {
-        _portDispatcher.Refresh();
+        
+    }
+    public void Load()
+    {
+        RefreshStartWithWindowsAsync();
+        if (!_startWithWindows)
+        {
+            _portDispatcher.Start();
+        }
+    }
+    public void RefreshDevices()
+    {
+        if(_portDispatcher!=null)
+        {
+            _portDispatcher.RefreshAllSessions();
+        }
+        SessionEntries = new List<SessionEntry>(GetSessionEntries());
     }
     private SessionEntry[] GetSessionEntries()
     {
@@ -167,6 +185,7 @@ public class MainViewModel : INotifyPropertyChanged
     }
     public MainViewModel()
     {
+        _elevator = new Elevator();
         var scr = Screen.Default;
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         if (!Directory.Exists(path))
@@ -186,7 +205,7 @@ public class MainViewModel : INotifyPropertyChanged
             ScreenItems.Add(new ScreenListEntry(_watcher.GetName(screen) ?? "(null)", screen));
         }
         _watcher.Screens.CollectionChanged += Screens_CollectionChanged;
-        _portDispatcher = new PortDispatcher(SynchronizationContext.Current);
+        _portDispatcher = new PortDispatcher(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Espmon"), SynchronizationContext.Current);
         var hwInfo = _portDispatcher.HardwareInfo;
         hwInfo.Providers.Add(new CoreTempCpuProvider());
         hwInfo.Providers.Add(new CimCpuProvider());
@@ -194,10 +213,10 @@ public class MainViewModel : INotifyPropertyChanged
         hwInfo.Providers.Add(new CimDiskProvider());
         hwInfo.Providers.Add(new AmdAdlGpuProvider());
         hwInfo.Providers.Add(new NvidiaNvmlGpuProvider());
-        
-        _portDispatcher.Start();
+        hwInfo.Providers.Add(new DxgiProvider());
+        Load();
 
-        
+
 
     }
     public ObservableCollection<Session> Sessions => _portDispatcher.Sessions;
@@ -291,6 +310,8 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
     private Screen? _selectedScreen = null;
+    private bool _isDisposed;
+
     public Screen? SelectedScreen
     {
         get => _selectedScreen;
@@ -373,5 +394,207 @@ public class MainViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_isDisposed)
+        {
+            if (disposing)
+            {
+                if(_elevator!=null)
+                {
+                    _elevator.Dispose();
+                }
+                if(_portDispatcher!=null)
+                { 
+                    _portDispatcher.Stop();
+                    _portDispatcher.Dispose();
+                }
+                if(HardwareInfo!=null)
+                {
+                    HardwareInfo.Dispose();
+                }
+            }
+
+            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+            // TODO: set large fields to null
+            _isDisposed = true;
+        }
+    }
+    public bool IsServiceRunning
+    {
+        get
+        {
+            try
+            {
+                using var client = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.InOut);
+                client.Connect(0); // 0ms timeout = non-blocking
+                return true; 
+            }
+            catch (TimeoutException)
+            {
+                return false; // pipe not found 
+            }
+            catch (Exception)
+            {
+                return false; // treat any error as not running
+            }
+        }
+    }
+    public bool IsRunning
+    {
+        get
+        {
+            if (_portDispatcher != null && _portDispatcher.IsStarted)
+            {
+                return true;
+            }
+            else
+            {
+                return IsServiceRunning;
+            }
+        }
+        set
+        {
+            if (IsRunning != value)
+            {
+                if (!WindowsServiceManager.IsInstalled)
+                {
+                    if (_portDispatcher != null)
+                    {
+                        if (value)
+                        {
+                            _portDispatcher.Start();
+                        }
+                        else
+                        {
+                            _portDispatcher.Stop();
+                        }
+                    }
+                }
+                else
+                {
+                    if (!_elevator.IsConnected)
+                    {
+                        _elevator.Connect();
+                        OnPropertyChanged(nameof(IsNotElevated));
+                        OnPropertyChanged(nameof(IsServiceRunning));
+                    }
+                    if (value)
+                    {
+                        _elevator.StartService();
+                    }
+                    else
+                    {
+                        _elevator.StopService();
+                    }
+                }
+                OnPropertyChanged(nameof(IsRunning));
+            }
+        }
+        
+    }
+    public bool IsNotElevated
+    {
+        get
+        {
+            return !_elevator.IsConnected;
+        }
+    }
+    public bool RequiresElevation
+    {
+        get
+        {
+            return IsNotElevated && IsServiceRunning;
+        }
+    }
+    private bool _startWithWindows;
+    private static async Task<bool> IsServiceRunningAsync()
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.In, PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(200);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void RefreshStartWithWindowsAsync()
+    {
+        _startWithWindows = WindowsServiceManager.IsInstalled;
+        OnPropertyChanged(nameof(StartWithWindows));
+    }
+    public bool StartWithWindows
+    {
+        get => _startWithWindows;
+        set => _ = SetStartWithWindowsAsync(value);
+    }
+
+    private async Task SetStartWithWindowsAsync(bool value)
+    {
+        if (!_elevator.IsConnected)
+        {
+            await _elevator.ConnectAsync();
+            OnPropertyChanged(nameof(IsNotElevated));
+            OnPropertyChanged(nameof(IsServiceRunning));
+        }
+
+        var isInstalled = _elevator.IsInstalled;
+        if (value != isInstalled)
+        {
+            if (!value)
+                await _elevator.UninstallServiceAsync();
+            else
+            {
+                await _elevator.InstallServiceAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon"));
+                await _elevator.StartServiceAsync();
+            }
+            RefreshStartWithWindowsAsync();
+        }
+    }
+    public string SelectedUpdateInterval
+    {
+        get
+        {
+            switch(_portDispatcher.Interval.TotalMilliseconds)
+            {
+                case 1000: return "1 Hz";
+                case 200: return "5 Hz";
+                default: return "10 Hz";
+            }
+        }
+        set
+        {
+            switch(value.ToLowerInvariant()) {
+                case "1 hz":
+                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(1000);
+                    break;
+                case "5 hz":
+                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(200);
+                    break;
+                default:
+                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(100);
+                    break;
+            }
+            //OnPropertyChanged(nameof(SelectedUpdateInterval));
+        }
+    }
+    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // ~MainViewModel()
+    // {
+    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+    //     Dispose(disposing: false);
+    // }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

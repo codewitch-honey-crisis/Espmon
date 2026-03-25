@@ -117,6 +117,7 @@ namespace HWKit
         public static readonly HardwareInfoFunction Round = new("round",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
         public static readonly HardwareInfoFunction Round1 = new("round1",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
         public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input));
+        
     }
     
     public abstract partial class HardwareInfoExpression: ICloneable, IEquatable<HardwareInfoExpression> 
@@ -856,6 +857,7 @@ namespace HWKit
             
             return ParseModifier(cursor, expr!);
         }
+        public abstract string GetUnit(HardwareInfoCollection hardwareInfo);
         public abstract HardwareInfoExpression Clone();
         object ICloneable.Clone()
         {
@@ -884,6 +886,10 @@ namespace HWKit
         public override string ToString()
         {
             return "";
+        }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return string.Empty;
         }
         public override HardwareInfoExpression Clone()
         {
@@ -966,6 +972,10 @@ namespace HWKit
         {
             return HashCode.Combine(GetType(), Value);
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return string.Empty;
+        }
     }
     public partial class HardwareInfoUnitExpression : HardwareInfoUnaryExpression
     {
@@ -976,6 +986,10 @@ namespace HWKit
         public override HardwareInfoExpression Clone()
         {
             return new HardwareInfoUnitExpression(Expression.Clone(), Unit);
+        }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return Unit;
         }
         public string Unit { get; set; } = string.Empty;
         public override string ToString()
@@ -1044,6 +1058,11 @@ namespace HWKit
         {
             return HashCode.Combine(GetType(), Path);
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return hardwareInfo.GetUnit(this);
+        }
+
     }
     public partial class HardwareInfoMatchExpression : HardwareInfoQueryExpression
     {
@@ -1070,7 +1089,10 @@ namespace HWKit
             return new HardwareInfoMatchExpression(Match);
         }
         public static readonly HardwareInfoMatchExpression MatchAll = new HardwareInfoMatchExpression();
-
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return hardwareInfo.GetUnit(this);
+        }
         public override bool Equals(HardwareInfoExpression? other)
         {
             if(other is HardwareInfoMatchExpression rhs)
@@ -1128,6 +1150,25 @@ namespace HWKit
         {
             return HashCode.Combine(GetType() ,Left, Right);
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            if (Left == null)
+            {
+                if (Right == null) return string.Empty;
+                return Right.GetUnit(hardwareInfo);
+            }
+            else
+            {
+                if (Right == null) return Left.GetUnit(hardwareInfo);
+            }
+            var cmp = Left.GetUnit(hardwareInfo);
+            if (cmp.Equals(Right.GetUnit(hardwareInfo), StringComparison.Ordinal))
+            {
+                return cmp;
+            }
+            return string.Empty;
+        }
+
     }
     public partial class HardwareInfoSubtractExpression : HardwareInfoBinaryExpression
     {
@@ -1158,6 +1199,25 @@ namespace HWKit
                 }
             }
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            if (Left == null)
+            {
+                if (Right == null) return string.Empty;
+                return Right.GetUnit(hardwareInfo);
+            }
+            else
+            {
+                if (Right == null) return Left.GetUnit(hardwareInfo);
+            }
+            var cmp = Left.GetUnit(hardwareInfo);
+            if (cmp.Equals(Right.GetUnit(hardwareInfo), StringComparison.Ordinal))
+            {
+                return cmp;
+            }
+            return string.Empty;
+        }
+
         public override HardwareInfoExpression Clone()
         {
             return new HardwareInfoSubtractExpression(Left.Clone(), Right.Clone());
@@ -1217,6 +1277,10 @@ namespace HWKit
         {
             return HashCode.Combine(GetType(), Left, Right);
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return string.Empty;
+        }
     }
     public partial class HardwareInfoDivideExpression : HardwareInfoBinaryExpression
     {
@@ -1259,6 +1323,10 @@ namespace HWKit
         public override int GetHashCode()
         {
             return HashCode.Combine(GetType(), Left, Right);
+        }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return string.Empty;
         }
     }
     public partial class HardwareInfoInvokeExpression : HardwareInfoNAryExpression
@@ -1313,6 +1381,7 @@ namespace HWKit
                 }
             }
         }
+        
         public override string ToString()
         {
             // throw if null
@@ -1341,6 +1410,11 @@ namespace HWKit
             }
             return false;
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            return string.Empty;
+        }
+       
         public override int GetHashCode()
         {
             var result = HashCode.Combine(GetType(), Function);
@@ -1389,6 +1463,25 @@ namespace HWKit
             }
             return false;
         }
+        public override string GetUnit(HardwareInfoCollection hardwareInfo)
+        {
+            if (Left == null)
+            {
+                if (Right == null) return string.Empty;
+                return Right.GetUnit(hardwareInfo);
+            }
+            else
+            {
+                if (Right == null) return Left.GetUnit(hardwareInfo);
+            }
+            var cmp = Left.GetUnit(hardwareInfo);
+            if(cmp.Equals(Right.GetUnit(hardwareInfo), StringComparison.Ordinal))
+            {
+                return cmp;
+            }
+            return string.Empty;
+        }
+        
         public override int GetHashCode()
         {
             // can't use combine for this because it salts with ordinal

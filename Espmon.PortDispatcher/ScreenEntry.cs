@@ -118,6 +118,32 @@ public partial class ScreenEntry : Component, INotifyPropertyChanged
         json.Add("value2", Value2.ToJson());
         return json;
     }
+    internal ResponseScreenEntry ToResponse()
+    {
+        if (Label == null) throw new System.InvalidOperationException("Trying to serialize when Label is null");
+        if (Value1 == null) throw new System.InvalidOperationException("Trying to serialize when Value1 is null");
+        if (Value2 == null) throw new System.InvalidOperationException("Trying to serialize when Value2 is null");
+        var result = new ResponseScreenEntry();
+        result.Label = Label;
+        var color = new ResponseColor();
+        color.A = (byte)(Color >> 24);
+        color.R = (byte)((Color >> 16) & 0xFF);
+        color.G = (byte)((Color >> 8) & 0xFF);
+        color.B = (byte)((Color >> 0) & 0xFF);
+        result.Color = color;
+        result.Value1 = Value1.ToResponse();
+        result.Value2 = Value2.ToResponse();
+        return result;
+    }
+    internal ResponseValueEntry ToResponseData()
+    {
+        if (Value1 == null) throw new System.InvalidOperationException("Trying to serialize when Value1 is null");
+        if (Value2 == null) throw new System.InvalidOperationException("Trying to serialize when Value2 is null");
+        var result = new ResponseValueEntry();
+        result.Value1 = Value1.ToResponseData();
+        result.Value2 = Value2.ToResponseData();
+        return result;
+    }
     internal static ScreenEntry FromJson(Screen parent, JsonObject json)
     {
         ScreenEntry result = new ScreenEntry(parent);

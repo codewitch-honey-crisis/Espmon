@@ -1,0 +1,5 @@
+menu "htcw_frame configuration"
+  config HTCW_FRAME
+    bool "Enable HTCW_FRAME"
+    default n
+endmenu

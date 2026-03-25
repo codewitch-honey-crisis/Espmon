@@ -1,14 +1,10 @@
-﻿using EL;
-
-using HWKit;
-
-using System.Collections.Concurrent;
+﻿using HWKit;
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 using System.IO.Compression;
-using System.IO.Ports;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Text;
 
 namespace Espmon;
@@ -17,6 +13,7 @@ public enum SessionStatus
 {
     Closed = 0,
     Connecting,
+    Resetting,
     Negotiating,
     Busy,
     ReadyForData,
@@ -24,72 +21,14 @@ public enum SessionStatus
     RequiresFlash,
     Flashing
 }
-
+[SupportedOSPlatform("windows")]
 public partial class Session : Component, INotifyPropertyChanged
 {
-    private sealed class FirmwareIdent {
-        public ushort VersionMajor { get; set; }
-        public ushort VersionMinor { get; set; }
-        public ulong Build { get; set; }
-        public short Id { get; set; }
-        public byte[]? MacAddress { get; set; }
-        public string? DisplayName { get; set; }
-        public string? Slug { get; set; }
-        public ushort HorizontalResolution { get; set;  }
-        public ushort VerticalResolution { get; set; }
-        public bool IsMonochrome { get; set; }
-        public float Dpi { get; set;  }
-        public float PixelSize { get; set;  }
-        public DeviceInputType InputType { get; set;  }
-        public static FirmwareIdent Read(byte[] ba)
-        {
-            var result = new FirmwareIdent();   
-            /*
-            uint16_t version_major; +0
-            uint16_t version_minor; +2
-            uint64_t build; +4
-            int16_t id; +12
-            uint8_t mac_address[6]; +14
-            char display_name[64]; +20
-            char slug[64] + 84
-            uint16_t horizontal_resolution; + 148
-            uint16_t vertical_resolution; + 150
-            uint8_t is_monochrome; + 152
-            float dpi; +153
-            float pixel_size; +157 // in millimeters
-            input_type_t input_type + 161;
-            */
-            result.VersionMajor= BitConverter.ToUInt16(ba, 0);
-            result.VersionMinor = BitConverter.ToUInt16(ba, 2);
-            result.Build = BitConverter.ToUInt64(ba, 4);
-            result.Id = BitConverter.ToInt16(ba, 12);
-            result.MacAddress = new byte[6];
-            Array.Copy(ba, 14, result.MacAddress, 0, result.MacAddress.Length);
-            result.DisplayName = Encoding.UTF8.GetString(ba, 20, 64);
-            result.Slug = Encoding.UTF8.GetString(ba, 84, 64);
-            result.HorizontalResolution = BitConverter.ToUInt16(ba, 148);
-            result.VerticalResolution = BitConverter.ToUInt16(ba, 150);
-            result.IsMonochrome = ba[152] != 0;
-            result.Dpi = BitConverter.ToSingle(ba, 153);
-            result.PixelSize = BitConverter.ToSingle(ba, 157);
-            result.InputType = (DeviceInputType)ba[161];
-            if (!BitConverter.IsLittleEndian)
-            {
-                result.VersionMajor = Swap(result.VersionMajor);
-                result.VersionMinor = Swap(result.VersionMinor);
-                result.Build = Swap(result.Build);
-                result.Id = Swap(result.Id);
-                result.HorizontalResolution = Swap(result.HorizontalResolution);
-                result.VerticalResolution = Swap(result.VerticalResolution);
-                result.Dpi = Swap(result.Dpi);
-                result.PixelSize = Swap(result.PixelSize);
-            }
-            return result;
-        }
-    }
+    
     SessionStatus _state = SessionStatus.Closed;
-    Transport _transport;
-    long _startTicks;
+    EspSerialSession? _transport;
+    long _startIdentTicks;
+    long _gotIdentTicks;
     Device? _device;
     ushort _versionMajor;
     ushort _versionMinor;
@@ -103,33 +42,46 @@ public partial class Session : Component, INotifyPropertyChanged
     bool _isMonochrome;
     float _dpi;
     float _pixelSize;
+    bool _dataReady;
+    int _needScreen;
+    bool _needsFlash;
     DeviceInputType _inputType;
-
+    string _portName;
+    string _serialNumber;
    int _screenIndex = -1;
-    ConcurrentQueue<(int Cmd, object Data)> _requests = new();
+    string _path;
     Dictionary<string, (long TimestampTicks, Screen Screen)> _screenCache = new(StringComparer.Ordinal);
     public event PropertyChangedEventHandler? PropertyChanged;
     
-    public Session(SerialPort port)
+    public Session(string path, string portName, string serialNumber)
     {
-        ArgumentNullException.ThrowIfNull(port, nameof(port));
-        _transport = new SerialTransport(port, 8192, 8192);
-        
+        ArgumentNullException.ThrowIfNull(path, nameof(path));
+        ArgumentNullException.ThrowIfNull(portName, nameof(portName));
+        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
+        _path = path;
+        _portName = portName;
+        _serialNumber = serialNumber;
+        _transport = null;
         InitializeComponent();
     }
 
-    public Session(SerialPort port, IContainer container)
+    public Session(string path, string portName,string serialNumber, IContainer container)
     {
-        ArgumentNullException.ThrowIfNull(port, nameof(port));
-        _transport = new SerialTransport(port, 8192, 8192);
-        container.Add(this);
+        ArgumentNullException.ThrowIfNull(path, nameof(path));
+        ArgumentNullException.ThrowIfNull(portName, nameof(portName));
+        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
+        _path = path;
+        _portName = portName;
+        _serialNumber= serialNumber;
+        _transport = null;
+        container?.Add(this);
         InitializeComponent();
     }
     public string PortName
     {
         get
         {
-            return _transport.Name;
+            return _portName;
         }
     }
     HardwareInfoCollection? _hardwareInfo = null;
@@ -148,15 +100,22 @@ public partial class Session : Component, INotifyPropertyChanged
     public void RefreshScreen(string name)
     {
         var n = CurrentScreenName;
-        if (_screenCache.Remove(name) && n!=null && name.Equals(n,StringComparison.Ordinal))
+        if (_transport!=null && _transport.IsOpen && _screenCache.Remove(name) && n!=null && name.Equals(n,StringComparison.Ordinal))
         {
-            _requests.Enqueue((0, (sbyte)_screenIndex));
+            // don't need to go through the motions of serializing, the struct is empty
+            try
+            {
+                _transport.Send((byte)Command.CmdRefreshScreen, Array.Empty<byte>());
+            }
+            catch (Win32Exception)
+            {
+                Close();
+            }
         }
     }
     Screen? GetScreen(string name)
     {
-        var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        var filePath = Path.Join(path, $"{name}.screen.json");
+        var filePath = Path.Join(_path, $"{name}.screen.json");
         if (_screenCache.TryGetValue(name, out var entry))
         {
             var lastWrite = File.GetLastWriteTime(filePath).Ticks;
@@ -166,6 +125,7 @@ public partial class Session : Component, INotifyPropertyChanged
                 _screenCache.Remove(name);
             } else
             {
+                
                 entry.Screen.HardwareInfo  = HardwareInfo;
                 return entry.Screen;
             }
@@ -221,6 +181,13 @@ public partial class Session : Component, INotifyPropertyChanged
             return $"{PortName.ToLowerInvariant()} ({MacToString(_macAddress,false)})";
         }
     }
+    public string SerialNumber
+    {
+        get
+        {
+            return _serialNumber;
+        }
+    }
     public Screen? CurrentScreen
     {
         get
@@ -234,7 +201,7 @@ public partial class Session : Component, INotifyPropertyChanged
     {
         get
         {
-            if(_device!=null && _screenIndex>-1)
+            if(_device!=null && _screenIndex>-1 && _device.Screens.Count > 0)
             {
                 return _device.Screens[_screenIndex % _device.Screens.Count];
             }
@@ -247,13 +214,33 @@ public partial class Session : Component, INotifyPropertyChanged
                 var idx = value==null?-1:_device.Screens.IndexOf(value);
                 if(idx!=_screenIndex)
                 {
-                    _screenIndex = idx;
-                    if (_screenIndex > -1)
+                    _screenIndex = idx % _device.Screens.Count;
+                    if (_screenIndex > -1 && value!=null && _transport!=null)
                     {
-                        _requests.Enqueue((5, (sbyte)_screenIndex));
-                        _requests.Enqueue((0, (sbyte)_screenIndex));
+                        var scr = GetScreen(value)?.ToResponseScreen();
+                        if (scr != null)
+                        {
+                            Span<byte> tmp = stackalloc byte[scr.SizeOfStruct];
+                            if (scr != null)
+                            {
+                                scr.Header.Index = (sbyte)idx;
+                                if (scr.TryWrite(tmp, out _))
+                                {
+                                    try
+                                    {
+                                        _transport.Send((byte)Command.CmdScreen, tmp);
+                                    }
+                                    catch (Win32Exception)
+                                    {
+                                        Close();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        //Debug.WriteLineIf(_portName.Equals("COM14", StringComparison.OrdinalIgnoreCase), "Send CMD_SCREEN");
                     }
-                    Debug.WriteLine($"Set CurrentScreenName to {value}, index {_screenIndex}");
+                    //Debug.WriteLine($"Set CurrentScreenName to {value}, index {_screenIndex}");
                 }
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenName)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenIndex)));
@@ -278,13 +265,33 @@ public partial class Session : Component, INotifyPropertyChanged
                 if (value != _screenIndex)
                 {
                     _screenIndex = value;
-                    if (_screenIndex > -1)
+                    if (_screenIndex > -1 && _transport != null)
                     {
                         var idx = _screenIndex % _device.Screens.Count;
-                        _requests.Enqueue((5, (sbyte)_screenIndex));
-                        _requests.Enqueue((0, (sbyte)idx));
+                        var scr = GetScreen(_device.Screens[idx])?.ToResponseScreen();
+                        if (scr != null)
+                        {
+                            Span<byte> tmp = stackalloc byte[scr.SizeOfStruct];
+                            if (scr != null)
+                            {
+                                scr.Header.Index = (sbyte)idx;
+                                if (scr.TryWrite(tmp, out _))
+                                {
+                                    try
+                                    {
+                                        _transport.Send((byte)Command.CmdScreen, tmp);
+                                    }
+                                    catch (Win32Exception)
+                                    {
+                                        Close();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        //Debug.WriteLineIf(_portName.Equals("COM14",StringComparison.OrdinalIgnoreCase), "Send CMD_SCREEN");
                     }
-                    Debug.WriteLine($"Set CurrentScreenIndex to {value}, index {_screenIndex}");
+                    //Debug.WriteLine($"Set CurrentScreenIndex to {value}, index {_screenIndex}");
                 }
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenName)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenIndex)));
@@ -314,16 +321,124 @@ public partial class Session : Component, INotifyPropertyChanged
         {
             _state = SessionStatus.Connecting;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+            if (_transport == null)
+            {
+#if DEBUG
+                _transport = new EspSerialSession(_portName, true);
+#else
+            _transport = new EspSerialSession(_portName, false);
+#endif
+            }
+            _dataReady = false;
+            _needScreen = CurrentScreenIndex;
+            _transport.ConnectionError += _transport_ConnectionError;
+            _transport.FrameError += _transport_FrameError;
+            _transport.FrameReceived += _transport_FrameReceived;
+            _transport.Open();
+            if(!_transport.IsOpen)
+            {
+                throw new IOException("Could not open serial port");
+            }
+            _startIdentTicks = 0;
+            _gotIdentTicks = 0;
+            _needsFlash = false;
         }     
     }
-   
+
+    private void _transport_FrameReceived(object? sender, FrameReceivedEventArgs e)
+    {
+        if(_transport!=null && _transport.IsOpen)
+        {
+            switch((Command)e.Command)
+            {
+                case Command.CmdScreen:
+                    {
+                        //Debug.WriteLineIf(_portName.Equals("COM14", StringComparison.OrdinalIgnoreCase), "Received CMD_SCREEN");
+                        if (RequestScreen.TryRead(e.Data, out var req, out _))
+                        {
+                            _screenIndex = -1; // force change
+                            _needScreen = req.ScreenIndex;
+                            _dataReady = false;
+                            
+                        }
+                    }
+                    break;
+                case Command.CmdData:
+                    {
+                        //Debug.WriteLineIf(_portName.Equals("COM14", StringComparison.OrdinalIgnoreCase), "Received CMD_DATA");
+                        if (RequestData.TryRead(e.Data, out var req, out _))
+                        {
+                            if(req.ScreenIndex==CurrentScreenIndex)
+                            {
+                                if (!_dataReady)
+                                {
+                                    _dataReady = true;
+                                    Thread.MemoryBarrier();
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case Command.CmdIdent:
+                    RequestIdent.TryRead(e.Data, out var ident, out _);
+                    _versionMajor = ident.VersionMajor;
+                    _versionMinor = ident.VersionMinor;
+                    _build = ident.Build;
+                    var appBuild = FirmwareBuild.Timestamp;
+                    var diff = TimeSpan.FromSeconds((long)(appBuild - _build));
+                    if (appBuild > _build)
+                    {
+                        _needsFlash = true;
+                        break;
+                    }
+                    _id = ident.ID;
+                    _macAddress = ident.MacAddress;
+                    _displayName = ident.DisplayName;
+                    _slug = ident.Slug;
+                    _hres = ident.HorizontalResolution;
+                    _vres = ident.VerticalResolution;
+                    _isMonochrome = ident.IsMonochrome!=0;
+                    _dpi = ident.Dpi;
+                    _pixelSize = ident.PixelSize;
+                    _inputType = (DeviceInputType)ident.InputType;
+                    _gotIdentTicks = Stopwatch.GetTimestamp();
+                    
+                    break;
+
+            }
+        }
+    }
+
+    private void _transport_FrameError(object? sender, FrameReceivedEventArgs e)
+    {
+        Debug.WriteLine("Serial frame error");
+    }
+
+    private void _transport_ConnectionError(object? sender, EventArgs e)
+    {
+        Debug.WriteLine("Disconnect detected");
+        if (_transport != null)
+        {
+            Close();
+        }
+    }
+
     public void Close()
     {
         if (_state != SessionStatus.Closed)
         {
             _state = SessionStatus.Closed;
+            if (_transport != null)
+            {
+                _transport.ConnectionError -= _transport_ConnectionError;
+                _transport.FrameError -= _transport_FrameError;
+                _transport.FrameReceived -= _transport_FrameReceived;
+                _transport.Close();
+                _transport = null;
+            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
         }
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+        
     }
     private sealed class InnerOpenFlashProgress : IProgress<int>
     {
@@ -349,134 +464,177 @@ public partial class Session : Component, INotifyPropertyChanged
     }
     public async Task ResetAsync(IOpenFlashProgress? progress = null, CancellationToken cancellationToken=default)
     {
-        var isOpen = _transport.IsOpen;
+        // esptool.py --no-stub flash_id
+        var wasOpen = _transport!=null && _transport.IsOpen;
         InnerOpenFlashProgress? innerProgress = (progress == null) ? null : new InnerOpenFlashProgress(progress);
-        innerProgress?.SetAction("Closing...");
         var prog = int.MinValue;
-        innerProgress?.Report(prog++);
-        Close();
-        innerProgress?.Report(prog++);
-        Update();
-        var espLink = new EspLink(_transport.Name);
-        innerProgress?.SetAction("Connecting...");
-        await espLink.ConnectAsync(EspConnectMode.Default, 3, false, espLink.DefaultTimeout,innerProgress,cancellationToken);
-        innerProgress?.SetAction("Resetting...");
-        await espLink.ResetAsync(null, cancellationToken);
-        if (isOpen)
+        if (wasOpen)
         {
-            innerProgress?.SetAction("Connecting...");
-            await Task.Delay(1000);
+            innerProgress?.SetAction("Closing...");
+            innerProgress?.Report(prog++);
+            Close();
+        }
+        innerProgress?.SetAction("Resetting...");
+        _state = SessionStatus.Resetting;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+        innerProgress?.Report(prog++);
+        var path = Path.Combine(Path.GetDirectoryName(AppContext.BaseDirectory) ?? "", "esptool.exe");
+        var cmdLine = $"--port {_portName} --no-stub flash_id";
+        var psi = new ProcessStartInfo(path, cmdLine)
+        {
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(path),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = false
+        };
+        using var proc = new Process();
+        proc.StartInfo = psi;
+        proc.Start();
+        var procTask = proc.WaitForExitAsync(cancellationToken);
+        if (wasOpen)
+        {
             Open();
-            Update();
+        } else
+        {
+            _state = SessionStatus.Closed;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+
         }
     }
-    public async Task FlashAsync(bool noReset,FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
+    public async Task FlashAsync(bool noReset, FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
     {
         using var stm = Assembly.GetExecutingAssembly()?.GetManifestResourceStream("Espmon.firmware.boards.zip");
-        if(stm==null)
+        if (stm == null)
         {
             throw new InvalidProgramException("boards not found in executable resources");
         }
         var slug = firmwareEntry.Slug;
         using var archive = new ZipArchive(stm);
-        var entries = new Dictionary<string,ZipArchiveEntry>();
+        var entries = new Dictionary<string, ZipArchiveEntry>();
         for (var i = 0; i < archive.Entries.Count; i++)
         {
-            var entry = archive.Entries[i]; 
-            if(entry.FullName.StartsWith(slug+"\\"))
+            var entry = archive.Entries[i];
+            if (entry.FullName.StartsWith(slug + "\\"))
             {
                 entries.Add(entry.Name, entry);
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        if(entries.Count!=3)
+        if (entries.Count != 3)
         {
             throw new InvalidProgramException("Files missing from boards");
         }
-        if(!entries.ContainsKey($"partition-table.bin") || !entries.ContainsKey("bootloader.bin") || !entries.ContainsKey("firmware.bin"))
+        if (!entries.ContainsKey("partition-table.bin") || !entries.ContainsKey("bootloader.bin") || !entries.ContainsKey("firmware.bin"))
         {
             throw new InvalidProgramException("Files missing from boards");
         }
-        var isOpen = _transport.IsOpen;
-        Close();
-        if(_transport.IsOpen)
+        var wasOpen = _transport != null && _transport.IsOpen;
+        var prog = int.MinValue;
+        InnerOpenFlashProgress? innerProgress = (progress == null) ? null : new InnerOpenFlashProgress(progress);
+        if (wasOpen)
         {
-            Update();
+            innerProgress?.SetAction("Closing...");
+            innerProgress?.Report(prog++);
+            Close();
         }
-        
-        _state = SessionStatus.Flashing;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-        cancellationToken.ThrowIfCancellationRequested();
-        MemoryStream? tmp = new MemoryStream();
-        var espLink = new EspLink(_transport.Name);
-        var innerProgress = InnerOpenFlashProgress.Wrap(progress);
-        cancellationToken.ThrowIfCancellationRequested();
-        innerProgress?.SetAction("Connecting...");
-        await espLink.ConnectAsync(noReset?EspConnectMode.NoReset:EspConnectMode.Default, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        innerProgress?.SetAction("Running stub...");
-        await espLink.RunStubAsync(espLink.DefaultTimeout, innerProgress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        await espLink.SetBaudRateAsync(921600, espLink.DefaultTimeout, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        var file = entries["partition-table.bin"];
-        using var partStm = file.Open();
-        tmp.Seek(0, SeekOrigin.Begin);
-        tmp.SetLength(0);
-        cancellationToken.ThrowIfCancellationRequested();
-        await partStm.CopyToAsync(tmp,cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        tmp.Seek(0, SeekOrigin.Begin);
-        partStm.Close();
-        innerProgress?.SetAction("Flashing partition table...");
-        cancellationToken.ThrowIfCancellationRequested();
-        await espLink.FlashAsync(tmp, true, 0,firmwareEntry.Offset.Partitiions, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        file = entries["bootloader.bin"];
-        using var bootStm = file.Open();
-        tmp.Seek(0, SeekOrigin.Begin);
-        tmp.SetLength(0);
-        cancellationToken.ThrowIfCancellationRequested();
-        await bootStm.CopyToAsync(tmp,cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        tmp.Seek(0, SeekOrigin.Begin);
-        innerProgress?.SetAction("Flashing bootloader...");
-        cancellationToken.ThrowIfCancellationRequested();
-        await espLink.FlashAsync(tmp, true, 0, firmwareEntry.Offset.Bootloader, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        bootStm.Close();
-        file = entries["firmware.bin"];
-        using var appStm = file.Open();
-        tmp.Seek(0, SeekOrigin.Begin);
-        tmp.SetLength(0);
-        cancellationToken.ThrowIfCancellationRequested();
-        await appStm.CopyToAsync(tmp,cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        tmp.Seek(0, SeekOrigin.Begin);
-        appStm.Close();
-        innerProgress?.SetAction("Flashing application...");
-        cancellationToken.ThrowIfCancellationRequested();
-        await espLink.FlashAsync(tmp, true, 0, firmwareEntry.Offset.Firmware, 3, false, espLink.DefaultTimeout, innerProgress, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        tmp.Close();
-        tmp = null;
-        innerProgress?.SetAction("Resetting device...");
-        innerProgress?.Report(int.MinValue);
-        await espLink.ResetAsync();
-        _state = SessionStatus.Closed;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-        if (isOpen)
+        innerProgress?.SetAction("Extracting firmware...");
+        prog = int.MinValue;
+        var path = _path;
+        innerProgress?.Report(0);
+        var pathPartition = Path.Combine(path, "partition-table.bin");
+        try { File.Delete(pathPartition); } catch { }
+        entries[Path.GetFileName(pathPartition)].ExtractToFile(pathPartition);
+        innerProgress?.Report(33);
+        var pathBootloader = Path.Combine(path, "bootloader.bin");
+        try { File.Delete(pathBootloader); } catch { }
+        entries[Path.GetFileName(pathBootloader)].ExtractToFile(pathBootloader);
+        innerProgress?.Report(66);
+        var pathFirmware = Path.Combine(path, "firmware.bin");
+        try { File.Delete(pathFirmware); } catch { }
+        entries[Path.GetFileName(pathFirmware)].ExtractToFile(pathFirmware);
+        innerProgress?.Report(99);
+        archive.Dispose();
+        stm.Close();
+        innerProgress?.Report(100);
+        innerProgress?.SetAction("Running Esptool...");
+        innerProgress?.Report(0);
+        path = Path.Combine(Path.GetDirectoryName(AppContext.BaseDirectory)??"", "esptool.exe");
+        var cmdLine = $"--baud 921600 --port {_portName} write_flash 0x{firmwareEntry.Offset.Partitiions:X} \"{pathPartition}\" 0x{firmwareEntry.Offset.Bootloader:X} \"{pathBootloader}\" 0x{firmwareEntry.Offset.Firmware:X} \"{pathFirmware}\"";
+        var psi = new ProcessStartInfo(path, cmdLine)
+        {
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(path),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = false
+        };
+        using var proc = new Process();
+        proc.StartInfo = psi;
+        proc.Start();
+        var procTask = proc.WaitForExitAsync(cancellationToken);
+        SynchronizationContext? sync = SynchronizationContext.Current;
+        await Task.Run(() => { 
+            while (!proc.StandardOutput.EndOfStream)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var line = proc.StandardOutput.ReadLine();
+                if(line!=null)
+                {
+                    if (line.EndsWith(" %)"))
+                    {
+                        int idx = line.IndexOf("... ");
+                        if (idx > -1)
+                        {
+                            var num = line.Substring(idx + 5, line.Length - idx - 8);
+                            var action = line.Substring(0, idx + 3);
+                            int i;
+                            if (int.TryParse(num, out i))
+                            {
+                                if (sync == null)
+                                {
+                                    innerProgress?.SetAction(action);
+                                    innerProgress?.Report(i);
+                                }
+                                else
+                                {
+                                    sync.Post((st) => {
+                                        innerProgress?.SetAction(action);
+                                        innerProgress?.Report(i);
+                                    },null);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },cancellationToken);
+        await procTask;
+        if(proc.ExitCode!=0)
+        {
+            throw new InvalidOperationException(proc.StandardError.ReadToEnd());
+        }
+        path = _path;
+        var path2 = Path.Combine(path, "partition-table.bin");
+        try { File.Delete(path2); } catch { }
+        path2 = Path.Combine(path, "bootloader.bin");
+        try { File.Delete(path2); } catch { }
+        path2 = Path.Combine(path, "firmware.bin");
+        try { File.Delete(path2); } catch { }
+        if(wasOpen)
         {
             Open();
-            Update();
         }
     }
-    private void LoadDeviceByMac()
+
+    private void LoadDeviceBySerial()
     {
+        if (_serialNumber == null) throw new InvalidOperationException("The serial number could not be retrieved");
         if (_macAddress == null) throw new InvalidOperationException("The session has not been started");
-        var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        var mac = MacToString(_macAddress,true);
-        var pattern = $"*.{mac}.device.json";
+        var path = _path;
+        var pattern = $"{_serialNumber}.device.json";
         var files = Directory.GetFiles(path, pattern);
         if (files.Length == 0) {
             var result = new Device();
@@ -489,7 +647,7 @@ public partial class Session : Component, INotifyPropertyChanged
             result.Dpi = _dpi;
             result.PixelSize = _pixelSize;
             result.InputType = _inputType;
-            var fileName = Path.Join(path, $"{_transport.Name}.{mac}.device.json");
+            var fileName = Path.Join(path, $"{_serialNumber}.device.json");
             using var writer = new StreamWriter(fileName, false, Encoding.UTF8);
             result.WriteTo(writer);
             if(_device!=null)
@@ -503,19 +661,6 @@ public partial class Session : Component, INotifyPropertyChanged
             return;
         }
         var fullPath = files[0];
-        var file = Path.GetFileName(fullPath);
-        var idx = file.IndexOf('.');
-        var portName = file.Substring(0, idx);
-        if(portName!=_transport.Name)
-        {
-            var tmp = Path.Join(path, $"{_transport.Name}.{mac}.device.json");
-            if (File.Exists(tmp))
-            {
-                File.Delete(tmp);
-            }
-            File.Move(fullPath, tmp);
-            fullPath = tmp;
-        }
         using var reader = new StreamReader(File.OpenRead(fullPath),Encoding.UTF8);
         if (_device != null)
         {
@@ -532,8 +677,7 @@ public partial class Session : Component, INotifyPropertyChanged
         if (_device!.MacAddress == null) throw new InvalidOperationException("The device is incomplete");
 
         var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        var mac = MacToString(_device.MacAddress, true);
-        var fullPath = Path.Join(path, $"{_transport.Name}.{mac}.device.json");
+        var fullPath = Path.Join(path, $"{_serialNumber}.device.json");
         if (File.Exists(fullPath))
         {
             File.Delete(fullPath);
@@ -561,341 +705,88 @@ public partial class Session : Component, INotifyPropertyChanged
     private static float Swap(float data) { var arr = BitConverter.GetBytes(data); arr.Reverse(); return BitConverter.ToSingle(arr); }
     private static ulong Swap(ulong data) { var arr = BitConverter.GetBytes(data); arr.Reverse(); return BitConverter.ToUInt64(arr); }
 
-    private static void BuildScreenValueEntryPart(ScreenValueEntry value, byte[] ba, ref int offset)
-    {
-        ba[offset++] = (byte)((value.Color >> 24) & 0xFF);
-        ba[offset++] = (byte)((value.Color >> 16) & 0xFF);
-        ba[offset++] = (byte)((value.Color >> 8) & 0xFF);
-        ba[offset++] = (byte)((value.Color >> 0) & 0xFF);
-        int startText = offset;
-        var suffix = value.Entry.Unit ?? "";
-        Span<byte> buffer = stackalloc byte[12];
-        while (!Encoding.UTF8.TryGetBytes(suffix, buffer, out _)) { suffix = suffix[^1..]; }
-        //Array.Clear(ba, offset, 12);
-        buffer.CopyTo(ba.AsSpan(offset));
-        offset = startText + 12;
-    }
-    private static void BuildScreenEntryPart(ScreenEntry entry, byte[] ba, ref int offset)
-    {
-        int start = offset;
-        var label = entry.Label ?? "";
-        Span<byte> buffer = stackalloc byte[16];
-        while (!Encoding.UTF8.TryGetBytes(label, buffer, out _)) { label = label[^1..]; }
-        //Array.Clear(ba, offset, 16);
-        buffer.CopyTo(ba.AsSpan(offset));
-        offset = start + 16;
-        // color = (a << 24) | (r << 16) | (g << 8) | b;
-        ba[offset++] = (byte)((entry.Color >> 24) & 0xFF);
-        ba[offset++] = (byte)((entry.Color >> 16) & 0xFF);
-        ba[offset++] = (byte)((entry.Color >> 8) & 0xFF);
-        ba[offset++] = (byte)((entry.Color >> 0) & 0xFF);
-        BuildScreenValueEntryPart(entry.Value1!, ba, ref offset);
-        BuildScreenValueEntryPart(entry.Value2!, ba, ref offset);
-    }
-    private static byte[] BuildScreenPacket(int index,Screen screen)
-    {
-        ArgumentNullException.ThrowIfNull(screen, nameof(screen));
-        if (screen.Top == null) throw new ArgumentException("Top was null", nameof(screen));
-        if (screen.Bottom == null) throw new ArgumentException("Bottom was null", nameof(screen));
-        if(screen.Top.Value1 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Top.Value2 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Bottom.Value1 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Bottom.Value2 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        
-        var result = new byte[109];
-        var offset = 0;
-        result[offset++] = 0; // CMD_SCREEN
-        result[offset++] = unchecked((byte)index);
-        byte flags = 0;
-        if (screen.Top.Value1.HasGradient) { flags |= (1 << 0); }
-        if (screen.Top.Value2.HasGradient) { flags |= (1 << 1); }
-        if (screen.Bottom.Value1.HasGradient) { flags |= (1 << 2); }
-        if (screen.Bottom.Value2.HasGradient) { flags |= (1 << 3); }
-        result[offset++] = flags;
-        BuildScreenEntryPart(screen.Top, result, ref offset);
-        BuildScreenEntryPart(screen.Bottom, result, ref offset);
-        return result;
-    }
-    private static void BuildDataValue(ScreenValueEntry value, byte[] ba, ref int offset)
-    {
-        var v= value.Value;
-        var s =value.Scaled;
-        if(!BitConverter.IsLittleEndian) { v = Swap(v); s = Swap(s); }
-        Array.Copy(BitConverter.GetBytes(v), 0, ba, offset, 4);
-        offset += 4;
-        Array.Copy(BitConverter.GetBytes(s), 0, ba, offset, 4);
-        offset += 4;
-    }
-    private static byte[] BuildDataPacket(Screen screen)
-    {
-        ArgumentNullException.ThrowIfNull(screen, nameof(screen));
-        if (screen.HardwareInfo == null) throw new ArgumentException("HardwareInfo was null", nameof(screen));
-        if (screen.Top == null) throw new ArgumentException("Top was null", nameof(screen));
-        if (screen.Bottom == null) throw new ArgumentException("Bottom was null", nameof(screen));
-        if (screen.Top.Value1 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Top.Value2 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Bottom.Value1 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        if (screen.Bottom.Value2 == null) throw new ArgumentException("Screen is incomplete", nameof(screen));
-        var result = new byte[33];
-        var offset = 0;
-        result[offset++] = 1;
-        BuildDataValue(screen.Top.Value1, result, ref offset);
-        BuildDataValue(screen.Top.Value2, result, ref offset);
-        BuildDataValue(screen.Bottom.Value1, result, ref offset);
-        BuildDataValue(screen.Bottom.Value2, result, ref offset);
-        return result;
-    }
     public void Update()
     {
-        if (_transport.IsOpen)
-        {
-            var done = false;
-            while (!done && _transport.AvaialableLength > 0)
-            {
-                var cmd = _transport.ReadByte();
-                if (cmd == _transport.ReadByte() && cmd == _transport.ReadByte())
-                {
-                    switch (cmd)
-                    {
-                        case 0: // need screen
-                            {
-                                var b = _transport.ReadByte();
-                                if(b==-1)
-                                {
-                                    _transport.DiscardAvailable();
-                                    done = true;
-                                    break;
-                                }
-                                var scnidx = unchecked((sbyte)b);
-                                if (_device == null) break;
-                                if (_device.Screens.Count == 0) break;
-                                if (_transport.IsOpen && _device != null && scnidx > -1)
-                                {
-                                    var idx = scnidx % _device.Screens.Count;
-                                    var name = _device.Screens[idx];
-                                    var screen = GetScreen(name);
-                                    if (screen != null)
-                                    {
-                                        var screenPacket = BuildScreenPacket(idx, screen);
-                                        try
-                                        {
-                                            _transport.Send(screenPacket, 0, screenPacket.Length);
-                                        }
-                                        catch
-                                        {
-                                            if (!_transport.IsOpen)
-                                            {
-                                                Close();
-                                            }
-                                            return;
-                                        }
-                                        _screenIndex = idx;
-                                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenIndex)));
-                                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreen)));
-                                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentScreenName)));
-                                    }
-                                }
-                            }
-                            break;
-                        case 1: // need data
-                            {
-                                var b = _transport.ReadByte();
-                                if (b == -1)
-                                {
-                                    _transport.DiscardAvailable();
-                                    done = true;
-                                    break;
-                                }
-                                var screenIndex = unchecked((sbyte)b);
-                                if (_device != null)
-                                {
-                                    if (_device.Screens.Count > 0)
-                                    {
-                                        if (_transport.IsOpen && _screenIndex == (sbyte)screenIndex)
-                                        {
-                                            var name = _device.Screens[_screenIndex % _device.Screens.Count];
-                                            var screen = GetScreen(name);
-                                            if (screen != null)
-                                            {
-                                                var dataPacket = BuildDataPacket(screen);
-                                                try
-                                                {
-                                                    _transport.Send(dataPacket, 0, dataPacket.Length);
-                                                }
-                                                catch
-                                                {
-                                                    if (!_transport.IsOpen)
-                                                    {
-                                                        Close();
-                                                    }
-                                                }
-
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                        case 2: // mode change
-                            {
-                                var b = _transport.ReadByte();
-                                if (b == -1)
-                                {
-                                    _transport.DiscardAvailable();
-                                    done = true;
-                                }
-                                break;
-                            }
-                        case 3: // firmware ident
-                      
-                            var data = new byte[162];
-                            _transport.Receive(data, 0, data.Length);
-                            var ident = FirmwareIdent.Read(data);
-                            _versionMajor = ident.VersionMajor;
-                            _versionMinor = ident.VersionMinor;
-                            _build = ident.Build;
-                            var appBuild = FirmwareBuild.Timestamp;
-                            var diff = TimeSpan.FromSeconds((long)(appBuild - _build));
-                            if (appBuild > _build)
-                            {
-                                _state = SessionStatus.RequiresFlash;
-                                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-                                done = true;
-                                break;
-                            }
-                            _id = ident.Id;
-                            _macAddress = ident.MacAddress;
-                            _displayName = ident.DisplayName;
-                            _slug = ident.Slug;
-                            _hres = ident.HorizontalResolution;
-                            _vres = ident.VerticalResolution;
-                            _isMonochrome = ident.IsMonochrome;
-                            _dpi = ident.Dpi;
-                            _pixelSize = ident.PixelSize;
-                            _inputType = ident.InputType;
-                            LoadDeviceByMac();
-                            _state = SessionStatus.Busy;
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Id)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HorizontalResolution)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VerticalResolution)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMonochrome)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PixelSize)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Dpi)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Device)));
-                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-                            // set the screen
-                            if (_device != null && _device.Screens.Count > 0)
-                            {
-                                var name = _device.Screens[0];
-                                var screen = GetScreen(name);
-                                if (screen != null)
-                                {
-                                    CurrentScreenIndex = 0;
-                                }
-                            }
-                            break;
-                        case 4: // NOP
-                            {
-                                var b = _transport.ReadByte();
-                                if (b == -1)
-                                {
-                                    _transport.DiscardAvailable();
-                                    done = true;
-                                    break;
-                                }
-                                break;
-                            }
-                        default:
-                            _transport.DiscardAvailable();
-                            break;
-                    }
-                }
-            }
-        }
         switch (_state)
         {
             case SessionStatus.Connecting:
-                if (!_transport.IsOpen)
+                if(_transport!=null && _transport.IsOpen && _startIdentTicks==0)
                 {
+                    _startIdentTicks = Stopwatch.GetTimestamp();
                     try
                     {
-                        _transport.Open();
+                        _transport.Send((byte)Command.CmdIdent, Array.Empty<byte>());
+                        _state = SessionStatus.Negotiating;
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
                     }
-                    catch { return; }
-                    _startTicks = DateTimeOffset.UtcNow.Ticks;
-                    _state = SessionStatus.Negotiating;
-                    try
-                    {
-                        _transport.Send([3], 0, 1);
-                    } catch
+                    catch (Win32Exception)
                     {
                         Close();
-                        return;
                     }
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-                    
                 }
+                break;
+            case SessionStatus.Busy:
 
+                if (_needScreen > -1 && _transport != null && _transport.IsOpen &&_device!=null && _device.Screens.Count>0)
+                {
+                    CurrentScreenIndex = _needScreen%_device.Screens.Count;
+                    _needScreen = -1;
+                    _dataReady = false;
+                }
+                if (_dataReady && _screenIndex > -1 && _transport != null && _transport.IsOpen)
+                {
+                    var scr = CurrentScreen;
+                    if (scr != null)
+                    {
+                        var packet = scr.ToResponseData();
+                        Span<byte> tmp = stackalloc byte[packet.SizeOfStruct];
+                        if (packet.TryWrite(tmp, out _))
+                        {
+                            try
+                            {
+                                _transport.Send((byte)Command.CmdData, tmp);
+                            } 
+                            catch(Win32Exception)
+                            {
+                                Close();
+                            }
+                            _dataReady = false;
+                        }
+
+                    }
+                }
                 break;
             case SessionStatus.Negotiating:
-                if ((DateTimeOffset.UtcNow.Ticks - _startTicks) > TimeSpan.FromSeconds(3).Ticks)
+                if (_transport != null && _transport.IsOpen && _startIdentTicks != 0)
                 {
-                    _state = SessionStatus.RequiresFlash;
+                    if(_needsFlash)
+                    {
+                        _state = SessionStatus.RequiresFlash;
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+                    } else if (_gotIdentTicks!=0)
+                    {
+                        LoadDeviceBySerial();
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Id)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HorizontalResolution)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VerticalResolution)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMonochrome)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Dpi)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PixelSize)));
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(InputType)));
+                        _state = SessionStatus.Busy;
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
 
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
-                }
-                else
-                {
-                    try
+                    } else if(TimeSpan.FromTicks( Stopwatch.GetTimestamp()-_startIdentTicks).TotalSeconds>3)
                     {
-                        _transport.Send([3], 0, 1);
-                    }
-                    catch
-                    {
-                        Close();
+                        _state = SessionStatus.RequiresFlash;
+                        _needsFlash = true;
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
                     }
                 }
-
-                break;
-            case SessionStatus.Closed:
-                if (_transport.IsOpen)
-                {
-                    _transport.Close();
-
-                    if (_device != null)
-                    {
-                        _device.PropertyChanged -= _device_PropertyChanged;
-                        _device.Screens.CollectionChanged -= _device_Screens_CollectionChanged;
-                        _device = null;
-                    }
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Device)));
-                }
-                break;
-            default:
-                if (_transport.TimeSinceLastReceived >= TimeSpan.FromSeconds(5))
-                {
-                        
-                    Debug.WriteLine("Port closing due to timeout");
-                    Close();
-                    return;
-                }
-                if (_transport.TimeSinceLastSent>=TimeSpan.FromMilliseconds(500))
-                {
-                    try
-                    {
-                        _transport.Send([4], 0, 1);
-                    }
-                    catch
-                    {
-                        Close();
-                        return;
-                    }
-                }
-                
                 break;
         }
+
     }
  
 }

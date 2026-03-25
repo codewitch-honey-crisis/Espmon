@@ -1,0 +1,42 @@
+{
+    "name": "htcw_frame",
+    "version": "0.1.5",
+    "description": "Provides data transport framing and error checking",
+    "keywords": ["transport","io","data","frame"],
+    "authors": {
+        "name":"honey the codewitch",
+        "homepage": "https://www.codeproject.com/Members/code-witch"
+    },
+    "license": "MIT",
+    "frameworks": "*",
+    "platforms": "*",
+    "build": {
+        "unflags": "-std=gnu++11",
+        "flags": "-std=gnu++17"
+    },
+    "repository":
+    {
+        "type": "git",
+        "url": "https://github.com/codewitch-honey-crisis/htcw_frame.git"
+    },
+    "examples": [
+        {
+            "name": "Demo",
+            "base": "examples/demo",
+            "files": [
+                "buffers_extra.py",
+                "buffers_gen_c.py",
+                "buffers_gen_cs.py",
+                "EspSerialSession.cs",
+                "platformio.ini",
+                "Program.cs",
+                "SerialFrameDemo.csproj",
+                "SerialFrameDemo.slnx",
+                "src/main.c",
+                "include/interface.h",
+                "Properties/launchSettings.json",
+                "src/main.cpp"
+            ]
+        }
+    ]
+}

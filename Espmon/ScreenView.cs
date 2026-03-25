@@ -252,9 +252,10 @@ public partial class ScreenView : Canvas
 
             if (Screen.Top.Value1 != null)
             {
-                if (!string.IsNullOrEmpty(Screen.Top.Value1.Entry.Unit))
+                
+                if (!string.IsNullOrEmpty(Screen.Top.Value1.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value1.Entry.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value1.Unit);
                     bytes.CopyTo(_responseScreen.Top.Value1.Suffix, 0);
                     _responseScreen.Top.Value1.Suffix[bytes.Length] = 0;
                 }
@@ -272,7 +273,7 @@ public partial class ScreenView : Canvas
             {
                 if (!string.IsNullOrEmpty(Screen.Top.Value2.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value2.Entry.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value2.Unit);
                     bytes.CopyTo(_responseScreen.Top.Value2.Suffix, 0);
                     _responseScreen.Top.Value2.Suffix[bytes.Length] = 0;
                 }
@@ -304,7 +305,7 @@ public partial class ScreenView : Canvas
             {
                 if (!string.IsNullOrEmpty(Screen.Bottom.Value1.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value1.Entry.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value1.Unit);
                     bytes.CopyTo(_responseScreen.Bottom.Value1.Suffix, 0);
                     _responseScreen.Bottom.Value1.Suffix[bytes.Length] = 0;
                 }
@@ -322,7 +323,7 @@ public partial class ScreenView : Canvas
             {
                 if (!string.IsNullOrEmpty(Screen.Bottom.Value2.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value2.Entry.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value2.Unit);
                     bytes.CopyTo(_responseScreen.Bottom.Value2.Suffix, 0);
                     _responseScreen.Bottom.Value2.Suffix[bytes.Length] = 0;
                 }
@@ -389,7 +390,7 @@ public partial class ScreenView : Canvas
 
                 // Read current bitmap data
                 stream.Seek(0, System.IO.SeekOrigin.Begin);
-                stream.Read(buffer, 0, (int)bufferBytes);
+                stream.ReadExactly(buffer, 0, (int)bufferBytes);
 
                 fixed (byte* pBuffer = buffer)
                 {
@@ -398,7 +399,7 @@ public partial class ScreenView : Canvas
 
                     // Update renders into the buffer
                     uint dirtyCount = 0;
-                    Abi.Update(_handle, 0, ref _responseScreen, IntPtr.Zero, ref dirtyCount);
+                    Abi.Update(_handle, 1, ref _responseScreen, IntPtr.Zero, ref dirtyCount);
                 }
 
                 // Write modified buffer back to bitmap
@@ -434,7 +435,7 @@ public partial class ScreenView : Canvas
 
                 // Read current bitmap data
                 stream.Seek(0, System.IO.SeekOrigin.Begin);
-                stream.Read(buffer, 0, (int)bufferBytes);
+                stream.ReadExactly(buffer, 0, (int)bufferBytes);
                 fixed (byte* pBuffer = buffer)
                 {
                     // Set the buffer pointer - Update will render directly into it
@@ -446,7 +447,7 @@ public partial class ScreenView : Canvas
                     }
                     // Update renders into the buffer
                     uint dirtyCount = 0;
-                    Abi.Update(_handle, 1, ref _responseData, IntPtr.Zero, ref dirtyCount);
+                    Abi.Update(_handle,2, ref _responseData, IntPtr.Zero, ref dirtyCount);
                 }
 
                 // Write modified buffer back to bitmap

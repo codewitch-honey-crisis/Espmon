@@ -101,6 +101,37 @@ public partial class ScreenValueEntry : Component, INotifyPropertyChanged
             }
         }
     }
+    public string Unit
+    {
+        get
+        {
+            var result = string.Empty;
+            try
+            {
+                result = Entry.Unit;
+            }
+            catch { }
+            if (!string.IsNullOrEmpty(result))
+            {
+                return result;
+            }
+            return BaseUnit;
+        }
+    }
+    public string BaseUnit
+    {
+        get
+        {
+            try
+            {
+                return HardwareInfo != null && _valueExpression != null ? _valueExpression.GetUnit(HardwareInfo): string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+    }
     public float Min
     {
         get
@@ -188,6 +219,25 @@ public partial class ScreenValueEntry : Component, INotifyPropertyChanged
         {
             obj.Add(name, expr.ToString());
         }
+    }
+    internal ResponseScreenValueEntry ToResponse()
+    {
+        var result = new ResponseScreenValueEntry();
+        var color = new ResponseColor();
+        color.A = (byte)(Color >> 24);
+        color.R = (byte)((Color >> 16) & 0xFF);
+        color.G = (byte)((Color >> 8) & 0xFF);
+        color.B = (byte)((Color >> 0) & 0xFF);
+        result.Color = color;
+        result.Suffix = Entry.Unit;
+        return result;
+    }
+    internal ResponseValue ToResponseData()
+    {
+        var result = new ResponseValue();
+        result.Value = Value;
+        result.Scaled = Scaled;
+        return result;
     }
     internal JsonObject ToJson()
     {

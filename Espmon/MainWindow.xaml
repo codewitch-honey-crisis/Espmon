@@ -133,6 +133,40 @@
                     </Border>
                     <ScrollViewer Grid.Column="2" VerticalScrollMode="Auto" HorizontalScrollMode="Auto"></ScrollViewer>
                 </Grid>
+                <Grid x:Name="settingsPanel" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    </Border>
+                    <ScrollViewer Grid.Column="1" VerticalScrollMode="Auto" HorizontalScrollMode="Auto">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" Padding="32" MaxWidth="400">
+
+                            <!-- Start Monitoring -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <CheckBox Content="Started" IsChecked="{x:Bind ViewModel.IsRunning, Mode=TwoWay}"/>
+                                <FontIcon Glyph="&#xE7EF;" Visibility="{x:Bind ViewModel.RequiresElevation, Mode=OneWay}"/>
+                            </StackPanel>
+
+                            <!-- Update Interval -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ComboBox x:Name="updateIntervalCombo" Header="Update Interval" SelectedItem="{x:Bind ViewModel.SelectedUpdateInterval, Mode=TwoWay}">
+                                    <x:String>10 Hz</x:String>
+                                    <x:String>5 Hz</x:String>
+                                    <x:String>1 Hz</x:String>
+                                </ComboBox>
+                                <FontIcon Glyph="&#xE7EF;" VerticalAlignment="Bottom" Margin="0,0,0,4" Visibility="{x:Bind ViewModel.RequiresElevation, Mode=OneWay}"/>
+                            </StackPanel>
+
+                            <!-- Start with Windows -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <CheckBox Content="Start with Windows" IsChecked="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}"/>
+                                <FontIcon Glyph="&#xE7EF;" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.IsNotElevated, Mode=OneWay}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
             </Grid>
         </Grid>
     </NavigationView>

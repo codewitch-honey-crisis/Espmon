@@ -1,29 +1,32 @@
-﻿using EL;
-
+﻿
 using HWKit;
 
-using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO.Ports;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Text;
-using System.Xml.Linq;
 
 namespace Espmon;
 
+[SupportedOSPlatform("windows")]
 public partial class PortDispatcher : Component
 {
-    readonly SynchronizationContext _synchronizationContext;
+    const int OpenInterval = 5 * 1000;
+    readonly SynchronizationContext? _synchronizationContext;
     private readonly Dictionary<Device, string> _deviceToFile = new();
     private const string deviceFileSuffix = ".device.json";
     private const string deviceFilePattern = $"*{deviceFileSuffix}";
     private const string screenFileSuffix = ".screen.json";
     private bool _attemptedOpenDevices = false;
+    private long _intervalMs=DefaultInterval;
+    private string _path;
+    public static int DefaultInterval => 100;
     public ObservableCollection<Session> Sessions { get; } = new ObservableCollection<Session>();
     public HardwareInfoCollection HardwareInfo { get; }
     private FileSystemWatcher _fsw;
-
+    private Timer _timer;
+    private Timer _openTimer;
     private void Post(Action action)
     {
         if (_synchronizationContext != null)
@@ -35,7 +38,8 @@ public partial class PortDispatcher : Component
             action();
         }
     }
-    public const int BaudRate = 115200;
+    
+    public static int BaudRate => 115200;
 
     public static FirmwareEntry[] GetFirmwareEntries()
     {
@@ -64,12 +68,12 @@ public partial class PortDispatcher : Component
         }
         return firmwareEntrys.ToArray();
     }
-    public string[] GetDevicePortNames()
+    public string[] GetDeviceSerialNumbers()
     {
         var result = new List<string>(_deviceToFile.Count);
         foreach(var str in _deviceToFile.Values)
         {
-            var name = GetPortName(str);
+            var name = GetSerialNumber(str);
             if(name!=null)
             {
                 result.Add(name);
@@ -78,7 +82,7 @@ public partial class PortDispatcher : Component
         return result.ToArray();
     }
     
-    private string? GetPortName(string? path)
+    private string? GetSerialNumber(string? path)
     {
         if (path != null)
         {
@@ -103,8 +107,7 @@ public partial class PortDispatcher : Component
 
     private void LoadAllDevices()
     {
-        var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        var deviceFiles = Directory.GetFiles(path, deviceFilePattern);
+        var deviceFiles = Directory.GetFiles(_path, deviceFilePattern);
         foreach (var filePath in deviceFiles)
         {
             LoadDevice(filePath);
@@ -112,7 +115,7 @@ public partial class PortDispatcher : Component
     }
     public void Refresh()
     {
-        foreach(var session in Sessions)
+        foreach (var session in Sessions)
         {
             session.Update();
         }
@@ -133,6 +136,23 @@ public partial class PortDispatcher : Component
             {
                 reader.Close();
                 File.Delete(path);
+            }
+        }
+    }
+    public TimeSpan Interval
+    {
+        get
+        {
+            return TimeSpan.FromMilliseconds(_intervalMs);
+        } set
+        {
+            var ms = value.TotalMilliseconds;
+            if (ms != _intervalMs)
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThan(ms, 100);
+                _intervalMs = (int)ms;
+                _timer.Dispose();
+                _timer = new Timer(_timer_Tick, this, Interval, Interval);
             }
         }
     }
@@ -264,22 +284,43 @@ public partial class PortDispatcher : Component
             }
         }
     }
-
     private void InitFileSystemWatcher()
     {
-        var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         _fsw.EnableRaisingEvents = false;
-        _fsw.Path = path;
+        _fsw.Path = _path;
         _fsw.Filter = "*.json";
         _fsw.Changed += _fsw_FileChanged;
         _fsw.Created += _fsw_FileCreated;
         _fsw.Deleted += _fsw_FileDeleted;
         _fsw.Renamed += _fsw_FileRenamed;
     }
-    public PortDispatcher(SynchronizationContext? syncContext = null)
+    private static void _timer_Tick(object? state)
     {
+        if(state is PortDispatcher pd) {
+            pd.Post(() => {
+                if (pd._fsw.EnableRaisingEvents)
+                {
+                    pd.Refresh();
+                }
+            });
+        }
+    }
+    private static void _openTimer_Tick(object? state)
+    {
+        if (state is PortDispatcher pd)
+        {
+            pd.Post(() => {
+                if (pd._fsw.EnableRaisingEvents)
+                {
+                    pd.TryOpenPorts();
+                }
+            });
+        }
+    }
+    public PortDispatcher(string path,SynchronizationContext? syncContext = null)
+    {
+        _path = path;
         if (syncContext == null) syncContext = SynchronizationContext.Current;
-        ArgumentNullException.ThrowIfNull(syncContext, nameof(syncContext));
         _fsw = new FileSystemWatcher();
         InitFileSystemWatcher();
         HardwareInfo = new();
@@ -287,12 +328,14 @@ public partial class PortDispatcher : Component
         _synchronizationContext = syncContext;        
         LoadAllDevices();
         RefreshAllSessions();
+        _timer = new Timer(_timer_Tick, this, Interval, Interval);
+        _openTimer = new Timer(_openTimer_Tick, this, OpenInterval, OpenInterval);
     }
 
-    public PortDispatcher(IContainer container, SynchronizationContext? syncContext = null)
+    public PortDispatcher(IContainer container, string path, SynchronizationContext? syncContext = null)
     {
+        _path = path;
         if (syncContext == null) syncContext = SynchronizationContext.Current;
-        ArgumentNullException.ThrowIfNull(syncContext, nameof(syncContext));
         _fsw = new FileSystemWatcher();
         InitFileSystemWatcher();
         HardwareInfo = new();
@@ -301,39 +344,68 @@ public partial class PortDispatcher : Component
         _synchronizationContext = syncContext;
         LoadAllDevices();
         RefreshAllSessions();
+        _timer = new Timer(_timer_Tick, this, Interval, Interval);
+        _openTimer = new Timer(_openTimer_Tick, this, OpenInterval, OpenInterval);
     }
-    private Session? FindSessionEntryByPort(string port)
+    private Session? FindSessionEntryBySerial(string serial)
     {
         if (Sessions == null) return null;
         for (var i = 0; i < Sessions.Count; ++i)
         {
             var session = Sessions[i];
-            if (session.PortName.Equals(port, StringComparison.OrdinalIgnoreCase))
+            if (session.SerialNumber.Equals(serial, StringComparison.OrdinalIgnoreCase))
             {
                 return session;
             }
         }
         return null;
     }
+    public bool IsStarted
+    {
+        get { return _fsw.EnableRaisingEvents; }
+    }
     public void Start()
     {
         if(_fsw.EnableRaisingEvents) { return; }
         HardwareInfo.StartAll();
-        var serialPorts = EspLink.GetPorts();
-        var savedPorts = GetDevicePortNames();
-        for (int i = 0; i < savedPorts.Length; i++)
+        _fsw.EnableRaisingEvents = true;
+        TryOpenPorts();
+    }
+    static string? FindPortNameBySerial(PortEntry[] entries,string serialNumber)
+    {
+        for(var i = 0;i<entries.Length;++i)
         {
-            var port = savedPorts[i];
-            var se = FindSessionEntryByPort(port);
+            if (entries[i].SerialNumber.Equals(serialNumber,StringComparison.OrdinalIgnoreCase))
+            {
+                return entries[i].PortName;
+            }
+        }
+        return null;
+    }
+    private void TryOpenPorts()
+    {
+        var serialPorts = EspSerialSession.GetPorts();
+        var savedSerialNumbers = GetDeviceSerialNumbers();
+        for (int i = 0; i < savedSerialNumbers.Length; i++)
+        {
+            var serialNo = savedSerialNumbers[i];
+            var se = FindSessionEntryBySerial(serialNo);
             if (se != null)
             {
-                if (serialPorts.Contains(port, StringComparer.OrdinalIgnoreCase))
+                var pn = FindPortNameBySerial(serialPorts, serialNo);
+                if (pn!=null)
                 {
-                    se.Open();
+                    try
+                    {
+                        se.Open();
+                    }
+                    catch
+                    {
+
+                    }
                 }
             }
         }
-        _fsw.EnableRaisingEvents = true;
     }
     public void Stop()
     {
@@ -349,38 +421,49 @@ public partial class PortDispatcher : Component
     {
         var hash = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<Session>();
-        var serialPorts = EspLink.GetPorts();
-        var savedPorts = GetDevicePortNames();
-        for (int i = 0; i < savedPorts.Length; i++)
+        var serialPorts = EspSerialSession.GetPorts();
+        var savedSerials = GetDeviceSerialNumbers();
+        for (int i = 0; i < savedSerials.Length; i++)
         {
-            var port = savedPorts[i];
+            var serialNo = savedSerials[i];
 
-            if (hash.Add(port))
+            if (hash.Add(serialNo))
             {
-                var se = FindSessionEntryByPort(port);
+                var se = FindSessionEntryBySerial(serialNo);
                 if (se != null)
                 {
                     result.Add(se);
                 }
                 else
                 {
-                    var session = new Session(new SerialPort(port, BaudRate));
-                    session.HardwareInfo = HardwareInfo;
-                    result.Add(session);
+                    var pn = FindPortNameBySerial(serialPorts,serialNo);
+                    if (pn != null)
+                    {
+                        var session = new Session(_path,pn, serialNo);
+                        session.HardwareInfo = HardwareInfo;
+                        result.Add(session);
+                    }
                 }
             }
             else if (_attemptedOpenDevices)
             {
-                var idx = Array.IndexOf(serialPorts, port);
+                var idx = Array.IndexOf(serialPorts, serialNo);
                 var se = result[idx];
-                se.Open();
+                try
+                {
+                    if (se.Status == SessionStatus.Closed) 
+                    {
+                        se.Open();
+                    }
+                }
+                catch { }
             }
         }
         for (var i = 0; i < serialPorts.Length; ++i)
         {
-            if (hash.Add(serialPorts[i]))
+            if (hash.Add(serialPorts[i].SerialNumber))
             {
-                var se = FindSessionEntryByPort(serialPorts[i]);
+                var se = FindSessionEntryBySerial(serialPorts[i].SerialNumber);
 
                 if (se != null)
                 {
@@ -388,7 +471,7 @@ public partial class PortDispatcher : Component
                 }
                 else
                 {
-                    var session = new Session(new SerialPort(serialPorts[i], BaudRate));
+                    var session = new Session(_path, serialPorts[i].PortName, serialPorts[i].SerialNumber);
                     session.HardwareInfo = HardwareInfo;
                     result.Add(session);
                 }
@@ -441,6 +524,14 @@ public partial class PortDispatcher : Component
 
         public void Dispose()
         {
+            _parent._timer.Dispose();
+            _parent._openTimer.Dispose();
+            foreach(var session in _parent.Sessions)
+            {
+                session.Close();
+                session.Update();
+                session.Dispose();
+            }
             _parent.Stop();
             foreach (var device in this._parent._deviceToFile.Keys)
             {

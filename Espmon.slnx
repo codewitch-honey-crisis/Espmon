@@ -6,16 +6,19 @@
       <File Path="espmon-esp32/LICENSE" />
       <File Path="README.md" />
    </Folder>
-   <Project Path="EspLinkLib/EspLinkLib.csproj">
+   <Project Path="Espmon.Elevation.Interface/Espmon.Elevation.Interface.csproj" Id="2097d9ee-7915-4f54-8d6b-c4f8c17ed042">
       <Platform Project="x64" />
    </Project>
-   <Project Path="EspLinkStubGen/EspLinkStubGen.csproj">
+   <Project Path="Espmon.Elevation/Espmon.Elevation.csproj" Id="382b840f-0c07-49d7-ac8e-9644caf9cf90">
       <Platform Project="x64" />
    </Project>
    <Project Path="Espmon.Json/Espmon.Json.csproj">
-      <Platform Project="x64" />
+      <Platform Project="AnyCPU" />
    </Project>
    <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj">
+      <Platform Project="AnyCPU" />
+   </Project>
+   <Project Path="Espmon.Service/Espmon.Service.csproj" Id="c0a8aaf5-7ee3-43ce-b1a3-f7c3ceefd5c0">
       <Platform Project="x64" />
    </Project>
    <Project Path="Espmon/Espmon.csproj">
@@ -23,6 +26,6 @@
       <Deploy />
    </Project>
    <Project Path="HWKit/HWKit.csproj">
-      <Platform Project="x64" />
+      <Platform Project="AnyCPU" />
    </Project>
 </Solution>

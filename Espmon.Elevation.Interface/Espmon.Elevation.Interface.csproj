@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon --public --out . &quot;$(ProjectDir)interface.h&quot;" />
+  </Target>
+</Project>

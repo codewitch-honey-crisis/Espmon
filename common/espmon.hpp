@@ -266,6 +266,7 @@ protected:
         gfx::draw::rectangle(destination,b,px);
         b.inflate_inplace(-1,-1);
         const float tenth_x = ((float)b.width())/10.f;
+        const float cap_x = ((float)b.width())/(float)buffer_type::capacity;
         for(float x = b.x1;x<=b.x2;x+=tenth_x) {
             x=roundf(x);
             destination.fill(gfx::rect16(x,b.y1,x,b.y2),px);
@@ -280,16 +281,21 @@ protected:
                 float fv = v/255.f;
                 float y = (1.0-fv)*(tenth_y*10);
                 gfx::pointf pt(b.x1,y);
-                for(int i = 1;i<entry->buffer->size();++i) {
+                int i = 0;
+                for(float x = 0;x<b.width();x+=cap_x) {
+                    if(i>=entry->buffer->size()) {
+                        break;
+                    }
                     v = *entry->buffer->peek(i);
                     fv = v/255.f;
                     gfx::pointf pt2=pt;
-                    pt2.x+=(tenth_x*.1f);
+                    pt2.x=x+b.x1;
                     y = (1.f-fv)*(tenth_y*10);
                     pt2.y =y;
                     gfx::draw::filled_rectangle(destination,gfx::srect16(floorf(pt.x),floorf(pt.y),ceilf(pt2.x),ceilf(pt2.y)),entry->color);
                     gfx::draw::filled_rectangle(destination,gfx::srect16(floorf(pt.x-1),floorf(pt.y-1),ceilf(pt2.x-1),ceilf(pt2.y-1)),entry->color);
                     pt=pt2;
+                    ++i;
                 }
             }
         }
@@ -534,9 +540,12 @@ class espmon {
     graph_buffer_t m_buffers[4];
     graph_t m_graph;
     
-    void refresh_display() {
+    void refresh_display(bool full = true) {
         while(m_display.dirty()) {
             m_display.update();
+            if(!full) {
+                break;
+            }
         }
     }
     
@@ -845,8 +854,11 @@ public:
     bool connected() const {
         return !m_disconnected_label.visible();
     }
-    void refresh() {
-        refresh_display();
+    void refresh(bool full = true) {
+        refresh_display(full);
+    }
+    bool is_dirty() const {
+        return m_display.dirty();
     }
     void clear_data() {
         m_graph.clear_data();
@@ -863,7 +875,7 @@ public:
             if(refresh) { refresh_display(); }
             m_is_screen_populated = false;
         }
-        if(cmd==0) { // new screen
+        if(cmd==CMD_SCREEN) { // new screen
             const response_screen_t& scr = resp.screen;
             m_screen_index = scr.header.index;
             uint8_t flags = scr.header.flags;
@@ -896,7 +908,7 @@ public:
             if(refresh) { refresh_display(); }
     
         }
-        if(cmd==1) { // screen data
+        if(cmd==CMD_DATA) { // screen data
             const response_data_t& data = resp.data;
             v=data.top.value1.scaled;
             if(m_has_graph) { m_graph.add_data(0,v); }
@@ -932,7 +944,7 @@ public:
             m_bottom.value2.bar.value(v);
             if(refresh) { refresh_display(); }
         }
-        if(cmd==5) {
+        if(cmd==CMD_CLEAR) {
             clear_data();
             if(refresh) { refresh_display(); }
         }

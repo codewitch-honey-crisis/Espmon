@@ -155,7 +155,17 @@ namespace HWKit
         {
             var entries = _entries[provider];
             _cache.Clear();
+            for(var i = 0;i<entries.Count;++i)
+            {
+                if (entries[i].Path == path)
+                {
+                    entries[i] = entry;
+                    return;
+                }
+            } 
+          
             entries.Add(entry);
+            
         }
         private int IndexOfEntry(IHardwareInfoProvider provider, string path)
         {
@@ -352,6 +362,81 @@ namespace HWKit
                 result = list;
                 _cache.Add(expression, result);
                 return result;
+            }
+            throw new NotSupportedException("This query expression is not supported");
+        }
+        public string GetUnit(HardwareInfoQueryExpression expression)
+        {
+            ArgumentNullException.ThrowIfNull(expression, nameof(expression));
+
+            if (_cache.TryGetValue(expression, out var cache))
+            {
+                try
+                {
+                    return cache.First().Unit;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+            IEnumerable<HardwareInfoEntry>? result = null;
+            if (expression is HardwareInfoPathExpression pathExpr)
+            {
+                var path = pathExpr.Path;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    foreach (var kvp in _entries)
+                    {
+                        var subentries = kvp.Value;
+                        for (var j = 0; j < subentries.Count; ++j)
+                        {
+                            var subentry = subentries[j];
+                            if (subentry.Path!.Equals(path, StringComparison.Ordinal))
+                            {
+                                result = [subentry];
+                                _cache.Add(expression, result);
+                                return subentry.Unit;
+                            }
+                        }
+                    }
+                }
+                result = [];
+                _cache.Add(expression, result);
+                return "";
+            }
+            else if (expression is HardwareInfoMatchExpression matchExpr)
+            {
+                var match = matchExpr.Match;
+                if (match == null)
+                {
+                    result = [];
+                    _cache.Add(expression, result);
+                    return string.Empty;
+                }
+                var list = new List<HardwareInfoEntry>();
+                foreach (var kvp in _entries)
+                {
+                    var subentries = kvp.Value;
+                    for (var j = 0; j < subentries.Count; ++j)
+                    {
+                        var subentry = subentries[j];
+                        if (match.IsMatch(subentry.Path!))
+                        {
+                            list.Add(subentry);
+                        }
+                    }
+                }
+                result = list;
+                _cache.Add(expression, result);
+                try
+                {
+                    return result.First().Unit;
+                }
+                catch
+                {
+                    return string.Empty;
+                }
             }
             throw new NotSupportedException("This query expression is not supported");
         }

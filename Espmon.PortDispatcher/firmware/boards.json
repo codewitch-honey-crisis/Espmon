@@ -7,6 +7,10 @@
         {
             "id": "codewitch-honey-crisis/htcw_esp_panel",
             "version": "^0.7.5"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_frame",
+            "version": "^0.1.5"
         }
     ],
     "boards": [

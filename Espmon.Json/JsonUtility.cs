@@ -108,7 +108,9 @@ internal static class JsonUtility
 			switch (c)
 			{
 				case '\\':
-				case '\"':
+                    result.Append("\\\\");
+                    break;
+                case '\"':
 					result.Append("\\\"");
 					break;
 				case '\t':

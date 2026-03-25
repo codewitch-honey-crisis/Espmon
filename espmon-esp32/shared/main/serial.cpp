@@ -1,247 +1,245 @@
-#if __has_include(<Arduino.h>)
-#include <Arduino.h>
-#include "serial_config.h"
-#else
-#include <driver/uart.h>
-#include <driver/gpio.h>
-#endif
-#include <memory.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <esp_idf_version.h>
-#include <esp_err.h>
-#include <esp_log.h>
 #include "serial.hpp"
-#define SERIAL_QUEUE_SIZE 256
-#define SERIAL_BUF_SIZE (2*SERIAL_QUEUE_SIZE)
-const char* TAG = "Serial";
-#ifdef TEST_NO_SERIAL
-#include "esp_random.h"
-static int8_t waiting = -1;
-static int index_requested = -1;
-static response_color_t to_resp_color(uint8_t* data) {
-    response_color_t result;
-    result.a = data[3];
-    result.r = data[0];
-    result.g = data[1];
-    result.b = data[2];
+
+#include <driver/gpio.h>
+#include <driver/uart.h>
+#include <esp_err.h>
+#include <esp_idf_version.h>
+#include <esp_log.h>
+#include <memory.h>
+
+#define FRAME_HEADER_LENGTH (8 + 4 + 4)
+#define FRAME_TOTAL (FRAME_HEADER_LENGTH + max_payload_size)
+#define SERIAL_QUEUE_SIZE (2 * FRAME_TOTAL)
+#define SERIAL_BUF_SIZE (2 * SERIAL_QUEUE_SIZE)
+static const char* TAG = "Serial";
+static uint8_t* frame_rx_data=nullptr;
+static size_t max_payload_size = 0;
+static uint8_t frame_start;
+static size_t frame_start_count=0;
+static bool initialized = false;
+
+static uint8_t rx_frame_next = 0;
+static uint32_t crc32(const uint8_t* data, size_t length, uint32_t seed = UINT32_MAX / 3) {
+    uint32_t result = seed;
+    while (length--) {
+        result ^= *data++;
+    }
     return result;
 }
-#endif
-static const uint8_t* read_response_header(const uint8_t* data, response_screen_header_t* out) {
-    out->index = (int8_t)data[0];
-    out->flags = data[1];
-    return data+2;
+
+static void write_frame_marker(uint8_t cmd, uint8_t* ptr) {
+    cmd +=128;
+    ptr[0]=cmd;
+    ptr[1]=cmd;
+    ptr[2]=cmd;
+    ptr[3]=cmd;
+    ptr[4]=cmd;
+    ptr[5]=cmd;
+    ptr[6]=cmd;
+    ptr[7]=cmd;
 }
-static const uint8_t* read_response_color(const uint8_t* data, response_color_t* out) {
-    out->a = data[0];
-    out->r = data[1];
-    out->g = data[2];
-    out->b = data[3];
-    return data+4;
+static void write_frame_length(size_t length, uint8_t* ptr) {
+    uint32_t len = (uint32_t)length;
+    *(uint32_t*)(ptr+8)=len;
 }
-static const uint8_t* read_response_screen_value_entry(const uint8_t* data, response_screen_value_entry_t* out) {
-    data = read_response_color(data,&out->color);
-    memcpy(out->suffix,data,12);
-    return data+12;
+static void write_frame_crc(uint32_t crc,uint8_t* ptr) {
+    *(uint32_t*)(ptr+12)=crc;
 }
-static const uint8_t* read_response_screen_entry(const uint8_t* data, response_screen_entry_t* out) {
-    memcpy(out->label,data,16);
-    data += 16;
-    data = read_response_color(data,&out->color);
-    data = read_response_screen_value_entry(data,&out->value1);
-    data = read_response_screen_value_entry(data,&out->value2);
-    return data;
-}
-static void read_response_screen(const uint8_t* data, response_screen_t* out) {
-    data = read_response_header(data,&out->header);
-    data = read_response_screen_entry(data,&out->top);
-    read_response_screen_entry(data,&out->bottom);
-}
-static const uint8_t* read_response_value(const uint8_t* data, response_value_t* out) {
-    memcpy(&out->value,data,4);
-    data+=4;
-    memcpy(&out->scaled,data,4);
-    data+=4;
-    return data;
+static void write_frame_header(uint8_t cmd, void* frame, size_t length, uint8_t* ptr) {
+    write_frame_marker(cmd,ptr);
+    write_frame_length(length,ptr);
+    write_frame_crc(crc32((const uint8_t*)frame,length),ptr);
 }
 
-static const uint8_t* read_response_value_entry(const uint8_t* data, response_value_entry_t* out) {
-    data = read_response_value(data,&out->value1);
-    data = read_response_value(data,&out->value2);
-    return data;
+static int8_t cmd_from_frame(const uint8_t* frame) {
+    return (frame[0]==frame[1]&&frame[0]==frame[2]&&frame[0]==frame[3]&&
+    frame[0]==frame[4]&&frame[0]==frame[5]&&frame[0]==frame[6]&&frame[0]==frame[7])?(int8_t)(frame[0]-128):0;
 }
-static void read_response_data(const uint8_t* data, response_data_t* out) {
-    data = read_response_value_entry(data,&out->top);
-    read_response_value_entry(data,&out->bottom);
+static size_t length_from_frame(const uint8_t* frame) {
+    uint32_t* result = (uint32_t*)(frame+8);
+    return (size_t)*result;
 }
-int8_t serial_read_packet(response_t* out_resp) {
-#ifndef TEST_NO_SERIAL
-    uint8_t tmp;
-    uint8_t data[sizeof(response_t)];
-    if(1==uart_read_bytes(UART_NUM_0,&tmp,1,0)) {
-        if(tmp==0) {
-            if(0<uart_read_bytes(UART_NUM_0,data,108,portMAX_DELAY)) {
-                read_response_screen(data,&out_resp->screen);
-                return tmp;
-            }
+static size_t crc_from_frame(const uint8_t* frame) {
+    uint32_t* result = (uint32_t*)(frame+12);
+    return (size_t)*result;
+}
+static bool read_frame_marker() {
+    // puts("CHECK DATA");
+    int length = 0;
+    if(ESP_OK!=uart_get_buffered_data_len(UART_NUM_0, (size_t*)&length)) {
+        return false;
+    }
+    if(length==0) {
+        return false;
+    }
+    uint8_t b;
+    int bytesRead = uart_read_bytes(UART_NUM_0,&b,1,pdMS_TO_TICKS(50));
+    if(bytesRead<1) {
+        //ESP_LOGE(TAG, "Serial read error reading frame");
+        return false;
+    }
+    if(frame_start_count == 0) {
+        if(b<128) {
+            return false;
         }
-        if(tmp==1) {
-            if(0<uart_read_bytes(UART_NUM_0,data,32,portMAX_DELAY)) {
-                read_response_data(data,&out_resp->data);
-                return tmp;
-            }
+        frame_start = b;
+        ++frame_start_count;
+        frame_rx_data[0]=b;
+        return false;
+    } 
+    if(frame_start_count<8) {
+        if(frame_start!=b) {
+            frame_start_count = 0;
+            frame_start=b;
+            return false;
         }
-        if(tmp==3) {
-            return 3;
+        frame_rx_data[frame_start_count]=frame_start;
+        ++frame_start_count;
+        if(frame_start_count==8) {
+            frame_start_count = 0;
+            return true;
         }
-        if(tmp==4) {
-            return 4;
-        }
-        if(tmp==5) {
-            return 5;
+        return false;
+    }
+    frame_start_count = 0;
+    return false;
+}
+static bool read_frame_header() {
+    if(!read_frame_marker()) {
+        return false;
+    }
+    uint8_t* p = frame_rx_data+8;
+   
+    int bytes_read = uart_read_bytes(UART_NUM_0, p, FRAME_HEADER_LENGTH-8, pdMS_TO_TICKS(1000));
+    if (bytes_read < (FRAME_HEADER_LENGTH-8)) {
+        ESP_LOGE(TAG, "Serial read error reading frame");
+        return false;
+    }
+   
+    return true;
+}
+static bool read_frame() {
+    if(!read_frame_header()) {
+        return false;
+    }
+    if(cmd_from_frame(frame_rx_data)==0) return false;
+    size_t len = length_from_frame(frame_rx_data);
+    uint32_t crc = crc_from_frame(frame_rx_data);
+    uint8_t* p = frame_rx_data+FRAME_HEADER_LENGTH;
+    if(len>max_payload_size) {
+        ESP_LOGE(TAG,"Serial corruption reading frame");
+        return false;
+    }
+    if(len>0) {
+        int bytes_read = uart_read_bytes(UART_NUM_0, p, len, pdMS_TO_TICKS(1000));
+        if (bytes_read < 0) {
+            ESP_LOGE(TAG, "Serial read error reading frame");
+            return false;
         }
     }
-    return -1;
-#else
-    if(waiting==CMD_SCREEN) {
-        response_screen_t* pr = (response_screen_t*)out_resp;
-        pr->header.flags = (1<<1)|(1<<3);
-        pr->header.index = 0;
-        pr->top.color = to_resp_color((uint8_t[]){ (uint8_t)(0.67843137254902*0xFF), (uint8_t)(0.847058823529412*0xFF), (uint8_t)(0.901960784313726*0xFF),0xFF});
-        strcpy(pr->top.label,"CPU");
-        pr->top.value1.color=to_resp_color((uint8_t[]){0x00,0xFF,0x00,0xFF});
-        strcpy(pr->top.value1.suffix, "GHz");
-        pr->top.value2.color=to_resp_color((uint8_t[]){0xFF,0x7F,0x00,0xFF});
-        strcpy(pr->top.value2.suffix, "\xC2\xB0");
-        pr->bottom.color = to_resp_color((uint8_t[]){0xFF, (uint8_t)(0.627450980392157*0xFF), (uint8_t)(0.47843137254902*0xFF),0xFF});
-        strcpy(pr->bottom.label,"GPU");
-        pr->bottom.value1.color=to_resp_color((uint8_t[]){0xFF,0xFF,0xFF,0xFF});
-        strcpy(pr->bottom.value1.suffix, "%");
-        pr->bottom.value2.color=to_resp_color((uint8_t[]){0xFF,0x00,0xFF,0xFF});
-        strcpy(pr->bottom.value2.suffix, "\xC2\xB0");
+    if(crc!=crc32(frame_rx_data+FRAME_HEADER_LENGTH,len)) {
+        ESP_LOGE(TAG, "CRC32 check failed for frame");
+        return false;
     }
-    if(waiting==CMD_DATA) {
-        response_data_t* pr = (response_data_t*)out_resp;
-        pr->top.value1.value = 50;
-        pr->top.value2.value = 30;
-        pr->bottom.value1.value = 15;
-        pr->bottom.value2.value = 35;
-        int variance = (esp_random()%30)-15;
-        pr->top.value1.value += variance;
-        pr->top.value1.scaled = (pr->top.value1.value/100.0f);
-        variance = (esp_random()%30)-15;
-        pr->top.value2.value += variance;
-        pr->top.value2.scaled = (pr->top.value2.value/100.0f);
-        variance = (esp_random()%30)-15;
-        pr->bottom.value1.value += variance;
-        pr->bottom.value1.scaled = (pr->bottom.value1.value/100.0f);
-        variance = (esp_random()%30)-15;
-        pr->bottom.value2.value += variance;
-        pr->bottom.value2.scaled = (pr->bottom.value2.value/85.0f);
-    }
-    int8_t ret = waiting;
-    waiting = -1;
-    return ret;
-#endif
+    return true;
 }
-static void build_array(const request_ident_t& req,uint8_t* data) {
-    memcpy(&data[0],&req.version_major,2);
-    memcpy(&data[2],&req.version_minor,2);
-    memcpy(&data[4],&req.build,8);
-    memcpy(&data[12],&req.id,2);
-    memcpy(&data[14],req.mac_address,6);
-    memcpy(&data[20],req.display_name,64);
-    memcpy(&data[84],req.slug,64);
-    memcpy(&data[148],&req.horizontal_resolution,2);
-    memcpy(&data[150],&req.vertical_resolution,2);
-    data[152]=req.is_monochrome;
-    memcpy(&data[153],&req.dpi,4);
-    memcpy(&data[157],&req.pixel_size,4);
-    data[161]=(uint8_t)req.input_type;
-} 
-void serial_write_identity() {
-    char tmp[128];
-    sprintf(tmp,"### Espmon firmware build: %lld\n",(long long)BUILD_TIMESTAMP_UTC);
-    size_t len = strlen(tmp);
-    if(0>uart_write_bytes(UART_NUM_0,tmp,len)) {
-        int i=1000;
-        while(i-->0) {
-            vTaskDelay(5);
-            if(-1<uart_write_bytes(UART_NUM_0,tmp,len)) {
-                break;
-            }
-        }
-        if(i==0) { return; }
-    }
-    uart_wait_tx_done(UART_NUM_0,portMAX_DELAY);
-}
-void serial_write(const request_ident_t& req) {
-    uint8_t tmp[165];
-    build_array(req,tmp+3);
-    tmp[0]=3;
-    tmp[1]=3;
-    tmp[2]=3;
-    if(0>uart_write_bytes(UART_NUM_0,tmp,165)) {
-        int i=1000;
-        while(i-->0) {
-            vTaskDelay(5);
-            if(-1<uart_write_bytes(UART_NUM_0,tmp,165)) {
-                break;
-            }
-        }
-        if(i==0) { return; }
-    }
-    
-    uart_wait_tx_done(UART_NUM_0,portMAX_DELAY);
-}
-void serial_write(int8_t cmd, uint8_t screen_index) {
-#ifndef TEST_NO_SERIAL
-    uint8_t ba[] = {(uint8_t)cmd,(uint8_t)cmd,(uint8_t)cmd,screen_index};
-    if(0>uart_write_bytes(UART_NUM_0,ba,sizeof(ba))) {
-        int i=1000;
-        while(i-->0) {
-            vTaskDelay(5);
-            if(-1<uart_write_bytes(UART_NUM_0,ba,sizeof(ba))) {
-                break;
-            }
-        }
-        if(i==0) { return; }
-    }
-    
-    uart_wait_tx_done(UART_NUM_0,portMAX_DELAY);
-#else
-    waiting = cmd;
-    index_requested = screen_index;
-#endif
-}
-bool serial_init() {
-#ifndef TEST_NO_SERIAL
+
+bool serial_init(size_t max_payload) {
+    if(initialized) return true;
     esp_log_level_set(TAG, ESP_LOG_INFO);
+    max_payload_size = max_payload?max_payload:8192;
+    frame_rx_data = (uint8_t*)malloc(FRAME_TOTAL);
+    if(frame_rx_data==nullptr) {
+        ESP_LOGE(TAG, "Unable to allocate serial frame buffer");
+        goto error;
+    }
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
     uart_config_t uart_config;
-    memset(&uart_config,0,sizeof(uart_config));
+    memset(&uart_config, 0, sizeof(uart_config));
     uart_config.baud_rate = 115200;
     uart_config.data_bits = UART_DATA_8_BITS;
     uart_config.parity = UART_PARITY_DISABLE;
     uart_config.stop_bits = UART_STOP_BITS_1;
     uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
-    //Install UART driver, and get the queue.
-    if(ESP_OK!=uart_driver_install(UART_NUM_0, SERIAL_BUF_SIZE * 2, 0, 20, nullptr, 0)) {
-        ESP_LOGE(TAG,"Unable to install uart driver");
+    // Install UART driver, and get the queue.
+    if (ESP_OK != uart_driver_install(UART_NUM_0, SERIAL_BUF_SIZE * 2, 0, 20, nullptr, 0)) {
+        ESP_LOGE(TAG, "Unable to install uart driver");
         goto error;
     }
     uart_param_config(UART_NUM_0, &uart_config);
-    //Set UART pins (using UART0 default pins ie no changes.)
+    // Set UART pins (using UART0 default pins ie no changes.)
     uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    //Create a task to handler UART event from ISR
-#else
-    waiting = 0;
-#endif
+    initialized = true;
     return true;
-#ifndef TEST_NO_SERIAL
 error:
+    if(frame_rx_data!=nullptr) {
+        free(frame_rx_data);
+        frame_rx_data = nullptr;
+    }
     return false;
-#endif
+}
+bool serial_try_get_frame(uint8_t* out_cmd,void** out_ptr, size_t* out_length) {
+    if(!initialized || rx_frame_next==0 || !out_cmd || !out_ptr || !out_length) {
+        return false;
+    }
+    *out_cmd = cmd_from_frame(frame_rx_data);
+    *out_ptr = frame_rx_data + FRAME_HEADER_LENGTH;
+    *out_length = length_from_frame(frame_rx_data);
+    rx_frame_next = 0;
+    return true;
+}
+static bool try_write(const uint8_t* data, size_t length) {
+    int tries=10;
+    size_t total = 0;
+    while(total<length && --tries) {
+        int written = uart_write_bytes(UART_NUM_0,data, length-total);
+        if(written<0) {
+            ESP_LOGE(TAG,"Write error");
+            return false;
+        } 
+        if(ESP_OK!=uart_wait_tx_done(UART_NUM_0,pdMS_TO_TICKS(5000))) {
+            ESP_LOGE(TAG,"Timout error during write");
+            return false;
+        }
+        total += written;
+        data+=written;
+    }
+    if(tries<=0) {
+        ESP_LOGE(TAG,"Retry count exceeded error during write");
+        return false;
+    }
+    return true;
+}
+bool serial_put_frame(uint8_t cmd, void* frame, size_t frame_length) {
+    if(!initialized || cmd==0 || cmd>127) {
+        return false;
+    }
+    uint8_t frame_header[FRAME_HEADER_LENGTH];
+    write_frame_header(cmd, frame, frame_length, frame_header);
+    if(!try_write(frame_header,FRAME_HEADER_LENGTH)) { return false; }
+    if(frame_length==0) return true;
+    return try_write((const uint8_t*)frame,frame_length);
+}
+bool serial_discard_frame() {
+    if(!initialized || rx_frame_next==0) {
+        return false;
+    }
+    rx_frame_next = 0;
+    return true;
+}
+
+bool serial_update() {
+    if(!initialized) {
+        return false;
+    }
+    if(rx_frame_next!=0) {
+        return true; // already have a frame waiting so we don't want to process more
+    }
+    if(read_frame()) {
+        rx_frame_next = cmd_from_frame(frame_rx_data);
+    } else {
+        rx_frame_next = 0;
+    }
+    return true;
 }

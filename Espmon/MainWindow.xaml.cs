@@ -35,7 +35,7 @@ public sealed partial class MainWindow : Window
         _timer.Start();
         ViewModel.Log.CollectionChanged += Log_CollectionChanged;
     }
-
+    
     private void Log_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Add)
@@ -80,7 +80,8 @@ public sealed partial class MainWindow : Window
 
     private void Window_Closed(object sender, WindowEventArgs args)
     {
-        ViewModel.HardwareInfo.Dispose();
+      
+        ViewModel.Dispose();
     }
     void SetPanelVisibility(Grid panel, Visibility visibility)
     {
@@ -110,12 +111,12 @@ public sealed partial class MainWindow : Window
 
     private void navView_ItemInvoked(object sender, NavigationViewItemInvokedEventArgs args)
     {
-        // e.InvokedItem - the item
-        // e.InvokedItemContainer - the container
-        // e.IsSettingsInvoked - bool
         string? tag = null;
-
-        if (args.InvokedItemContainer != null && args.InvokedItemContainer.Tag != null)
+        if(args.IsSettingsInvoked)
+        {
+            tag = "settings";
+        }
+        if (tag==null && args.InvokedItemContainer != null && args.InvokedItemContainer.Tag != null)
         {
             tag = args.InvokedItemContainer.Tag.ToString();
         }
@@ -133,12 +134,16 @@ public sealed partial class MainWindow : Window
 
         switch (tag)
         {
+            case "settings":
+                SetPanelVisibility(settingsPanel, Visibility.Visible);
+                break;
             case "screens":
                 SetPanelVisibility(screensPanel, Visibility.Visible);
                 _timer.Start();
                 break;
             case "devices":
                 SetPanelVisibility(devicesPanel, Visibility.Visible);
+                ViewModel?.RefreshDevices();
                 break;
             case "providers":
                 SetPanelVisibility(providersPanel, Visibility.Visible);
@@ -147,6 +152,7 @@ public sealed partial class MainWindow : Window
     }
     private void HideAllSecondaryPanels()
     {
+        SetPanelVisibility(settingsPanel, Visibility.Collapsed);
         SetPanelVisibility(screensPanel, Visibility.Collapsed); 
         SetPanelVisibility(devicesPanel, Visibility.Collapsed);
         SetPanelVisibility(providersPanel, Visibility.Collapsed);
@@ -168,19 +174,27 @@ public sealed partial class MainWindow : Window
         {
             switch (lastInvokedTag)
             {
+                case "settings":
+                    SetPanelVisibility(settingsPanel, Visibility.Visible);
+                    SetPanelVisibility(devicesPanel, Visibility.Collapsed);
+                    SetPanelVisibility(providersPanel, Visibility.Collapsed);
+                    SetPanelVisibility(screensPanel, Visibility.Collapsed);
+                    break;
                 case "screens":
+                    SetPanelVisibility(settingsPanel, Visibility.Collapsed);
                     SetPanelVisibility(devicesPanel, Visibility.Collapsed);
                     SetPanelVisibility(providersPanel, Visibility.Collapsed);
                     SetPanelVisibility(screensPanel, Visibility.Visible); 
-
                     break;
                 case "devices":
+                    SetPanelVisibility(settingsPanel, Visibility.Collapsed);
                     SetPanelVisibility(devicesPanel, Visibility.Visible);
                     SetPanelVisibility(providersPanel, Visibility.Collapsed);
                     SetPanelVisibility(screensPanel, Visibility.Collapsed);
 
                     break;
                 case "providers":
+                    SetPanelVisibility(settingsPanel, Visibility.Collapsed);
                     SetPanelVisibility(providersPanel, Visibility.Visible);
                     SetPanelVisibility(devicesPanel, Visibility.Collapsed);
                     SetPanelVisibility(screensPanel, Visibility.Collapsed); 
@@ -200,9 +214,11 @@ public sealed partial class MainWindow : Window
         {
             switch (lastInvokedTag)
             {
+                case "settings":
+                    SetPanelVisibility(settingsPanel, Visibility.Visible);
+                    break;
                 case "screens":
                     SetPanelVisibility(screensPanel, Visibility.Visible); 
-
                     break;
                 case "devices":
                     ViewModel.SessionEntries.Clear();
@@ -427,4 +443,6 @@ public sealed partial class MainWindow : Window
 
         }
     }
+
+   
 }

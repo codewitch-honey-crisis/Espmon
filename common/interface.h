@@ -7,16 +7,17 @@ extern "C" {
 #define ESPMON_VERSION_MAJOR 4
 #define ESPMON_VERSION_MINOR 0
 // all packet structs are preceded on the wire by a 1 byte command
-extern "C" {
-typedef enum : uint8_t {
-    CMD_SCREEN = 0,
-    CMD_DATA = 1,
-    CMD_MODE = 2,
-    CMD_IDENT = 3,
-    CMD_NOP = 4,
-    CMD_CLEAR = 5
+typedef enum {
+    CMD_NONE,
+    CMD_SCREEN,
+    CMD_DATA,
+    CMD_MODE,
+    CMD_IDENT,
+    CMD_NOP,
+    CMD_CLEAR,
+    CMD_REFRESH_SCREEN
 } command_t;
-typedef enum : uint8_t {
+typedef enum {
     INPUT_NONE = 0,
     INPUT_TOUCH = 1,
     INPUT_BUTTON = 2
@@ -67,14 +68,37 @@ typedef struct { // 108 bytes on the wire
     response_screen_entry_t bottom;
 } response_screen_t;
 
+typedef struct {
+
+} response_clear_t;
+
+typedef struct {
+
+} response_ident_t;
+
+typedef struct {
+
+} response_refresh_screen_t;
+
 typedef union {
     response_data_t data;
     response_screen_t screen;
+    response_clear_t clear;
+    response_ident_t ident;
+    response_refresh_screen_t refresh_screen;
 } response_t;
 
 typedef struct {
     int8_t screen_index;
 } request_data_t;
+
+typedef struct {
+
+} request_nop_t;
+
+typedef struct {
+    int8_t screen_index;
+} request_screen_t;
 
 typedef struct {
     int8_t mode;
@@ -95,7 +119,6 @@ typedef struct { // 162 bytes on the wire
     float pixel_size; // in millimeters
     input_type_t input_type;
 } request_ident_t;
-}
 #ifdef __cplusplus
 }
 #endif
