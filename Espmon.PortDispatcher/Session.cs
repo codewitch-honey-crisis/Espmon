@@ -505,6 +505,7 @@ public partial class Session : Component, INotifyPropertyChanged
     }
     public async Task FlashAsync(bool noReset, FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
     {
+        
         using var stm = Assembly.GetExecutingAssembly()?.GetManifestResourceStream("Espmon.firmware.boards.zip");
         if (stm == null)
         {
@@ -539,6 +540,9 @@ public partial class Session : Component, INotifyPropertyChanged
             innerProgress?.Report(prog++);
             Close();
         }
+        _state = SessionStatus.Flashing;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+
         innerProgress?.SetAction("Extracting firmware...");
         prog = int.MinValue;
         var path = _path;
@@ -623,9 +627,13 @@ public partial class Session : Component, INotifyPropertyChanged
         try { File.Delete(path2); } catch { }
         path2 = Path.Combine(path, "firmware.bin");
         try { File.Delete(path2); } catch { }
-        if(wasOpen)
+        _state = SessionStatus.Closed;
+        if (wasOpen)
         {
             Open();
+        } else
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
         }
     }
 
