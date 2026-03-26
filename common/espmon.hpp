@@ -918,6 +918,7 @@ public:
             }
             m_top.value1.label.text(m_top.value1.value_buffer);
             m_top.value1.bar.value(v);
+            m_top.value1.bar.invalidate();
             v=data.top.value2.scaled;
             if(m_has_graph) { m_graph.add_data(1,v); }
             format_float(data.top.value2.value,m_top.value2.value_buffer,sizeof(m_top.value2.value_buffer));
@@ -926,6 +927,7 @@ public:
             }
             m_top.value2.label.text(m_top.value2.value_buffer);
             m_top.value2.bar.value(v);
+            m_top.value2.bar.invalidate();
             v=data.bottom.value1.scaled;
             if(m_has_graph) { m_graph.add_data(2,v); }
             format_float(data.bottom.value1.value,m_bottom.value1.value_buffer,sizeof(m_bottom.value1.value_buffer));
@@ -934,6 +936,7 @@ public:
             }
             m_bottom.value1.label.text(m_bottom.value1.value_buffer);
             m_bottom.value1.bar.value(v);
+            m_bottom.value1.bar.invalidate();
             v=data.bottom.value2.scaled;
             if(m_has_graph) { m_graph.add_data(3,v); }
             format_float(data.bottom.value2.value,m_bottom.value2.value_buffer,sizeof(m_bottom.value2.value_buffer));
@@ -942,6 +945,7 @@ public:
             }
             m_bottom.value2.label.text(m_bottom.value2.value_buffer);
             m_bottom.value2.bar.value(v);
+            m_bottom.value2.bar.invalidate();
             if(refresh) { refresh_display(); }
         }
         if(cmd==CMD_CLEAR) {

@@ -179,15 +179,16 @@ namespace HWKit
             }
             return -1;
         }
-        void RevokePath(IHardwareInfoProvider provider, string path)
+        bool RevokePath(IHardwareInfoProvider provider, string path)
         {
             var idx = IndexOfEntry(provider,path);
             if (idx<0)
             {
-                throw new InvalidOperationException("Unable to revoke path");
+                return false;
             }
             _cache.Clear();
             _entries[provider].RemoveAt(idx);
+            return true;
         }
         public TimeSpan MinimumTrackingInterval { get; set; } = TimeSpan.Zero;
         public void StartAll(bool throwOnError = false)

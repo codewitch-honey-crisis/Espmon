@@ -425,7 +425,7 @@ public partial class Session : Component, INotifyPropertyChanged
 
     public void Close()
     {
-        if (_state != SessionStatus.Closed)
+        if (_state != SessionStatus.Closed )
         {
             _state = SessionStatus.Closed;
             if (_transport != null)

@@ -397,7 +397,10 @@ public partial class PortDispatcher : Component
                 {
                     try
                     {
-                        se.Open();
+                        if (se.Status == SessionStatus.Closed)
+                        {
+                            se.Open();
+                        }
                     }
                     catch
                     {

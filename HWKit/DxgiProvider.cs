@@ -111,7 +111,11 @@ namespace HWKit
                             // not yet in Dictionary, add it
 
                             string name = "";
-                            var proc = Process.GetProcessById(pid);
+                            Process? proc = null;
+                            try {
+                                proc = Process.GetProcessById(pid);
+                            }
+                            catch { }
                             if (proc != null)
                             {
                                 using (proc)
