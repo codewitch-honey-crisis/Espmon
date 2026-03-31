@@ -8,6 +8,6 @@ namespace Espmon
 {
     public static class FirmwareBuild
     {
-        public static readonly ulong Timestamp = (ulong)1774487312;
+        public static readonly ulong Timestamp = (ulong)1774902447;
     }
 }

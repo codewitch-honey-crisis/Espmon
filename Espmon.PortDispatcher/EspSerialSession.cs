@@ -156,6 +156,7 @@ internal partial class EspSerialSession : IDisposable
     }
 
     volatile bool _closing;
+    volatile bool _connErrorFired;
     string _portName;
     bool _disposed;
     SafeFileHandle? _handle;
@@ -168,37 +169,6 @@ internal partial class EspSerialSession : IDisposable
     public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
     public event EventHandler<FrameReceivedEventArgs>? FrameError;
-
-    public void Close()
-    {
-        _closing = true;
-        Thread.MemoryBarrier();
-        // CancelIoEx unblocks any pending ReadFile / WaitCommEvent.
-        // They will complete with ERROR_OPERATION_ABORTED and the
-        // IOCP callback will fire, resolving the tasks.
-        try
-        {
-            if (_handle != null && !_handle.IsInvalid && !_handle.IsClosed)
-            {
-                CancelIoEx(_handle, IntPtr.Zero);
-            }
-        }
-        catch (Win32Exception) { }
-        try
-        {
-            if (_statTask != null && _readTask != null)
-            {
-                Task.WaitAll([_statTask, _readTask]);
-            }
-        }
-        catch (AggregateException)
-        {
-
-        }
-        _boundHandle?.Dispose();
-        _handle?.Dispose();
-        _closing = false;
-    }
     public static PortEntry[] GetPorts()
     {
         var result = new List<PortEntry>();
@@ -332,6 +302,8 @@ internal partial class EspSerialSession : IDisposable
     private void OnConnectionError(EventArgs args)
     {
         if (_disposed) return;
+        if (_connErrorFired) return;
+        _connErrorFired = true;
         if (ConnectionError != null)
         {
             if (_sync == null)
@@ -498,7 +470,9 @@ internal partial class EspSerialSession : IDisposable
     }
     public void Open()
     {
+        if (IsOpen) return;
         _closing = false;
+        _connErrorFired = false;
         var rawHandle = CreateFile(
                     $@"\\.\{_portName}",
                     GENERIC_READ | GENERIC_WRITE,
@@ -529,7 +503,6 @@ internal partial class EspSerialSession : IDisposable
         dcb.ByteSize = 8;
         dcb.Parity = 0;
         dcb.StopBits = 0;
-
         if (!SetCommState(_handle, ref dcb))
         {
             throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -543,7 +516,7 @@ internal partial class EspSerialSession : IDisposable
         {
             throw new Win32Exception(Marshal.GetLastWin32Error());
         }
-        _statTask = Task.Run(async () =>
+        _statTask = Task.Factory.StartNew(async () =>
         {
             try
             {
@@ -557,13 +530,12 @@ internal partial class EspSerialSession : IDisposable
                     }
                 }
             }
-            catch (OperationCanceledException) { }
             catch (Exception)
             {
                 if (!_closing)
                     OnConnectionError(EventArgs.Empty);
             }
-        });
+        }, default,TaskCreationOptions.RunContinuationsAsynchronously, TaskScheduler.Default);
 
         _readTask = Task.Run(async () =>
         {
@@ -611,7 +583,6 @@ internal partial class EspSerialSession : IDisposable
                     }
                 }
             }
-            catch (OperationCanceledException) { }
             catch (Exception)
             {
                 if (!_closing)
@@ -621,6 +592,58 @@ internal partial class EspSerialSession : IDisposable
             }
             
         });
+    }
+    public void Close()
+    {
+        if(!IsOpen)
+        {
+            return;
+        }
+        _closing = true;
+        Thread.MemoryBarrier();
+        // CancelIoEx unblocks any pending ReadFile / WaitCommEvent.
+        // They will complete with ERROR_OPERATION_ABORTED and the
+        // IOCP callback will fire, resolving the tasks.
+        try
+        {
+            if (_handle != null && !_handle.IsInvalid && !_handle.IsClosed)
+            {
+                CancelIoEx(_handle, IntPtr.Zero);
+            }
+        }
+        catch (Win32Exception) { }
+        try
+        {
+            if (_connErrorFired)
+            {
+                if (_statTask != null && _readTask != null)
+                {
+                    var tasks = new List<Task>(2);
+                    
+                    if (_readTask.Status == TaskStatus.Running)
+                    {
+                        tasks.Add(_readTask);
+                    }
+
+                    if (_statTask.Status == TaskStatus.Running)
+                    {
+                        tasks.Add(_statTask);
+                    }
+                    if(tasks.Count > 0) 
+                    {
+                        Task.WaitAll(tasks.ToArray());
+                    }
+                }
+            }
+        }
+        catch (AggregateException)
+        {
+
+        }
+        _boundHandle?.Dispose();
+        _handle?.Dispose();
+        _closing = false;
+        _connErrorFired = false;
     }
     public EspSerialSession(string port, bool logging = false, SynchronizationContext? syncContext = null)
     {

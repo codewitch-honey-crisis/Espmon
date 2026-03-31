@@ -417,25 +417,24 @@ public partial class Session : Component, INotifyPropertyChanged
     private void _transport_ConnectionError(object? sender, EventArgs e)
     {
         Debug.WriteLine("Disconnect detected");
-        if (_transport != null)
-        {
-            Close();
-        }
+        
+        Close();
+        
     }
 
     public void Close()
     {
+        if (_transport != null)
+        {
+            _transport.ConnectionError -= _transport_ConnectionError;
+            _transport.FrameError -= _transport_FrameError;
+            _transport.FrameReceived -= _transport_FrameReceived;
+            _transport.Close();
+            _transport = null;
+        }
         if (_state != SessionStatus.Closed )
         {
             _state = SessionStatus.Closed;
-            if (_transport != null)
-            {
-                _transport.ConnectionError -= _transport_ConnectionError;
-                _transport.FrameError -= _transport_FrameError;
-                _transport.FrameReceived -= _transport_FrameReceived;
-                _transport.Close();
-                _transport = null;
-            }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
         }
         

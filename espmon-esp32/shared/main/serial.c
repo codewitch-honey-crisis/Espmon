@@ -34,7 +34,7 @@ bool serial_init(size_t max_payload) {
 error:
     return false;
 }
-int serial_getc() {
+int serial_getc(void) {
     uint8_t tmp;
     if(1==uart_read_bytes(UART_NUM_0,&tmp,1,0)) {
         return tmp;
@@ -45,3 +45,32 @@ void serial_putc(int value) {
     uint8_t tmp = value;
     uart_write_bytes(UART_NUM_0,&tmp,1);
 }
+#ifdef CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "driver/usb_serial_jtag.h"
+
+bool serial2_init(size_t queue_size) {
+    usb_serial_jtag_driver_config_t usb_config;
+    memset(&usb_config,0,sizeof(usb_config));
+    usb_config.rx_buffer_size = queue_size;
+    usb_config.tx_buffer_size = queue_size;
+    if(ESP_OK!=usb_serial_jtag_driver_install(&usb_config)) {
+        return false;
+    }
+    return true;
+}
+int serial2_getc(void) {
+    uint8_t tmp;
+    if(1==usb_serial_jtag_read_bytes(&tmp,1,0)) {
+        return tmp;
+    }
+    return -1;
+}
+bool serial2_putc(int value) {
+    uint8_t tmp=value;
+    if(1==usb_serial_jtag_write_bytes(&tmp,1,pdMS_TO_TICKS(100))) {
+        //uart_wait_tx_done(UART_NUM_0,pdMS_TO_TICKS(100));
+        return true;
+    }
+    return false;
+}
+#endif
