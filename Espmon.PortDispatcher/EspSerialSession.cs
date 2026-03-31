@@ -618,20 +618,19 @@ internal partial class EspSerialSession : IDisposable
             {
                 if (_statTask != null && _readTask != null)
                 {
-                    var tasks = new List<Task>(2);
-                    
+                    var tasks = new Task[2];
+                    int taskCount = 0;
                     if (_readTask.Status == TaskStatus.Running)
                     {
-                        tasks.Add(_readTask);
+                        tasks[taskCount++] = _readTask;
                     }
-
                     if (_statTask.Status == TaskStatus.Running)
                     {
-                        tasks.Add(_statTask);
+                        tasks[taskCount++);
                     }
-                    if(tasks.Count > 0) 
+                    if(taskCount > 0) 
                     {
-                        Task.WaitAll(tasks.ToArray());
+                        Task.WaitAll(tasks.AsSpan(0,taskCount);
                     }
                 }
             }
