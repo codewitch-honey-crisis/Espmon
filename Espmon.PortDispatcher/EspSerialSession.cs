@@ -626,11 +626,11 @@ internal partial class EspSerialSession : IDisposable
                     }
                     if (_statTask.Status == TaskStatus.Running)
                     {
-                        tasks[taskCount++);
+                        tasks[taskCount++]=_statTask;
                     }
                     if(taskCount > 0) 
                     {
-                        Task.WaitAll(tasks.AsSpan(0,taskCount);
+                        Task.WaitAll(tasks.AsSpan(0,taskCount));
                     }
                 }
             }
