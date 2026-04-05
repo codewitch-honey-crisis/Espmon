@@ -1,10 +1,12 @@
 ﻿
 using HWKit;
 
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Reflection;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Espmon;
@@ -14,11 +16,13 @@ public partial class PortDispatcher : Component
 {
     const int OpenInterval = 5 * 1000;
     readonly SynchronizationContext? _synchronizationContext;
-    private readonly Dictionary<Device, string> _deviceToFile = new();
+    private readonly ConcurrentDictionary<Device, string> _deviceToFile = new();
+    private readonly ConcurrentDictionary<string, Device> _serialToDevice = new();
+    private readonly ConcurrentDictionary<string, Device> _macToDevice = new();
     private const string deviceFileSuffix = ".device.json";
     private const string deviceFilePattern = $"*{deviceFileSuffix}";
     private const string screenFileSuffix = ".screen.json";
-    private bool _attemptedOpenDevices = false;
+    
     private long _intervalMs=DefaultInterval;
     private string _path;
     public static int DefaultInterval => 100;
@@ -70,29 +74,37 @@ public partial class PortDispatcher : Component
     }
     public string[] GetDeviceSerialNumbers()
     {
-        var result = new List<string>(_deviceToFile.Count);
-        foreach(var str in _deviceToFile.Values)
+        var result = new List<string>(_serialToDevice.Count);
+        foreach(var str in _serialToDevice.Keys)
         {
-            var name = GetSerialNumber(str);
-            if(name!=null)
+            result.Add(str);
+        }
+        return result.ToArray();
+    }
+    internal DevicePortEntry[] GetDevicePortEntries(PortEntry[] ports) 
+    {
+        var result = new List<DevicePortEntry>(_macToDevice.Count);
+        foreach (var kvp in _macToDevice)
+        {
+            var mac = Convert.FromHexString(kvp.Key);
+            var serialNumbers = kvp.Value.SerialNumbers;
+            for (int i = 0; i < ports.Length; ++i)
             {
-                result.Add(name);
+                var port = ports[i];
+                for (var j = 0; j < serialNumbers.Length; ++j)
+                {
+                    if (port.SerialNumber.Equals(serialNumbers[j], StringComparison.Ordinal))
+                    {
+                        result.Add(new DevicePortEntry(port.PortName, serialNumbers, mac));
+                        i = ports.Length; // break outer loop because we're done
+                        break;
+                    }
+                }
             }
         }
         return result.ToArray();
     }
-    
-    private string? GetSerialNumber(string? path)
-    {
-        if (path != null)
-        {
-            if (path.EndsWith(deviceFileSuffix))
-            {
-                return Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(path)));
-            }
-        }
-        return null;
-    }
+
     private string? GetScreenName(string? path)
     {
         if (path != null)
@@ -115,22 +127,48 @@ public partial class PortDispatcher : Component
     }
     public void Refresh()
     {
-        foreach (var session in Sessions)
+        try
         {
-            session.Update();
+            foreach (var session in Sessions)
+            {
+                session.Update();
+            }
         }
+        catch { }
     }
     private void LoadDevice(string path)
     {
         if (!_deviceToFile.Values.Contains(path))
         {
+            Stream? stm = null;
+            var i = 0;
+            while(true) {
+                try
+                {
+                    stm = File.OpenRead(path);
+                    break;
+                }
+                catch
+                {
+                    if(i++>10)
+                    {
+                        throw;
+                    }
+                    Thread.Sleep(100);
+                }
+            }
             // Load the updated screen
-            using var reader = new StreamReader(File.OpenRead(path), Encoding.UTF8);
+            using var reader = new StreamReader(stm, Encoding.UTF8);
             try
             {
                 var device = Device.ReadFrom(reader);
                 device.HardwareInfo = HardwareInfo;
-                _deviceToFile.Add(device, path);
+                _deviceToFile.TryAdd(device, path);
+                for(i = 0;i< device.SerialNumbers.Length;++i)
+                {
+                    _serialToDevice.TryAdd(device.SerialNumbers[i], device);
+                }
+                _macToDevice.TryAdd(Convert.ToHexString(device.MacAddress,0,device.MacAddress.Length), device);
             }
             catch
             {
@@ -206,11 +244,17 @@ public partial class PortDispatcher : Component
                 Device? device = null;
                 Post(() =>
                 {
-                    device = _deviceToFile.FirstOrDefault(kvp => kvp.Value == e.FullPath).Key;
+                    var kvp = _deviceToFile.FirstOrDefault(kvp => kvp.Value == e.FullPath);
+                    device = kvp.Key;
                     if (device != null)
                     {
-                        device.Dispose();
-                        _deviceToFile.Remove(device);
+                        for(var i = 0;i<device.SerialNumbers.Length;++i)
+                        {
+                            _serialToDevice.TryRemove(new KeyValuePair<string, Device>(device.SerialNumbers[i], device));
+                        }
+                        _deviceToFile.TryRemove(device, out _);
+                        _macToDevice.TryRemove(Convert.ToHexString(device.MacAddress, 0, device.MacAddress.Length), out _);
+                        device.Dispose();                        
                         device = null;
                     }
                 });
@@ -240,8 +284,13 @@ public partial class PortDispatcher : Component
                     var device = _deviceToFile.FirstOrDefault(kvp => kvp.Value == e.FullPath).Key;
                     if (device != null)
                     {
+                        for (var i = 0; i < device.SerialNumbers.Length; ++i)
+                        {
+                            _serialToDevice.TryRemove(new KeyValuePair<string, Device>(device.SerialNumbers[i], device));
+                        }
+                        _deviceToFile.TryRemove(device, out _);
+                        _macToDevice.TryRemove(Convert.ToHexString(device.MacAddress, 0, device.MacAddress.Length), out _);
                         device.Dispose();
-                        _deviceToFile.Remove(device);
                         RefreshAllSessions();
                     }
                 });
@@ -353,9 +402,38 @@ public partial class PortDispatcher : Component
         for (var i = 0; i < Sessions.Count; ++i)
         {
             var session = Sessions[i];
-            if (session.SerialNumber.Equals(serial, StringComparison.OrdinalIgnoreCase))
+            for(var j = 0;j<session.SerialNumbers.Length; ++j)
             {
-                return session;
+                var serialNo = session.SerialNumbers[j];
+                if (serialNo.Equals(serial, StringComparison.OrdinalIgnoreCase))
+                {
+                    return session;
+                }
+            }
+        }
+        return null;
+    }
+    private Session? FindSessionEntryByMac(byte[] mac)
+    {
+        if (Sessions == null) return null;
+        if (mac == null || mac.Length != 6) return null;
+        for (var i = 0; i < Sessions.Count; ++i)
+        {
+            var session = Sessions[i];
+            if(session.MacAddess!=null && session.MacAddess.Length==6)
+            {
+                var found = true;
+                for(var j = 0;j<6;++j)
+                {
+                    if (mac[j] != session.MacAddess[j])
+                    {
+                        found = false; break;
+                    }
+                }
+                if (found)
+                {
+                    return session;
+                }
             }
         }
         return null;
@@ -371,43 +449,62 @@ public partial class PortDispatcher : Component
         _fsw.EnableRaisingEvents = true;
         TryOpenPorts();
     }
-    static string? FindPortNameBySerial(PortEntry[] entries,string serialNumber)
+   
+    internal Device? GetDeviceForMac(byte[] mac)
     {
-        for(var i = 0;i<entries.Length;++i)
+        if(_macToDevice.TryGetValue(Convert.ToHexString(mac), out var result)) {
+            return result;
+        }
+        return null;
+    }
+    internal string? GetNameForDevice(Device device)
+    {
+        if (_deviceToFile.TryGetValue(device, out var result))
         {
-            if (entries[i].SerialNumber.Equals(serialNumber,StringComparison.OrdinalIgnoreCase))
-            {
-                return entries[i].PortName;
-            }
+            return Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(result));
         }
         return null;
     }
     private void TryOpenPorts()
     {
         var serialPorts = EspSerialSession.GetPorts();
-        var savedSerialNumbers = GetDeviceSerialNumbers();
-        for (int i = 0; i < savedSerialNumbers.Length; i++)
+        var portEntries = GetDevicePortEntries(serialPorts);
+        for (int i = 0; i < portEntries.Length; i++)
         {
-            var serialNo = savedSerialNumbers[i];
-            var se = FindSessionEntryBySerial(serialNo);
+            var portEntry = portEntries[i];
+            var mac = portEntry.MacAddress;
+            var se = FindSessionEntryByMac(mac);
             if (se != null)
             {
-                var pn = FindPortNameBySerial(serialPorts, serialNo);
-                if (pn!=null)
+                try
                 {
-                    try
+                    if (se.Status == SessionStatus.Closed)
                     {
-                        if (se.Status == SessionStatus.Closed)
-                        {
-                            se.Open();
-                        }
+                        se.Open();
                     }
-                    catch
+                }
+                catch { }
+            }
+            else if (_macToDevice.TryGetValue(Convert.ToHexString(mac), out var device)) 
+            {
+                for(var j = 0;j< device.SerialNumbers.Length;j++)
+                {
+                    var serialNo = device.SerialNumbers[j];
+                    var se2 = FindSessionEntryBySerial(serialNo);
+                    if (se2 != null)
                     {
-
+                        try
+                        {
+                            if (se2.Status == SessionStatus.Closed)
+                            {
+                                se2.Open();
+                            }
+                        }
+                        catch { }
                     }
                 }
             }
+                
         }
     }
     public void Stop()
@@ -425,46 +522,75 @@ public partial class PortDispatcher : Component
         var hash = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<Session>();
         var serialPorts = EspSerialSession.GetPorts();
-        var savedSerials = GetDeviceSerialNumbers();
-        for (int i = 0; i < savedSerials.Length; i++)
+        var portEntries = GetDevicePortEntries(serialPorts);
+        for (int i = 0; i < portEntries.Length; i++)
         {
-            var serialNo = savedSerials[i];
+            var portEntry = portEntries[i];
+            if (_macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device))
+            {
+                var found = false;
+                for (var j = 0; j < device.SerialNumbers.Length; ++j)
+                {
+                    var serialNo = device.SerialNumbers[j];
+                    if (!hash.Add(serialNo))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if(!found) { 
+                    var se = FindSessionEntryByMac(portEntry.MacAddress);
+                    if (se != null)
+                    {
+                        result.Add(se);
+                    }
+                    else
+                    {
+                        if (_macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device2))
+                        {
+                            if (_deviceToFile.TryGetValue(device2, out var filename)) 
+                            {
+                                var name = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(filename));
+                                var session = new Session(this,_path, name, portEntry.PortName, device2.SerialNumbers);
+                                session.HardwareInfo = HardwareInfo;
+                                result.Add(session);
+                            }
+                        }
+                    }
+                }
+                //else if (_attemptedOpenDevices)
+                //{
+                //    var idx = Array.IndexOf(serialPorts, serialNo);
+                //    var se = result[idx];
+                //    try
+                //    {
+                //        if (se.Status == SessionStatus.Closed) 
+                //        {
+                //            se.Open();
+                //        }
+                //    }
+                //    catch { }
+                //}
 
-            if (hash.Add(serialNo))
-            {
-                var se = FindSessionEntryBySerial(serialNo);
-                if (se != null)
-                {
-                    result.Add(se);
-                }
-                else
-                {
-                    var pn = FindPortNameBySerial(serialPorts,serialNo);
-                    if (pn != null)
-                    {
-                        var session = new Session(_path,pn, serialNo);
-                        session.HardwareInfo = HardwareInfo;
-                        result.Add(session);
-                    }
-                }
             }
-            else if (_attemptedOpenDevices)
-            {
-                var idx = Array.IndexOf(serialPorts, serialNo);
-                var se = result[idx];
-                try
-                {
-                    if (se.Status == SessionStatus.Closed) 
-                    {
-                        se.Open();
-                    }
-                }
-                catch { }
-            }
+
         }
         for (var i = 0; i < serialPorts.Length; ++i)
         {
-            if (hash.Add(serialPorts[i].SerialNumber))
+            var found = false;
+            if (_serialToDevice.TryGetValue(serialPorts[i].SerialNumber,out var device))
+            {
+                for (var j = 0; j < device.SerialNumbers.Length; ++j)
+                {
+                    var serialNo = device.SerialNumbers[j];
+                    if (!hash.Add(serialNo))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found)
             {
                 var se = FindSessionEntryBySerial(serialPorts[i].SerialNumber);
 
@@ -474,7 +600,8 @@ public partial class PortDispatcher : Component
                 }
                 else
                 {
-                    var session = new Session(_path, serialPorts[i].PortName, serialPorts[i].SerialNumber);
+                    
+                    var session = new Session(this,_path, "", serialPorts[i].PortName, [serialPorts[i].SerialNumber]);
                     session.HardwareInfo = HardwareInfo;
                     result.Add(session);
                 }

@@ -144,9 +144,9 @@ public sealed class JsonArray : DynamicObject, IList<object?>, IJsonElement
 	}
 	public JsonArray(IList<object?> inner)
 	{
-		if (_inner == null) throw new ArgumentNullException(nameof(inner));
-		_inner = new List<object?>(inner.Count);
+		if (inner == null) throw new ArgumentNullException(nameof(inner));
 		_inner = inner;
+
 	}
 	public object? this[int index] { get => _inner[index]; set => _inner[index] = JsonUtility.Wrap(value); }
 

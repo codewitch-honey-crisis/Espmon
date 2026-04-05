@@ -31,13 +31,13 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" x:Name="nameDisplay" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="nameDisplay_DoubleTapped"/>
-                                        <TextBlock Grid.Column="0" x:Name="nameDisplayDefault" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" Visibility="Collapsed"/>
-                                        <TextBox Grid.Column="0" x:Name="nameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="NameEdit_LostFocus" KeyDown="NameEdit_KeyDown"/>
+                                        <TextBlock Grid.Column="0" x:Name="screenNameDisplay" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="screenNameDisplay_DoubleTapped"/>
+                                        <TextBlock Grid.Column="0" x:Name="screenNameDisplayDefault" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" Visibility="Collapsed"/>
+                                        <TextBox Grid.Column="0" x:Name="screenNameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="screenNameEdit_LostFocus" KeyDown="screenNameEdit_KeyDown"/>
                                         <Button Grid.Column="1" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Save" Click="SaveButton_Click">
                                              <FontIcon Glyph="&#xE74E;" FontSize="14"/>
                                         </Button>
-                                        <Button Grid.Column="2" x:Name="deleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="DeleteButton_Click">
+                                        <Button Grid.Column="2" x:Name="screenDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="screenDeleteButton_Click">
                                             <FontIcon Glyph="&#xE74D;" FontSize="14"/>
                                         </Button>
                                     </Grid>
@@ -63,13 +63,20 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{x:Bind Name, Mode=OneWay}" VerticalAlignment="Center">
+                                        <TextBlock Grid.Column="0" x:Name="deviceNameDisplay" Text="{x:Bind Name, Mode=OneWay}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="deviceNameDisplay_DoubleTapped">
                                             <TextBlock.Foreground>
                                                 <SolidColorBrush Color="{x:Bind TextColor, Mode=OneWay}"/>
                                             </TextBlock.Foreground>
                                         </TextBlock>
-                                        <SymbolIcon Grid.Column="1" Symbol="Upload" Visibility="{x:Bind RequiresFlash, Mode=OneWay}" Foreground="Orange" Margin="8,0,0,0"/>
+                                        <TextBox Grid.Column="0" x:Name="deviceNameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="deviceNameEdit_LostFocus" KeyDown="deviceNameEdit_KeyDown"/>
+                                        <Button Grid.Column="2" x:Name="deviceDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="deviceDeleteButton_Click">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                                        </Button>
+                                        <Button Grid.Column="2" x:Name="deviceFlashButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="flashButton_Click">
+                                            <SymbolIcon Grid.Column="1" Symbol="Upload" Visibility="{x:Bind RequiresFlash, Mode=OneWay}" Foreground="Orange" Margin="8,0,0,0"/>
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>

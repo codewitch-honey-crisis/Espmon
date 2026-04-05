@@ -533,9 +533,11 @@ internal partial class EspSerialSession : IDisposable
             catch (Exception)
             {
                 if (!_closing)
+                {
                     OnConnectionError(EventArgs.Empty);
+                }
             }
-        }, default,TaskCreationOptions.RunContinuationsAsynchronously, TaskScheduler.Default);
+        }, default,TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
 
         _readTask = Task.Run(async () =>
         {

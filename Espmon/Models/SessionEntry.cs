@@ -32,6 +32,11 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OpenVisibility)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RunningVisibility)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TextColor)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+        }
+        if(e.PropertyName=="Name")
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
         }
     }
 
@@ -40,7 +45,16 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
     public bool RequiresFlash => Session.Status == SessionStatus.RequiresFlash;
     public bool IsFlashing => Session.Status == SessionStatus.Flashing;
     public bool IsClosed => Session.Status == SessionStatus.Closed;
-    public string Name => Session.Name;
+    public string Name {
+        get
+        {
+            return Session.Name;
+        }
+        set
+        {
+            Session.Name = value;
+        }
+    }
     public string ScreenMetrics
     {
         get

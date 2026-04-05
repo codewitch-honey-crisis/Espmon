@@ -183,6 +183,22 @@ public partial class Device : Component, INotifyPropertyChanged
             }
         }
     }
+    string[] _serialNumbers = Array.Empty<string>();
+    public string[] SerialNumbers
+    {
+        get
+        {
+            return _serialNumbers;
+        }
+        set
+        {
+            if (_serialNumbers != value)
+            {
+                _serialNumbers = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SerialNumbers)));
+            }
+        }
+    }
     ObservableCollection<string> _screens = new ObservableCollection<string>();
     public ObservableCollection<string> Screens 
     { 
@@ -214,6 +230,10 @@ public partial class Device : Component, INotifyPropertyChanged
         json.Add("vres", (double)VerticalResolution);
         json.Add("is_monochrome", IsMonochrome);
         json.Add("input_type", InputType.ToString().ToLowerInvariant());
+        if(SerialNumbers.Length>0)
+        {
+            json.Add("serial_numbers", new JsonArray(SerialNumbers));
+        }
         json.Add("mac", MacToString(MacAddress));
         var screens = new JsonArray();
         for(var i = 0; i < _screens.Count;++i)
@@ -319,6 +339,29 @@ public partial class Device : Component, INotifyPropertyChanged
             else
             {
                 throw new ScreenParseException($"Device \"input_type\" field must be a string.", 0, 0, 0);
+            }
+        }
+        if (json.TryGetValue("serial_numbers", out var serialNumbers))
+        {
+            if (serialNumbers is JsonArray arrSerialNumbers)
+            {
+                var arr = new string[arrSerialNumbers.Count];
+                for(var i = 0;i<arr.Length;i++)
+                {
+                    if (arrSerialNumbers[i] is string sno)
+                    {
+                        arr[i] = sno;  
+                    }
+                    else
+                    {
+                        throw new ScreenParseException("The serial number was not a valid string", 0, 0, 0);
+                    }
+                }
+                result.SerialNumbers = arr;
+            }
+            else
+            {
+                throw new ScreenParseException($"Device \"serial_numbers\" field must be an array of strings.", 0, 0, 0);
             }
         }
         if (json.TryGetValue("mac", out var mac))

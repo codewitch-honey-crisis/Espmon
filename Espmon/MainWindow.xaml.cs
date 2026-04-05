@@ -256,44 +256,65 @@ public sealed partial class MainWindow : Window
             preview.Screen = null;
         }
     }
-    private void NameEdit_KeyDown(object sender, KeyRoutedEventArgs e)
+    private void screenNameEdit_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key == VirtualKey.Enter)
         {
             e.Handled = true;
-            CommitRename((TextBox)sender);
+            CommitScreenRename((TextBox)sender);
         }
         else if (e.Key == VirtualKey.Escape)
         {
             e.Handled = true;
-            CancelRename((TextBox)sender);
+            CancelScreenRename((TextBox)sender);
         }
     }
 
-    private void NameEdit_LostFocus(object sender, RoutedEventArgs e)
+    private void screenNameEdit_LostFocus(object sender, RoutedEventArgs e)
     {
-        CommitRename((TextBox)sender);
+        CommitScreenRename((TextBox)sender);
     }
 
-    private void CommitRename(TextBox textBox)
+    private void CommitScreenRename(TextBox textBox)
     {
         var grid = (Grid)textBox.Parent;
         var entry = (ScreenListEntry)textBox.DataContext;
         var newName = textBox.Text.Trim();
 
         textBox.Visibility = Visibility.Collapsed;
-        ((TextBlock)grid.FindName("nameDisplay")).Visibility = Visibility.Visible;
+        ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Visible;
 
         if (string.IsNullOrEmpty(newName) || newName == entry.Name || entry.Screen==null || ViewModel==null) return;
         ViewModel.RenameScreen(entry.Screen, newName);
     }
 
-    private void CancelRename(TextBox textBox)
+    private void CancelScreenRename(TextBox textBox)
     {
         var grid = (Grid)textBox.Parent;
         textBox.Text = ((ScreenListEntry)textBox.DataContext).Name;
         textBox.Visibility = Visibility.Collapsed;
-        ((TextBlock)grid.FindName("nameDisplay")).Visibility = Visibility.Visible;
+        ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Visible;
+    }
+
+    private void CommitDeviceRename(TextBox textBox)
+    {
+        var grid = (Grid)textBox.Parent;
+        var entry = (SessionEntry)textBox.DataContext;
+        var newName = textBox.Text.Trim();
+
+        textBox.Visibility = Visibility.Collapsed;
+        ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Visible;
+
+        if (string.IsNullOrEmpty(newName) || newName == entry.Name || entry.Session == null || ViewModel == null) return;
+        ViewModel.RenameDevice(entry.Session, newName);
+    }
+
+    private void CancelDeviceRename(TextBox textBox)
+    {
+        var grid = (Grid)textBox.Parent;
+        textBox.Text = ((SessionEntry)textBox.DataContext).Name;
+        textBox.Visibility = Visibility.Collapsed;
+        ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Visible;
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -312,7 +333,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void DeleteButton_Click(object sender, RoutedEventArgs e)
+    private void screenDeleteButton_Click(object sender, RoutedEventArgs e)
     {
         var entry = (ScreenListEntry)((Button)sender).DataContext;
         if (entry != null && entry.Screen!=null)
@@ -330,11 +351,11 @@ public sealed partial class MainWindow : Window
         return $"Screen {i}";
     }
 
-    private void nameDisplay_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    private void screenNameDisplay_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         var grid = (Grid)((TextBlock)sender).Parent;
-        ((TextBlock)grid.FindName("nameDisplay")).Visibility = Visibility.Collapsed;
-        var textBox = (TextBox)grid.FindName("nameEdit");
+        ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Collapsed;
+        var textBox = (TextBox)grid.FindName("screenNameEdit");
         textBox.Visibility = Visibility.Visible;
         textBox.SelectAll();
         textBox.Focus(FocusState.Keyboard);
@@ -346,9 +367,9 @@ public sealed partial class MainWindow : Window
         if (entry == null) return;
         if (entry.IsDefault)
         {
-            ((TextBlock)grid.FindName("nameDisplay")).Visibility = Visibility.Collapsed;
-            ((TextBlock)grid.FindName("nameDisplayDefault")).Visibility = Visibility.Visible;
-            ((Button)grid.FindName("deleteButton")).Visibility = Visibility.Collapsed;
+            ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Collapsed;
+            ((TextBlock)grid.FindName("screenNameDisplayDefault")).Visibility = Visibility.Visible;
+            ((Button)grid.FindName("screenDeleteButton")).Visibility = Visibility.Collapsed;
         }
     }
 
@@ -444,5 +465,38 @@ public sealed partial class MainWindow : Window
         }
     }
 
-   
+    private void deviceNameDisplay_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        var grid = (Grid)((TextBlock)sender).Parent;
+        ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Collapsed;
+        var textBox = (TextBox)grid.FindName("deviceNameEdit");
+        textBox.Visibility = Visibility.Visible;
+        textBox.SelectAll();
+        textBox.Focus(FocusState.Keyboard);
+    }
+
+    private void deviceDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+
+    }
+
+    
+    private void deviceNameEdit_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitDeviceRename((TextBox)sender);
+    }
+
+    private void deviceNameEdit_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            CommitDeviceRename((TextBox)sender);
+        }
+        else if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            CancelDeviceRename((TextBox)sender);
+        }
+    }
 }

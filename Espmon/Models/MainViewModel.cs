@@ -261,6 +261,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         DeleteScreen(screen);
         AddScreen(newName, screen);
     }
+    public void RenameDevice(Session session, string newName)
+    {
+        session.Name = newName;
+    }
     private void Screens_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         switch (e.Action)

@@ -24,7 +24,7 @@ public enum SessionStatus
 [SupportedOSPlatform("windows")]
 public partial class Session : Component, INotifyPropertyChanged
 {
-    
+    PortDispatcher _parent;
     SessionStatus _state = SessionStatus.Closed;
     EspSerialSession? _transport;
     long _startIdentTicks;
@@ -47,32 +47,40 @@ public partial class Session : Component, INotifyPropertyChanged
     bool _needsFlash;
     DeviceInputType _inputType;
     string _portName;
-    string _serialNumber;
+    string[] _serialNumbers;
    int _screenIndex = -1;
     string _path;
     Dictionary<string, (long TimestampTicks, Screen Screen)> _screenCache = new(StringComparer.Ordinal);
     public event PropertyChangedEventHandler? PropertyChanged;
     
-    public Session(string path, string portName, string serialNumber)
+    public Session(PortDispatcher parent, string path, string name, string portName, string[] serialNumbers)
     {
+        ArgumentNullException.ThrowIfNull(parent, nameof(parent));
         ArgumentNullException.ThrowIfNull(path, nameof(path));
+        ArgumentNullException.ThrowIfNull(name, nameof(name));
         ArgumentNullException.ThrowIfNull(portName, nameof(portName));
-        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
+        ArgumentNullException.ThrowIfNull(serialNumbers, nameof(serialNumbers));
+        _parent = parent;
         _path = path;
+        _name = name;
         _portName = portName;
-        _serialNumber = serialNumber;
+        _serialNumbers = serialNumbers;
         _transport = null;
         InitializeComponent();
     }
 
-    public Session(string path, string portName,string serialNumber, IContainer container)
+    public Session(PortDispatcher parent, string path, string name, string portName,string[] serialNumbers, IContainer container)
     {
+        ArgumentNullException.ThrowIfNull(parent, nameof(parent));
         ArgumentNullException.ThrowIfNull(path, nameof(path));
+        ArgumentNullException.ThrowIfNull(name, nameof(name));
         ArgumentNullException.ThrowIfNull(portName, nameof(portName));
-        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
+        ArgumentNullException.ThrowIfNull(serialNumbers, nameof(serialNumbers));
+        _parent = parent;
         _path = path;
+        _name = name;
         _portName = portName;
-        _serialNumber= serialNumber;
+        _serialNumbers= serialNumbers;
         _transport = null;
         container?.Add(this);
         InitializeComponent();
@@ -162,6 +170,10 @@ public partial class Session : Component, INotifyPropertyChanged
     {
         get { return _isMonochrome; }
     }
+    public byte[]? MacAddess
+    {
+        get { return _macAddress; }
+    }
     public float Dpi
     {
         get { return _dpi; }
@@ -170,22 +182,46 @@ public partial class Session : Component, INotifyPropertyChanged
     {
         get { return _pixelSize; }
     }
+    private string? _name;
     public string Name
     {
         get
         {
-            if (_macAddress==null || _state==SessionStatus.Closed || _state==SessionStatus.Connecting)
+            if (_name==null || _state==SessionStatus.Closed || _state==SessionStatus.Connecting)
             {
                 return PortName.ToLowerInvariant();
             }
-            return $"{PortName.ToLowerInvariant()} ({MacToString(_macAddress,false)})";
+            return _name;
+        }
+        set
+        {
+            if (_name != value)
+            {
+                var path = _path;
+                if (!string.IsNullOrEmpty(_name))
+                {
+                    var filename = $"{_name}.device.json";
+                    var filepath = Path.Combine(path, filename);
+                    if (File.Exists(filepath))
+                    {
+                        var filename2 = $"{value}.device.json";
+                        var filepath2 = Path.Combine(path, filename2);
+                        File.Move(filepath, filepath2);
+                    }
+                }
+
+                _name = value;
+
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+
+            }
         }
     }
-    public string SerialNumber
+    public string[] SerialNumbers
     {
         get
         {
-            return _serialNumber;
+            return _serialNumbers;
         }
     }
     public Screen? CurrentScreen
@@ -310,7 +346,7 @@ public partial class Session : Component, INotifyPropertyChanged
     }
     static string MacToString(byte[] mac, bool isFile )
     {
-        var j = isFile ? "_" : ":";
+        var j = isFile ? "-" : ":";
         return string.Join(j, mac.Select(b => b.ToString("X2")));
     }
     public SessionStatus Status => _state;
@@ -636,33 +672,69 @@ public partial class Session : Component, INotifyPropertyChanged
         }
     }
 
-    private void LoadDeviceBySerial()
+    private void LoadDeviceByName()
     {
-        if (_serialNumber == null) throw new InvalidOperationException("The serial number could not be retrieved");
+        if (_serialNumbers == null) throw new InvalidOperationException("The serial number could not be retrieved");
         if (_macAddress == null) throw new InvalidOperationException("The session has not been started");
         var path = _path;
-        var pattern = $"{_serialNumber}.device.json";
-        var files = Directory.GetFiles(path, pattern);
+        string pattern;
+        string[] files;
+        if (_name != null) 
+        { 
+            pattern = $"{_name}.device.json";
+            files = Directory.GetFiles(path, pattern);
+        } else
+        {
+            files = Array.Empty<string>();
+        }
         if (files.Length == 0) {
-            var result = new Device();
-            result.Id = _id;
-            result.MacAddress = _macAddress;
-            result.DisplayName = _displayName;
-            result.HorizontalResolution = _hres;
-            result.VerticalResolution= _vres;
-            result.IsMonochrome = _isMonochrome;
-            result.Dpi = _dpi;
-            result.PixelSize = _pixelSize;
-            result.InputType = _inputType;
-            var fileName = Path.Join(path, $"{_serialNumber}.device.json");
-            using var writer = new StreamWriter(fileName, false, Encoding.UTF8);
-            result.WriteTo(writer);
-            if(_device!=null)
+            var result = _parent.GetDeviceForMac(_macAddress);
+            if (result == null)
             {
-                _device.PropertyChanged -= _device_PropertyChanged;
-                _device.Screens.CollectionChanged -= _device_Screens_CollectionChanged;
+                result = new Device();
+                result.Id = _id;
+                result.MacAddress = _macAddress;
+                result.DisplayName = _displayName;
+                result.HorizontalResolution = _hres;
+                result.VerticalResolution = _vres;
+                result.IsMonochrome = _isMonochrome;
+                result.Dpi = _dpi;
+                result.PixelSize = _pixelSize;
+                result.InputType = _inputType;
+                Name = MacToString(_macAddress, true);
+                var fileName = Path.Join(path, $"{_name}.device.json");
+                using var writer = new StreamWriter(fileName, false, Encoding.UTF8);
+                result.WriteTo(writer);
+                if (_device != null)
+                {
+                    _device.PropertyChanged -= _device_PropertyChanged;
+                    _device.Screens.CollectionChanged -= _device_Screens_CollectionChanged;
+                }
+                _device = result;
+                _device.PropertyChanged += _device_PropertyChanged;
+                _device.Screens.CollectionChanged += _device_Screens_CollectionChanged;
+                return;
             }
             _device = result;
+            var changed = false;
+            _name = _parent.GetNameForDevice(_device);
+            for (var i = 0; i < _serialNumbers.Length; ++i)
+            {
+                if (0 > Array.IndexOf(_device.SerialNumbers, _serialNumbers[i]))
+                {
+                    var nsa = new string[_device.SerialNumbers.Length + 1];
+                    _device.SerialNumbers.CopyTo(nsa, 0);
+                    nsa[_device.SerialNumbers.Length] = _serialNumbers[i];
+                    _device.SerialNumbers = nsa;
+                    changed = true;
+                }
+            }
+            if(changed)
+            {   
+                var fileName = Path.Join(path, $"{_name}.device.json");
+                using var writer = new StreamWriter(fileName, false, Encoding.UTF8);
+                _device.WriteTo(writer);
+            }
             _device.PropertyChanged += _device_PropertyChanged;
             _device.Screens.CollectionChanged += _device_Screens_CollectionChanged;
             return;
@@ -681,14 +753,45 @@ public partial class Session : Component, INotifyPropertyChanged
     }
     private void SaveDevice()
     {
-        if (_device!.MacAddress == null) throw new InvalidOperationException("The device is incomplete");
-
+        if (_device == null) throw new InvalidOperationException("The device is null");
+        if (_device.MacAddress == null) throw new InvalidOperationException("The device is incomplete");
+        for (var i = 0; i < _serialNumbers.Length; ++i)
+        {
+            if (0 > Array.IndexOf(_device.SerialNumbers, _serialNumbers[i]))
+            {
+                var nsa = new string[_device.SerialNumbers.Length + 1];
+                _device.SerialNumbers.CopyTo(nsa, 0);
+                nsa[_device.SerialNumbers.Length] = _serialNumbers[i];
+                _device.SerialNumbers = nsa;
+            }
+        }
+        
         var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        var fullPath = Path.Join(path, $"{_serialNumber}.device.json");
+        var fullPath = Path.Join(path, $"{_name}.device.json");
         if (File.Exists(fullPath))
         {
-            File.Delete(fullPath);
+            int tries = 0;
+            while (true)
+            {
+                try
+                {
+
+                    File.Delete(fullPath);
+                    break;
+                }
+                catch
+                {
+                    if (tries > 10)
+                    {
+                        throw;
+                    }
+                    ++tries;
+                    Thread.Sleep(100);
+                }
+            }
+
         }
+        
         using var writer = new StreamWriter(fullPath, false, Encoding.UTF8);
         _device.WriteTo(writer);
         writer.Close();
@@ -772,7 +875,7 @@ public partial class Session : Component, INotifyPropertyChanged
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
                     } else if (_gotIdentTicks!=0)
                     {
-                        LoadDeviceBySerial();
+                        LoadDeviceByName();
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Id)));
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HorizontalResolution)));
