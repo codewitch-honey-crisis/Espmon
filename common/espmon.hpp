@@ -914,7 +914,8 @@ public:
             if(m_has_graph) { m_graph.add_data(0,v); }
             format_float(data.top.value1.value,m_top.value1.value_buffer,sizeof(m_top.value1.value_buffer));
             if(!m_top.value1.vsuffix.visible()) {
-                strncat(m_top.value1.value_buffer,m_top.value1.suffix_buffer,sizeof(m_top.value1.value_buffer)-1);
+                size_t len = strlen(m_top.value1.value_buffer);
+                strncpy(m_top.value1.value_buffer+len,m_top.value1.suffix_buffer,sizeof(m_top.value1.value_buffer)-len);
             }
             m_top.value1.label.text(m_top.value1.value_buffer);
             m_top.value1.bar.value(v);
@@ -923,7 +924,8 @@ public:
             if(m_has_graph) { m_graph.add_data(1,v); }
             format_float(data.top.value2.value,m_top.value2.value_buffer,sizeof(m_top.value2.value_buffer));
             if(!m_top.value2.vsuffix.visible()) {
-                strncat(m_top.value2.value_buffer,m_top.value2.suffix_buffer,sizeof(m_top.value2.value_buffer)-1);
+                size_t len = strlen(m_top.value2.value_buffer);
+                strncpy(m_top.value2.value_buffer+len,m_top.value2.suffix_buffer,sizeof(m_top.value2.value_buffer)-len);
             }
             m_top.value2.label.text(m_top.value2.value_buffer);
             m_top.value2.bar.value(v);
@@ -932,7 +934,8 @@ public:
             if(m_has_graph) { m_graph.add_data(2,v); }
             format_float(data.bottom.value1.value,m_bottom.value1.value_buffer,sizeof(m_bottom.value1.value_buffer));
             if(!m_bottom.value1.vsuffix.visible()) {
-                strncat(m_bottom.value1.value_buffer,m_bottom.value1.suffix_buffer,sizeof(m_bottom.value1.value_buffer)-1);
+                size_t len = strlen(m_bottom.value1.value_buffer);
+                strncpy(m_bottom.value1.value_buffer+len,m_bottom.value1.suffix_buffer,sizeof(m_bottom.value1.value_buffer)-len);
             }
             m_bottom.value1.label.text(m_bottom.value1.value_buffer);
             m_bottom.value1.bar.value(v);
@@ -941,7 +944,8 @@ public:
             if(m_has_graph) { m_graph.add_data(3,v); }
             format_float(data.bottom.value2.value,m_bottom.value2.value_buffer,sizeof(m_bottom.value2.value_buffer));
             if(!m_bottom.value2.vsuffix.visible()) {
-                strncat(m_bottom.value2.value_buffer,m_bottom.value2.suffix_buffer,sizeof(m_bottom.value2.value_buffer)-1);
+                size_t len = strlen(m_bottom.value2.value_buffer);
+                strncpy(m_bottom.value2.value_buffer+len,m_bottom.value2.suffix_buffer,sizeof(m_bottom.value2.value_buffer)-len);
             }
             m_bottom.value2.label.text(m_bottom.value2.value_buffer);
             m_bottom.value2.bar.value(v);

@@ -328,7 +328,6 @@ namespace HWKit
 
         /// <summary>
         /// Polls the foreground window and caches the PID. Called by a timer every 250ms.
-        /// Much cheaper than calling GetForegroundWindow on every ETW event.
         /// </summary>
         private void UpdateForegroundPid(object? state)
         {
