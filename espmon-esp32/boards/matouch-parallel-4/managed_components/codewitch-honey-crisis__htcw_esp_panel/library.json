@@ -1,6 +1,6 @@
 {
     "name": "htcw_esp_panel",
-    "version": "0.7.5",
+    "version": "0.8.0",
     "description": "Provides an easy to use configuration system for display, input, SD card, I/O expander and power management with out of the box support for several devkits.",
     "keywords": ["esp32","lcd","input","button","touch","power","sd"],
     "authors": {

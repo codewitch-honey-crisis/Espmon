@@ -1,0 +1,30 @@
+﻿[
+  {
+    "type": "HWKit.CoreTempCpuProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.CimCpuProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.CimRamProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.CimDiskProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.AmdAdlGpuProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.NvidiaNvmlGpuProvider, HWKit.dll",
+    "is_started": true
+  },
+  {
+    "type": "HWKit.DxgiProvider, HWKit.dll",
+    "is_started": true
+  }
+]

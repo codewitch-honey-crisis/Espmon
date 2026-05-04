@@ -208,9 +208,9 @@ namespace HWKit
         {
         }
 
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
-            return _processing ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _processing ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
 
         protected override void OnStart()
@@ -434,6 +434,10 @@ namespace HWKit
         protected override string GetDisplayName()
         {
             return "DirectX Info Provider";
+        }
+        protected override string GetDescription()
+        {
+            return "Provides frame rate information for the current foreground app using DXGI";
         }
     }
 }

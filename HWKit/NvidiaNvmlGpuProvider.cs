@@ -41,21 +41,21 @@ namespace HWKit
             {
                 var handle = NvGpu.NvmlDeviceGetHandleByIndex((uint)i);
                 var accessor = new DeviceAccessor(handle);
-                Publish($"/gpu/{i}/temperature", "°", () => accessor.Temperature);
-                Publish($"/gpu/{i}/load","%", () => accessor.Load);
-                Publish($"/gpu/{i}/clock","MHz", () => accessor.Frequency);
-                Publish($"/gpu/{i}/load/vram","%", () => accessor.VramLoad);
-                Publish($"/gpu/{i}/clock/vram","MHz", () => accessor.VramFrequency);
-                Publish($"/gpu/{i}/clock/sm", "MHz", () => accessor.SMFrequency);
-                Publish($"/gpu/{i}/load/fan", "%",() => accessor.FanLoad);
+                Publish($"/gpu/{i}/temperature", "°", () => _started?accessor.Temperature:float.NaN);
+                Publish($"/gpu/{i}/load","%", () => _started?accessor.Load:float.NaN);
+                Publish($"/gpu/{i}/clock","MHz", () => _started? accessor.Frequency : float.NaN);
+                Publish($"/gpu/{i}/load/vram","%", () => _started ? accessor.VramLoad : float.NaN);
+                Publish($"/gpu/{i}/clock/vram","MHz", () => _started ? accessor.VramFrequency : float.NaN);
+                Publish($"/gpu/{i}/clock/sm", "MHz", () => _started ? accessor.SMFrequency : float.NaN);
+                Publish($"/gpu/{i}/load/fan", "%",() => _started ? accessor.FanLoad : float.NaN);
                 
             }
             _started = true;
         }
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
 
-            return _started ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         protected override void OnStop()
         {
@@ -66,6 +66,10 @@ namespace HWKit
             _started = false; // even on error this should go false.
             NvGpu.NvmlShutdown();
             
+        }
+        protected override string GetDescription()
+        {
+            return "Provides various information about installed NVidia GPUs";
         }
     }
 }

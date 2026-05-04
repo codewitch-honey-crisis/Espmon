@@ -1,5 +1,6 @@
 #define PANEL_DEPENDENCIES
 #include "panel.h"
+#undef PANEL_DEPENDENCIES
 #include <memory.h>
 #include "esp_log.h"
 #include "driver/gpio.h"
@@ -869,7 +870,7 @@ void panel_touch_init(void) {
 #endif
     esp_lcd_touch_config_t touch_cfg;
     memset(&touch_cfg,0,sizeof(touch_cfg));
-    #ifdef TOUCH_DRIVER_DATA
+#ifdef TOUCH_DRIVER_DATA
     TOUCH_DRIVER_DATA;
     touch_cfg.driver_data = &driver_data;
 #endif
@@ -908,7 +909,7 @@ void panel_touch_init(void) {
 #endif
 #ifdef TOUCH_MIRROR_Y
 #if TOUCH_MIRROR_Y
-    touch_cfg.flags.mirror_y = TOUCH_MIRROR_X;
+    touch_cfg.flags.mirror_y = TOUCH_MIRROR_Y;
 #endif
 #endif
 #if TOUCH_BUS == PANEL_BUS_I2C
@@ -933,6 +934,25 @@ void panel_touch_init(void) {
 #else
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v1((uint32_t)TOUCH_I2C_HOST, &touch_i2c_cfg, &touch_io_handle));
 #endif
+#endif
+#if TOUCH_BUS == PANEL_BUS_SPI
+    esp_lcd_panel_io_spi_config_t touch_spi_cfg;
+    memset(&touch_spi_cfg,0,sizeof(touch_spi_cfg));
+    touch_spi_cfg.lcd_param_bits = TOUCH_PARAM_BITS;
+    touch_spi_cfg.lcd_cmd_bits = TOUCH_CMD_BITS;
+#ifdef TOUCH_CLOCK_HZ
+    touch_spi_cfg.pclk_hz = TOUCH_CLOCK_HZ;
+#else
+    touch_spi_cfg.pclk_hz = 10 * 1000 * 1000;
+#endif
+    touch_spi_cfg.trans_queue_depth = 10;
+    touch_spi_cfg.on_color_trans_done = on_flush_complete;
+#ifdef TOUCH_SPI_MODE
+    touch_spi_cfg.spi_mode = TOUCH_SPI_MODE;
+#else
+    touch_spi_cfg.spi_mode = 0;
+#endif
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)TOUCH_SPI_HOST, &touch_spi_cfg, &touch_io_handle));
 #endif
     ESP_ERROR_CHECK(TOUCH_INIT(touch_io_handle,&touch_cfg,&touch_handle));
 }

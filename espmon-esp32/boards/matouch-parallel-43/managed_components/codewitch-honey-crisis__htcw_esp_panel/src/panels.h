@@ -876,6 +876,47 @@ st7703_vendor_config_t vendor_config = { \
 #define BUTTON_ON_LEVEL 0
 #endif
 
+#ifdef CYD_2432S028
+#ifdef PANEL_DEPENDENCIES
+    #include "esp_lcd_panel_ili9341.h"
+    #include "esp_lcd_touch_xpt2046.h"
+#endif // PANEL_DEPENDENCIES
+// BEGIN LCD configuration
+#define LCD_INIT esp_lcd_new_panel_ili9341
+#define LCD_HRES 320
+#define LCD_VRES 240
+#define LCD_SPI_HOST SPI_2
+#define LCD_CLOCK_HZ ((uint32_t)(40*(1000*1000)))
+#define LCD_PIN_NUM_BCKL 21
+#define LCD_PIN_NUM_MOSI 13
+#define LCD_PIN_NUM_CLK 14
+#define LCD_PIN_NUM_CS 15
+#define LCD_PIN_NUM_DC 2
+#define LCD_MIRROR_Y 1
+// END LCD configuration
+
+// BEGIN Touch configuration
+#define TOUCH_INIT esp_lcd_touch_new_xpt2046
+#define TOUCH_SPI_HOST SPI_3
+#define TOUCH_PIN_NUM_INT 36
+#define TOUCH_PIN_NUM_MOSI 32
+#define TOUCH_PIN_NUM_MISO 39
+#define TOUCH_PIN_NUM_CLK 25
+#define TOUCH_PIN_NUM_CS 33
+#define TOUCH_INT_ON_LEVEL 1
+#define TOUCH_MIRROR_Y 0
+#define TOUCH_MIRROR_X 0
+#define TOUCH_TRANSFER_SIZE (8*1024)
+#define TOUCH_CLOCK_HZ (10*1000*1000)
+// END Touch configuration
+
+// BEGIN SD configuration
+#define SD_SPI_HOST SPI_2
+#define SD_PIN_NUM_MISO 12
+#define SD_PIN_NUM_CS 5
+// END SD configuration
+#endif
+
 // END devices
 
 #endif // PANELS_H

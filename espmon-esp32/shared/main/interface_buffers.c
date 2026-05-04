@@ -521,7 +521,7 @@ int request_ident_read(request_ident_t* s, buffers_read_callback_t on_read, void
     if(res < 0) { return res; }
     res = buffers_read_uint16_t_le(&s->vertical_resolution, on_read, on_read_state, &bytes_read);
     if(res < 0) { return res; }
-    res = buffers_read_uint8_t(&s->is_monochrome, on_read, on_read_state, &bytes_read);
+    res = buffers_read_bool(&s->is_monochrome, on_read, on_read_state, &bytes_read);
     if(res < 0) { return res; }
     res = buffers_read_float_le(&s->dpi, on_read, on_read_state, &bytes_read);
     if(res < 0) { return res; }
@@ -588,7 +588,7 @@ int request_ident_write(const request_ident_t* s, buffers_write_callback_t on_wr
     res = buffers_write_uint16_t_le(s->vertical_resolution, on_write, on_write_state);
     if(res < 0) { return res; }
     total += res;
-    res = buffers_write_uint8_t(s->is_monochrome, on_write, on_write_state);
+    res = buffers_write_bool(s->is_monochrome, on_write, on_write_state);
     if(res < 0) { return res; }
     total += res;
     res = buffers_write_float_le(s->dpi, on_write, on_write_state);

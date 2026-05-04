@@ -43,9 +43,9 @@ namespace HWKit
         CpuCoreEntry[]? _entries = null;
         bool _started = false;
 
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
-            return _started ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         void RunQuery()
         {
@@ -173,7 +173,10 @@ namespace HWKit
             }
             
         }
-        
+        protected override string GetDescription()
+        {
+            return "Provides CPU load and frequency information via the Windows CIM subsystem";
+        }
     }
         
 }

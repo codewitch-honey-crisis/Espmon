@@ -20,23 +20,18 @@ namespace Espmon;
 [SupportedOSPlatform("windows")]
 public sealed partial class MainWindow : Window
 {
-    DispatcherTimer _timer = new DispatcherTimer();
+    
     public MainWindow()
     {
 
         InitializeComponent();
         ViewModel = new MainViewModel();
-        ViewModel.HardwareInfo.MinimumTrackingInterval = TimeSpan.FromMilliseconds(100);
-        ViewModel.HardwareInfo.StartAll();
         HideAllSecondaryPanels();
-        currentScreenView.Screen = Screen.Default;
-        _timer.Interval = ViewModel.HardwareInfo.MinimumTrackingInterval;
-        _timer.Tick += _timer_Tick;
-        _timer.Start();
+        
         ViewModel.Log.CollectionChanged += Log_CollectionChanged;
     }
     
-    private void Log_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    private void Log_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Add)
         {
@@ -50,32 +45,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void _timer_Tick(object? sender, object e)
-    {
-        if (ViewModel != null)
-        {
-            ViewModel.Refresh();
-            if (ViewModel.HardwareInfo != null)
-            {
-                ViewModel.HardwareInfo.ExpireTracking();
-                if (screensPanel.Visibility == Visibility.Visible && preview.Screen != null)
-                {
-
-                    preview.Refresh();
-                }
-                if (devicesPanel.Visibility == Visibility.Visible)
-                {
-                    if(currentScreenView.Screen==null && ViewModel.SelectedSession?.CurrentScreen!=null)
-                    {
-                        currentScreenView.Screen = ViewModel.SelectedSession.CurrentScreen;
-                    }
-                    currentScreenView.Refresh();
-                }
-            }
-        }
-        
-    }
-    
+  
     public MainViewModel ViewModel { get; }
 
     private void Window_Closed(object sender, WindowEventArgs args)
@@ -139,7 +109,6 @@ public sealed partial class MainWindow : Window
                 break;
             case "screens":
                 SetPanelVisibility(screensPanel, Visibility.Visible);
-                _timer.Start();
                 break;
             case "devices":
                 SetPanelVisibility(devicesPanel, Visibility.Visible);
@@ -233,28 +202,20 @@ public sealed partial class MainWindow : Window
 
     private void screenItemList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        foreach (var toUnset in e.RemovedItems)
-        {
-            var scrToUnset = ((ScreenListEntry)toUnset)?.Screen;
-            if (scrToUnset != null)
-            {
-                scrToUnset.HardwareInfo = null;
-            }
-        }
-        if (e.AddedItems.Count > 0)
-        {
-            var scrListEntry = ((ScreenListEntry)e.AddedItems.First());
-            var scr = scrListEntry?.Screen;
-            if (scrListEntry != null && scr != null)
-            {
-                System.Diagnostics.Debug.WriteLine($"Screen is {scrListEntry.Name}");
-                scr.HardwareInfo = ViewModel.HardwareInfo;
-                preview.Screen = scr;
-            }
-        } else 
-        {
-            preview.Screen = null;
-        }
+    
+        //if (e.AddedItems.Count > 0)
+        //{
+        //    var scrListEntry = ((ScreenListEntry)e.AddedItems.First());
+        //    var scr = scrListEntry?.Screen;
+        //    if (scrListEntry != null && scr != null)
+        //    {
+        //        preview.Session = ViewModel.PortController.ViewSession;
+                
+        //    }
+        //} else 
+        //{
+        //    preview.Session= null;
+        //}
     }
     private void screenNameEdit_KeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -285,7 +246,11 @@ public sealed partial class MainWindow : Window
         ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Visible;
 
         if (string.IsNullOrEmpty(newName) || newName == entry.Name || entry.Screen==null || ViewModel==null) return;
-        ViewModel.RenameScreen(entry.Screen, newName);
+        if(entry.Screen==null)
+        {
+            throw new InvalidOperationException("The screen has not been established");
+        }
+        entry.Screen.Name= newName;
     }
 
     private void CancelScreenRename(TextBox textBox)
@@ -306,7 +271,11 @@ public sealed partial class MainWindow : Window
         ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Visible;
 
         if (string.IsNullOrEmpty(newName) || newName == entry.Name || entry.Session == null || ViewModel == null) return;
-        ViewModel.RenameDevice(entry.Session, newName);
+        if(entry.Session==null || entry.Session.Device==null)
+        {
+            throw new InvalidOperationException("The session device has not been established");
+        }
+        entry.Name= newName;
     }
 
     private void CancelDeviceRename(TextBox textBox)
@@ -317,38 +286,15 @@ public sealed partial class MainWindow : Window
         ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Visible;
     }
 
-    private void SaveButton_Click(object sender, RoutedEventArgs e)
-    {
-        var entry = (ScreenListEntry)((Button)sender).DataContext;
-
-        if (entry.IsDefault && entry.Screen!=null)
-        {
-            var newName = GenerateScreenName();
-            Screen scr = entry.Screen;
-            ViewModel.AddScreen(newName, scr);
-        }
-        else if(entry.Screen!=null)
-        {
-            ViewModel.SaveScreen(entry.Screen);
-        }
-    }
+    
 
     private void screenDeleteButton_Click(object sender, RoutedEventArgs e)
     {
         var entry = (ScreenListEntry)((Button)sender).DataContext;
         if (entry != null && entry.Screen!=null)
         {
-            ViewModel.DeleteScreen(entry.Screen);
+            ViewModel.PortController.Screens.Remove(entry.Screen); 
         }
-    }
-
-    private string GenerateScreenName()
-    {
-        
-        int i = 1;
-        while (ViewModel.ScreenItems.Any(s => s.Name == $"Screen {i}"))
-            i++;
-        return $"Screen {i}";
     }
 
     private void screenNameDisplay_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -375,7 +321,24 @@ public sealed partial class MainWindow : Window
 
     private void devicePortsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        
+        if (ViewModel.SelectedSession != null)
+        {
+            switch (ViewModel.SelectedSession.Status)
+            {
+                case SessionStatus.Closed:
+                    ViewModel.DevicePanelIndex = 0;
+                    break;
+                case SessionStatus.RequiresFlash:
+                    ViewModel.DevicePanelIndex = 2;
+                    break;
+                default:
+                    ViewModel.DevicePanelIndex = 1;
+                    break;
+            }
+        } else
+        {
+            ViewModel.DevicePanelIndex = 0;
+        }
     }
 
     private async void flashButton_Click(object sender, RoutedEventArgs e)
@@ -386,10 +349,16 @@ public sealed partial class MainWindow : Window
             var idx = flashCombo.SelectedIndex;
             if (idx>-1)
             {
+                ViewModel.DevicePanelIndex = 2;
                 ViewModel.Log.Clear();
                 var reporter = new OpenFlashProgressReporter(ViewModel.Log);
-                await session.FlashAsync(false,ViewModel.FirmwareEntries[idx], reporter);
+                await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
                 ViewModel.Log.Clear();
+                ViewModel.DevicePanelIndex = 0;
+                
+            } else
+            {
+                ViewModel.DevicePanelIndex=2;
             }
 
         }
@@ -400,16 +369,8 @@ public sealed partial class MainWindow : Window
         if (ViewModel != null && ViewModel.SelectedSession != null)
         {
             var session = ViewModel.SelectedSession;
-            session.Open();
-        }
-    }
-
-    private void closeButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel != null && ViewModel.SelectedSession != null)
-        {
-            var session = ViewModel.SelectedSession;
-            session.Close();
+            session.Connect();
+            ViewModel.DevicePanelIndex = 1;
         }
     }
 
@@ -417,8 +378,9 @@ public sealed partial class MainWindow : Window
     {
         if (ViewModel != null && ViewModel.SelectedSession!= null)
         {
-            ViewModel.SelectedSession.CurrentScreenIndex = deviceScreens.SelectedScreenIndex;
-            currentScreenView.Screen = ViewModel.SelectedSession.CurrentScreen;
+            currentScreenView.Session = ViewModel.SelectedSession;
+            ViewModel.SelectedSession.ScreenIndex = deviceScreens.SelectedScreenIndex;
+           
         }
         
         
@@ -429,14 +391,13 @@ public sealed partial class MainWindow : Window
         if (ViewModel != null && ViewModel.SelectedSession != null)
         {
             var session = ViewModel.SelectedSession;
-            session.Close();
-            session.Update();
+            session.Disconnect();
+            session.Refresh();
             ViewModel.Log.Clear();
             var reporter = new OpenFlashProgressReporter(ViewModel.Log);
             await session.ResetAsync(reporter);
             ViewModel.Log.Clear();
-
-            session.Open();
+            session.Connect();
         }
     }
 
@@ -457,8 +418,9 @@ public sealed partial class MainWindow : Window
             if (idx > -1)
             {
                 ViewModel.Log.Clear();
+               
                 var reporter = new OpenFlashProgressReporter(ViewModel.Log);
-                await session.FlashAsync(true,ViewModel.FirmwareEntries[idx], reporter);
+                await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
                 ViewModel.Log.Clear();
             }
 
@@ -477,7 +439,11 @@ public sealed partial class MainWindow : Window
 
     private void deviceDeleteButton_Click(object sender, RoutedEventArgs e)
     {
-
+        var entry = (SessionEntry)((Button)sender).DataContext;
+        if (entry != null && entry.Session!= null && entry.Session.Device!=null)
+        {
+            ViewModel.PortController.Devices.Remove(entry.Session.Device);
+        }
     }
 
     
@@ -498,5 +464,10 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
             CancelDeviceRename((TextBox)sender);
         }
+    }
+
+    private void screenNewButton_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.NewScreen();
     }
 }

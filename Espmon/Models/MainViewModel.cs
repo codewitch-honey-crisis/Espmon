@@ -1,6 +1,4 @@
-﻿using HWKit;
-
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 
 using System;
 using System.Collections.Generic;
@@ -10,24 +8,52 @@ using System.ComponentModel;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
-using System.Text;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Espmon;
 
+[SupportedOSPlatform("windows")]
 public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private Elevator _elevator;
-    private ScreenWatcher _watcher;
+    private int _devicePanelIndex;
     public event PropertyChangedEventHandler? PropertyChanged;
-    private PortDispatcher _portDispatcher;
+    public PortController PortController { get; }
     private string _selectedPath = string.Empty;
-    public FirmwareEntry[] FirmwareEntries { get; private set; }
+
     public ObservableCollection<string> Log { get; } = [];
     public ObservableCollection<ScreenListEntry> ScreenItems { get; } = [];
-    private Session? _selectedSession;
-    public Session? SelectedSession
+    private SessionController? _selectedSession;
+
+    public Visibility DevicePanel1Visibility
+    {
+        get => _devicePanelIndex == 0 ? Visibility.Visible:Visibility.Collapsed;
+    }
+    public Visibility DevicePanel2Visibility
+    {
+        get => _devicePanelIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+    }
+    public Visibility DevicePanel3Visibility
+    {
+        get => _devicePanelIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
+    }
+    public int DevicePanelIndex { get=> _devicePanelIndex; 
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value,0);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 2);
+            if (value != _devicePanelIndex)
+            {
+                _devicePanelIndex = value;
+                OnPropertyChanged(nameof(DevicePanel1Visibility));
+                OnPropertyChanged(nameof(DevicePanel2Visibility));
+                OnPropertyChanged(nameof(DevicePanel3Visibility));
+            }
+        }
+    }
+    public SessionController? SelectedSession
     {
         get => _selectedSession;
         set
@@ -48,6 +74,24 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SessionOpenVisibility));
                 OnPropertyChanged(nameof(SessionFlashVisibility));
                 OnPropertyChanged(nameof(SessionRunningVisibility));
+                OnPropertyChanged(nameof(SessionScreenListVisibility));
+            }
+        }
+    }
+    private bool _flashRequested;
+    public bool FlashRequested
+    {
+        get => _flashRequested;
+        set
+        {
+            if(_flashRequested!=value)
+            {
+                _flashRequested = value;
+                OnPropertyChanged(nameof(FlashRequested));
+                OnPropertyChanged(nameof(SessionFlashVisibility));
+                OnPropertyChanged(nameof(SessionRunningVisibility));
+                OnPropertyChanged(nameof(SessionOpenVisibility));
+                OnPropertyChanged(nameof(SessionScreenListVisibility));
             }
         }
     }
@@ -69,6 +113,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(SessionOpenVisibility));
         OnPropertyChanged(nameof(SessionFlashVisibility));
         OnPropertyChanged(nameof(SessionRunningVisibility));
+        OnPropertyChanged(nameof(SessionScreenListVisibility));
     }
 
     public Visibility SessionFlashVisibility
@@ -77,7 +122,18 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             if(SelectedSession!=null)
             {
-                return SelectedSession.Status==SessionStatus.RequiresFlash||SelectedSession.Status==SessionStatus.Flashing ?Visibility.Visible:Visibility.Collapsed; 
+                return FlashRequested || SelectedSession.GetUpgrade()!=FirmwareUpgrade.NotRequired||SelectedSession.Status==SessionStatus.Flashing ?Visibility.Visible:Visibility.Collapsed; 
+            }
+            return Visibility.Collapsed;
+        }
+    }
+    public Visibility SessionScreenListVisibility
+    {
+        get
+        {
+            if (SelectedSession != null)
+            {
+                return !SelectedSession.IsWaitingForScreenChange && SelectedSession.Device != null && SelectedSession.Status == SessionStatus.Busy || SelectedSession.Status == SessionStatus.ReadyForData? Visibility.Visible:Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
@@ -86,6 +142,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
+            if (FlashRequested) return Visibility.Collapsed;
             if (SelectedSession != null)
             {
                 return SelectedSession.Status==SessionStatus.Closed? Visibility.Visible : Visibility.Collapsed;
@@ -97,6 +154,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
+            if (FlashRequested) return Visibility.Collapsed;
             if (SelectedSession != null)
             {
 
@@ -106,23 +164,75 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
     public ObservableCollection<string> ValidationLog { get; } = new();
-    public void Refresh()
-    {
-        
-    }
+    
     public void Load()
     {
         RefreshStartWithWindowsAsync();
         if (!_startWithWindows)
         {
-            _portDispatcher.Start();
+            PortController.Start();
         }
+    }
+    private ProviderEntry[] GetProviderEntries()
+    {
+        var result = new ProviderEntry[PortController.Providers.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = new ProviderEntry(PortController.Providers[i]);
+        }
+        return result;
+    }
+    IList<ProviderEntry>? _providerEntries= null;
+    public IList<ProviderEntry> ProviderEntries
+    {
+        get
+        {
+            if (_providerEntries == null || _providerEntries.Count == 0)
+            {
+                _providerEntries = new List<ProviderEntry>(GetProviderEntries());
+            }
+            return _providerEntries;
+        }
+        set
+        {
+            _providerEntries = value;
+            OnPropertyChanged(nameof(ProviderEntries));
+            OnPropertyChanged(nameof(ProviderPanelVisibility));
+        }
+    }
+    private ProviderEntry? _selectedProviderEntry = null;
+    public ProviderEntry? SelectedProviderEntry
+    {
+        get
+        {
+            return _selectedProviderEntry;
+        }
+        set
+        {
+            if (_selectedProviderEntry != value)
+            {
+                _selectedProviderEntry = value;
+                OnPropertyChanged(nameof(SelectedProviderEntry));
+                OnPropertyChanged(nameof(ProviderPanelVisibility));
+            }
+        }
+    }
+    public Visibility ProviderPanelVisibility
+    {
+        get
+        {
+            return _selectedProviderEntry!=null?Visibility.Visible:Visibility.Collapsed;
+        }
+    }
+    public void RefreshProviders()
+    {
+        ProviderEntries = new List<ProviderEntry>(GetProviderEntries());
     }
     public void RefreshDevices()
     {
-        if(_portDispatcher!=null)
+        if(PortController!=null)
         {
-            _portDispatcher.RefreshAllSessions();
+            PortController.RefreshSessions();
         }
         SessionEntries = new List<SessionEntry>(GetSessionEntries());
     }
@@ -174,7 +284,11 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     var entry = SessionEntries[i];
                     if (object.ReferenceEquals(entry.Session, ses)) {
-                        SelectedSession = entry.Session;
+                        if (SelectedSession != entry.Session)
+                        {
+                            SelectedSession = entry.Session;
+                            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedSessionEntry)));
+                        }
                         return;
                     }
                 }
@@ -192,79 +306,18 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Directory.CreateDirectory(path);
         }
-        if(!File.Exists(Path.Join(path,"(default).screen.json")))
-        {
-            using var writer = new StreamWriter(Path.Combine(path, "(default).screen.json"), false, Encoding.UTF8);
-            scr.WriteTo(writer);
-            writer.Close();
-        }
-        FirmwareEntries = PortDispatcher.GetFirmwareEntries();
-        _watcher = new ScreenWatcher(path, SynchronizationContext.Current);
-        foreach (var screen in _watcher.Screens)
-        {
-            ScreenItems.Add(new ScreenListEntry(_watcher.GetName(screen) ?? "(null)", screen));
-        }
-        _watcher.Screens.CollectionChanged += Screens_CollectionChanged;
-        _portDispatcher = new PortDispatcher(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Espmon"), SynchronizationContext.Current);
-        var hwInfo = _portDispatcher.HardwareInfo;
-        hwInfo.Providers.Add(new CoreTempCpuProvider());
-        hwInfo.Providers.Add(new CimCpuProvider());
-        hwInfo.Providers.Add(new CimRamProvider());
-        hwInfo.Providers.Add(new CimDiskProvider());
-        hwInfo.Providers.Add(new AmdAdlGpuProvider());
-        hwInfo.Providers.Add(new NvidiaNvmlGpuProvider());
-        hwInfo.Providers.Add(new DxgiProvider());
+        
+ 
+        PortController = new LocalPortController(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Espmon"), SynchronizationContext.Current);
+        PortController.Screens.CollectionChanged += Screens_CollectionChanged;
+
         Load();
 
 
 
     }
-    public ObservableCollection<Session> Sessions => _portDispatcher.Sessions;
-    public void AddScreen(string name, Screen screen)
-    {
-        ArgumentNullException.ThrowIfNull(name, nameof(name));
-        ArgumentException.ThrowIfNullOrWhiteSpace(name, nameof(name));
-        if (name == "(default)") throw new ArgumentException("The (default) screen cannot be overwritten", nameof(name));
-        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        if (Directory.Exists(path))
-        {
-            using var writer = new StreamWriter(Path.Combine(path, $"{name}.screen.json"), false, Encoding.UTF8);
-            screen.WriteTo(writer);
-            writer.Close();
-        }
-    }
-    public void SaveScreen(Screen screen)
-    {
-        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        if (Directory.Exists(path))
-        {
-            var name = _watcher.GetName(screen);
-            if (name != null)
-            {
-                using var writer = new StreamWriter(Path.Combine(path, $"{name}.screen.json"), false, Encoding.UTF8);
-                screen.WriteTo(writer);
-                writer.Close();
-            }
-        }
-    }
-    public void DeleteScreen(Screen screen)
-    {
-        var name = _watcher.GetName(screen);
-        if (name == null) return;
-        if (name == "(default)") throw new ArgumentException("The (default) screen cannot be deleted", nameof(screen));
-        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-        File.Delete(Path.Combine(path, $"{name}.screen.json"));
-    }
-    public void RenameScreen(Screen screen, string newName)
-    {
-        if (newName == "(default)") throw new ArgumentException("The (default) screen cannot be renamed", nameof(newName));
-        DeleteScreen(screen);
-        AddScreen(newName, screen);
-    }
-    public void RenameDevice(Session session, string newName)
-    {
-        session.Name = newName;
-    }
+    public ReadOnlyObservableCollection<SessionController> Sessions => PortController.Sessions;
+    public FirmwareEntry[] FirmwareEntries => FirmwareEntry.GetFirmwareEntries();
     private void Screens_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         switch (e.Action)
@@ -273,9 +326,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 if (e.NewStartingIndex != -1 && e.NewItems != null)
                 {
                     var i = 0;
-                    foreach (Screen item in e.NewItems)
+                    foreach (ScreenController item in e.NewItems)
                     {
-                        ScreenItems.Insert(e.NewStartingIndex + i, new ScreenListEntry(_watcher.GetName(item) ?? "(null)", item));
+                        ScreenItems.Insert(e.NewStartingIndex + i, new ScreenListEntry(item.Name ?? "(null)", item));
                         ++i;
                     }
                 }
@@ -299,8 +352,6 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public HardwareInfoCollection HardwareInfo =>   _portDispatcher.HardwareInfo;
-
     public string SelectedPath
     {
         get => _selectedPath;
@@ -313,10 +364,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
     }
-    private Screen? _selectedScreen = null;
+    private ScreenController? _selectedScreen = null;
     private bool _isDisposed;
 
-    public Screen? SelectedScreen
+    public ScreenController? SelectedScreen
     {
         get => _selectedScreen;
         set
@@ -328,6 +379,29 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SelectedScreenIndex));
             }
         }
+    }
+    private bool HasScreen(string name)
+    {
+        foreach(var scr in PortController.Screens)
+        {
+            if(scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    public void NewScreen()
+    {
+        var baseName = "Screen";
+        var newName = baseName;
+        var i = 2;
+        while(HasScreen(newName))
+        {
+            newName = $"{baseName} {i++}";
+        }
+        var scr = PortController.CreateScreen(newName);
+        PortController.Screens.Add(scr);
     }
     public int SelectedScreenIndex
     {
@@ -378,6 +452,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             }
             if(changed)
             {
+              
+               PortController.ViewSession.ScreenIndex = value;
+             
                 OnPropertyChanged(nameof(SelectedScreen));
                 OnPropertyChanged(nameof(SelectedScreenIndex));   
             }
@@ -410,15 +487,12 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     _elevator.Dispose();
                 }
-                if(_portDispatcher!=null)
+                if(PortController!=null)
                 { 
-                    _portDispatcher.Stop();
-                    _portDispatcher.Dispose();
+                    PortController.Stop();
+                    PortController.Dispose();
                 }
-                if(HardwareInfo!=null)
-                {
-                    HardwareInfo.Dispose();
-                }
+               
             }
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
@@ -450,7 +524,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            if (_portDispatcher != null && _portDispatcher.IsStarted)
+            if (PortController != null && PortController.IsStarted)
             {
                 return true;
             }
@@ -465,15 +539,15 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 if (!WindowsServiceManager.IsInstalled)
                 {
-                    if (_portDispatcher != null)
+                    if (PortController != null)
                     {
                         if (value)
                         {
-                            _portDispatcher.Start();
+                            PortController.Start();
                         }
                         else
                         {
-                            _portDispatcher.Stop();
+                            PortController.Stop();
                         }
                     }
                 }
@@ -561,33 +635,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             RefreshStartWithWindowsAsync();
         }
     }
-    public string SelectedUpdateInterval
-    {
-        get
-        {
-            switch(_portDispatcher.Interval.TotalMilliseconds)
-            {
-                case 1000: return "1 Hz";
-                case 200: return "5 Hz";
-                default: return "10 Hz";
-            }
-        }
-        set
-        {
-            switch(value.ToLowerInvariant()) {
-                case "1 hz":
-                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(1000);
-                    break;
-                case "5 hz":
-                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(200);
-                    break;
-                default:
-                    _portDispatcher.Interval = TimeSpan.FromMilliseconds(100);
-                    break;
-            }
-            //OnPropertyChanged(nameof(SelectedUpdateInterval));
-        }
-    }
+    
     // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
     // ~MainViewModel()
     // {

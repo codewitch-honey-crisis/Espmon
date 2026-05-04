@@ -48,39 +48,44 @@ public partial class Session : Component, INotifyPropertyChanged
     DeviceInputType _inputType;
     string _portName;
     string[] _serialNumbers;
+    string _serialNumber;
    int _screenIndex = -1;
     string _path;
     Dictionary<string, (long TimestampTicks, Screen Screen)> _screenCache = new(StringComparer.Ordinal);
     public event PropertyChangedEventHandler? PropertyChanged;
     
-    public Session(PortDispatcher parent, string path, string name, string portName, string[] serialNumbers)
+    public Session(PortDispatcher parent, string path, string name, string portName, string[] serialNumbers, string serialNumber)
     {
         ArgumentNullException.ThrowIfNull(parent, nameof(parent));
         ArgumentNullException.ThrowIfNull(path, nameof(path));
         ArgumentNullException.ThrowIfNull(name, nameof(name));
         ArgumentNullException.ThrowIfNull(portName, nameof(portName));
         ArgumentNullException.ThrowIfNull(serialNumbers, nameof(serialNumbers));
+        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
         _parent = parent;
         _path = path;
         _name = name;
         _portName = portName;
         _serialNumbers = serialNumbers;
         _transport = null;
+        _serialNumber = serialNumber;
         InitializeComponent();
     }
 
-    public Session(PortDispatcher parent, string path, string name, string portName,string[] serialNumbers, IContainer container)
+    public Session(PortDispatcher parent, string path, string name, string portName,string[] serialNumbers, string serialNumber, IContainer container)
     {
         ArgumentNullException.ThrowIfNull(parent, nameof(parent));
         ArgumentNullException.ThrowIfNull(path, nameof(path));
         ArgumentNullException.ThrowIfNull(name, nameof(name));
         ArgumentNullException.ThrowIfNull(portName, nameof(portName));
         ArgumentNullException.ThrowIfNull(serialNumbers, nameof(serialNumbers));
+        ArgumentNullException.ThrowIfNull(serialNumber, nameof(serialNumber));
         _parent = parent;
         _path = path;
         _name = name;
         _portName = portName;
         _serialNumbers= serialNumbers;
+        _serialNumber = serialNumber;
         _transport = null;
         container?.Add(this);
         InitializeComponent();
@@ -91,6 +96,10 @@ public partial class Session : Component, INotifyPropertyChanged
         {
             return _portName;
         }
+    }
+    public string SerialNumber
+    {
+        get { return _serialNumber; }
     }
     HardwareInfoCollection? _hardwareInfo = null;
     public HardwareInfoCollection? HardwareInfo
@@ -183,6 +192,13 @@ public partial class Session : Component, INotifyPropertyChanged
         get { return _pixelSize; }
     }
     private string? _name;
+    public string? StoredName
+    {
+        get
+        {
+            return _name;
+        }
+    }
     public string Name
     {
         get
@@ -353,6 +369,7 @@ public partial class Session : Component, INotifyPropertyChanged
 
     public void Open()
     {
+        Debug.WriteLine($"Try open {_portName}");
         if (_state == SessionStatus.Closed || _state == SessionStatus.RequiresFlash)
         {
             _state = SessionStatus.Connecting;
@@ -371,10 +388,6 @@ public partial class Session : Component, INotifyPropertyChanged
             _transport.FrameError += _transport_FrameError;
             _transport.FrameReceived += _transport_FrameReceived;
             _transport.Open();
-            if(!_transport.IsOpen)
-            {
-                throw new IOException("Could not open serial port");
-            }
             _startIdentTicks = 0;
             _gotIdentTicks = 0;
             _needsFlash = false;
@@ -433,7 +446,7 @@ public partial class Session : Component, INotifyPropertyChanged
                     _slug = ident.Slug;
                     _hres = ident.HorizontalResolution;
                     _vres = ident.VerticalResolution;
-                    _isMonochrome = ident.IsMonochrome!=0;
+                    _isMonochrome = ident.IsMonochrome;
                     _dpi = ident.Dpi;
                     _pixelSize = ident.PixelSize;
                     _inputType = (DeviceInputType)ident.InputType;
@@ -477,8 +490,8 @@ public partial class Session : Component, INotifyPropertyChanged
     }
     private sealed class InnerOpenFlashProgress : IProgress<int>
     {
-        IOpenFlashProgress _inner;
-        public InnerOpenFlashProgress(IOpenFlashProgress inner)
+        IFlashProgress _inner;
+        public InnerOpenFlashProgress(IFlashProgress inner)
         {
             _inner = inner;
         }
@@ -491,13 +504,13 @@ public partial class Session : Component, INotifyPropertyChanged
         {
             _inner.Report(new FlashProgressEntry(Action, value));
         }
-        public static InnerOpenFlashProgress? Wrap(IOpenFlashProgress? progress)
+        public static InnerOpenFlashProgress? Wrap(IFlashProgress? progress)
         {
             if (progress == null) return null;
             return new InnerOpenFlashProgress(progress);
         }
     }
-    public async Task ResetAsync(IOpenFlashProgress? progress = null, CancellationToken cancellationToken=default)
+    public async Task ResetAsync(IFlashProgress? progress = null, CancellationToken cancellationToken=default)
     {
         // esptool.py --no-stub flash_id
         var wasOpen = _transport!=null && _transport.IsOpen;
@@ -538,7 +551,7 @@ public partial class Session : Component, INotifyPropertyChanged
 
         }
     }
-    public async Task FlashAsync(bool noReset, FirmwareEntry firmwareEntry, IOpenFlashProgress? progress = null, CancellationToken cancellationToken = default)
+    public async Task FlashAsync(bool noReset, FirmwareEntry firmwareEntry, IFlashProgress? progress = null, CancellationToken cancellationToken = default)
     {
         
         using var stm = Assembly.GetExecutingAssembly()?.GetManifestResourceStream("Espmon.firmware.boards.zip");
@@ -600,7 +613,7 @@ public partial class Session : Component, INotifyPropertyChanged
         innerProgress?.SetAction("Running Esptool...");
         innerProgress?.Report(0);
         path = Path.Combine(Path.GetDirectoryName(AppContext.BaseDirectory)??"", "esptool.exe");
-        var cmdLine = $"--baud 921600 --port {_portName} write_flash 0x{firmwareEntry.Offset.Partitiions:X} \"{pathPartition}\" 0x{firmwareEntry.Offset.Bootloader:X} \"{pathBootloader}\" 0x{firmwareEntry.Offset.Firmware:X} \"{pathFirmware}\"";
+        var cmdLine = $"--baud 921600 --port {_portName} write_flash 0x{firmwareEntry.Offsets.Partitiions:X} \"{pathPartition}\" 0x{firmwareEntry.Offsets.Bootloader:X} \"{pathBootloader}\" 0x{firmwareEntry.Offsets.Firmware:X} \"{pathFirmware}\"";
         var psi = new ProcessStartInfo(path, cmdLine)
         {
             CreateNoWindow = true,
@@ -662,6 +675,7 @@ public partial class Session : Component, INotifyPropertyChanged
         try { File.Delete(path2); } catch { }
         path2 = Path.Combine(path, "firmware.bin");
         try { File.Delete(path2); } catch { }
+        _needsFlash = false;
         _state = SessionStatus.Closed;
         if (wasOpen)
         {
@@ -692,15 +706,7 @@ public partial class Session : Component, INotifyPropertyChanged
             if (result == null)
             {
                 result = new Device();
-                result.Id = _id;
                 result.MacAddress = _macAddress;
-                result.DisplayName = _displayName;
-                result.HorizontalResolution = _hres;
-                result.VerticalResolution = _vres;
-                result.IsMonochrome = _isMonochrome;
-                result.Dpi = _dpi;
-                result.PixelSize = _pixelSize;
-                result.InputType = _inputType;
                 Name = MacToString(_macAddress, true);
                 var fileName = Path.Join(path, $"{_name}.device.json");
                 using var writer = new StreamWriter(fileName, false, Encoding.UTF8);
@@ -810,11 +816,7 @@ public partial class Session : Component, INotifyPropertyChanged
         if (_device == null) return;
         SaveDevice();
     }
-    private static ushort Swap(ushort data) { return (ushort)((data >> 8) | ((data << 8) & 0xFF00)); }
-    private static short Swap(short data) { return unchecked((short)((data >> 8) | ((data << 8) & 0xFF00))); }
-    private static float Swap(float data) { var arr = BitConverter.GetBytes(data); arr.Reverse(); return BitConverter.ToSingle(arr); }
-    private static ulong Swap(ulong data) { var arr = BitConverter.GetBytes(data); arr.Reverse(); return BitConverter.ToUInt64(arr); }
-
+   
     public void Update()
     {
         switch (_state)
@@ -852,6 +854,7 @@ public partial class Session : Component, INotifyPropertyChanged
                         Span<byte> tmp = stackalloc byte[packet.SizeOfStruct];
                         if (packet.TryWrite(tmp, out _))
                         {
+                           
                             try
                             {
                                 _transport.Send((byte)Command.CmdData, tmp);
@@ -871,6 +874,7 @@ public partial class Session : Component, INotifyPropertyChanged
                 {
                     if(_needsFlash)
                     {
+                        Debug.WriteLine($"{_portName} requires flash");
                         _state = SessionStatus.RequiresFlash;
                         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
                     } else if (_gotIdentTicks!=0)
@@ -911,7 +915,7 @@ public struct FlashProgressEntry
         Progress = progress; 
     }
 }
-public interface IOpenFlashProgress : IProgress<FlashProgressEntry>
+public interface IFlashProgress : IProgress<FlashProgressEntry>
 {
     
 }

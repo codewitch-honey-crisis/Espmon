@@ -291,10 +291,10 @@ namespace HWKit
         {
             return "cim_disk";
         }
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
 
-            return _started ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         private static T? ValueOrDef<T>(object? value, T? def = default)
         {
@@ -471,7 +471,10 @@ namespace HWKit
             
 
         }
-
+        protected override string GetDescription()
+        {
+            return "Provides disk usage information via the Windows CIM subsystem";
+        }
     }
 
 }

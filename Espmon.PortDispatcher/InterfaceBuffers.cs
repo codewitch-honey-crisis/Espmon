@@ -1052,7 +1052,7 @@ partial class RequestIdent
     internal string Slug { get; set; }
     internal ushort HorizontalResolution { get; set; }
     internal ushort VerticalResolution { get; set; }
-    internal byte IsMonochrome { get; set; }
+    internal bool IsMonochrome { get; set; }
     internal float Dpi { get; set; }
     internal float PixelSize { get; set; }
     internal InputType InputType { get; set; }
@@ -1129,7 +1129,7 @@ partial class RequestIdent
         result.VerticalResolution = BinaryPrimitives.ReadUInt16LittleEndian(span.Slice(offset));
         offset += 2;
         if (span.Length - offset < 1) return false;
-        result.IsMonochrome = span[offset];
+        result.IsMonochrome = span[offset] != 0;
         offset += 1;
         if (span.Length - offset < 4) return false;
         result.Dpi = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(offset));
@@ -1206,7 +1206,7 @@ partial class RequestIdent
         BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(offset), VerticalResolution);
         offset += 2;
         if (span.Length - offset < 1) return false;
-        span[offset] = IsMonochrome;
+        span[offset] = (byte)(IsMonochrome ? 1 : 0);
         offset += 1;
         if (span.Length - offset < 4) return false;
         BinaryPrimitives.WriteSingleLittleEndian(span.Slice(offset), Dpi);

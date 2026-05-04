@@ -1,0 +1,35 @@
+﻿{
+    "top": {
+        "label": "CPU",
+        "color": "Light-blue",
+        "value1": {
+            "value": "round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))",
+            "max": 100,
+            "min": 0,
+            "color": "Green"
+        },
+        "value2": {
+            "value": "round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))",
+            "max": "min('^/coretemp/cpu/[0-9]+/tjmax$')",
+            "min": 0,
+            "color": "Orange",
+            "has_gradient": true
+        }
+    },
+    "bottom": {
+        "label": "GPU",
+        "color": "Light-salmon",
+        "value1": {
+            "value": "round(avg('^/.+/gpu/[0-9]+/load$'))",
+            "max": 100,
+            "min": 0
+        },
+        "value2": {
+            "value": "round(max('^/.+/gpu/[0-9]+/temperature$'))",
+            "max": 90,
+            "min": 0,
+            "color": "Purple",
+            "has_gradient": true
+        }
+    }
+}

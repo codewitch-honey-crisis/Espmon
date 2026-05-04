@@ -62,7 +62,12 @@ namespace HWKit
             }
             public float Value { 
                 get {
-                    if (_provider.State != HardwareInfoProviderState.Started) return float.NaN;
+                    if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
+                    try
+                    {
+                        _provider.EnsureFileMapping();
+                    }
+                    catch { return float.NaN; }
                     var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
                     return data.uiLoad[_index];
                 } 
@@ -83,7 +88,12 @@ namespace HWKit
             {
                 get
                 {
-                    if (_provider.State != HardwareInfoProviderState.Started) return float.NaN;
+                    if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
+                    try
+                    {
+                        _provider.EnsureFileMapping();
+                    }
+                    catch { return float.NaN; }
                     var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
                     float val = data.fTemp[_index];
                     if (0 == data.ucDeltaToTjMax)
@@ -116,7 +126,12 @@ namespace HWKit
             {
                 get
                 {
-                    if (_provider.State != HardwareInfoProviderState.Started) return float.NaN;
+                    if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
+                    try
+                    {
+                        _provider.EnsureFileMapping();
+                    }
+                    catch { return float.NaN; }
                     var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
                     if (data.ucFahrenheit > 0)
                     {
@@ -139,7 +154,12 @@ namespace HWKit
             {
                 get
                 {
-                    if (_provider.State != HardwareInfoProviderState.Started) return float.NaN;
+                    if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
+                    try
+                    {
+                        _provider.EnsureFileMapping();
+                    }
+                    catch { return float.NaN; }
                     var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
                     return data.fMultipliers[_index]*data.fFSBSpeed;
                 }
@@ -158,19 +178,24 @@ namespace HWKit
             {
                 get
                 {
-                    if (_provider.State != HardwareInfoProviderState.Started) return float.NaN;
+                    if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
+                    try
+                    {
+                        _provider.EnsureFileMapping();
+                    }
+                    catch { return float.NaN; }
                     var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
                     return data.fMultipliers[_index];
                 }
             }
         }
-      
+        bool _started = false;
         IntPtr _sharedHandle = IntPtr.Zero;
         IntPtr _sharedPtr = IntPtr.Zero;
         List<IAccessor> accessors = new List<IAccessor>();
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
-            return _sharedHandle != IntPtr.Zero ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _sharedHandle != IntPtr.Zero ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         protected override string GetDisplayName()
         {
@@ -180,44 +205,45 @@ namespace HWKit
         {
             return "coretemp";
         }
-        protected override void OnStart()
+        internal void EnsureFileMapping()
         {
-            if (_sharedHandle!=IntPtr.Zero)
+            if (_sharedHandle != IntPtr.Zero)
             {
                 return;
             }
             _sharedHandle = OpenFileMapping(FILE_MAP_READ, true, "CoreTempMappingObjectEx");
-            if(_sharedHandle!=IntPtr.Zero)
+            if (_sharedHandle != IntPtr.Zero)
             {
-                System.Diagnostics.Debug.Assert(4740 == Marshal.SizeOf<CoreTempSharedDataEx>(),"Something is wrong with your struct");
-                _sharedPtr = MapViewOfFile(_sharedHandle,FILE_MAP_READ,0,0,Marshal.SizeOf<CoreTempSharedDataEx>());
+                System.Diagnostics.Debug.Assert(4740 == Marshal.SizeOf<CoreTempSharedDataEx>(), "Something is wrong with your struct");
+                _sharedPtr = MapViewOfFile(_sharedHandle, FILE_MAP_READ, 0, 0, Marshal.SizeOf<CoreTempSharedDataEx>());
             }
-            if(_sharedPtr==IntPtr.Zero)
+            if (_sharedPtr == IntPtr.Zero)
             {
                 CloseHandle(_sharedHandle);
-                _sharedHandle = IntPtr.Zero; 
+                _sharedHandle = IntPtr.Zero;
                 throw new SystemException("Unable to map view");
-                
+
             }
             var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
-            Publish($"/cpu/clock","MHz", new Func<float>(() => {
-                if (State != HardwareInfoProviderState.Started) return float.NaN;
+            Publish($"/cpu/clock", "MHz", new Func<float>(() => {
+                if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
                 var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
                 return data.fCPUSpeed;
             }));
-            Publish($"/bus/clock","MHz", new Func<float>(() => {
-                if (State != HardwareInfoProviderState.Started) return float.NaN;
+            Publish($"/bus/clock", "MHz", new Func<float>(() => {
+                if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
                 var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
                 return data.fFSBSpeed;
             }));
-            Publish($"/cpu/multiplier","x", new Func<float>(() => {
-                if (State != HardwareInfoProviderState.Started) return float.NaN;
+            Publish($"/cpu/multiplier", "x", new Func<float>(() => {
+                if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
                 var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
                 return data.fMultiplier;
             }));
-            
+
             int coreIndex = 0;
-            for (var i = 0; i < data.uiCPUCnt; i++) {
+            for (var i = 0; i < data.uiCPUCnt; i++)
+            {
                 var tjmaxAcc = new CpuTJMaxAccessor(this, i);
                 Publish($"/cpu/{i}/tjmax", "°", new Func<float>(() => {
                     return tjmaxAcc.Value;
@@ -225,11 +251,11 @@ namespace HWKit
                 for (int j = 0; j < data.uiCoreCnt; j++)
                 {
                     var loadAcc = new CoreLoadAccessor(this, coreIndex);
-                    Publish($"/cpu/{i}/core/{j}/load","%", new Func<float>(() => {
+                    Publish($"/cpu/{i}/core/{j}/load", "%", new Func<float>(() => {
                         return loadAcc.Value;
                     }));
                     var multAcc = new CoreMultiplierAccessor(this, coreIndex);
-                    Publish($"/cpu/{i}/core/{j}/multiplier","x", new Func<float>(() => {
+                    Publish($"/cpu/{i}/core/{j}/multiplier", "x", new Func<float>(() => {
                         return multAcc.Value;
                     }));
                     var tempAcc = new CoreTemperatureAccessor(this, i, coreIndex);
@@ -237,15 +263,26 @@ namespace HWKit
                         return tempAcc.Value;
                     }));
                     var freqAcc = new CoreFrequencyAccessor(this, coreIndex);
-                    Publish($"/cpu/{i}/core/{j}/clock", "MHz",new Func<float>(() => {
+                    Publish($"/cpu/{i}/core/{j}/clock", "MHz", new Func<float>(() => {
                         return freqAcc.Value;
                     }));
                     ++coreIndex;
                 }
             }
         }
+        protected override void OnStart()
+        {
+            if (_started) return;
+            _started = true;
+            try
+            {
+                EnsureFileMapping();
+            }
+            catch { return; }
+        }
         protected override void OnStop()
         {
+            _started = false;
             if (_sharedHandle==IntPtr.Zero)
             {
                 return;
@@ -255,6 +292,10 @@ namespace HWKit
             _sharedPtr = IntPtr.Zero;
             CloseHandle(_sharedHandle);
             _sharedHandle = IntPtr.Zero;
+        }
+        protected override string GetDescription()
+        {
+            return "Provides CPU core temperature, load and frequency information via the the CoreTemp application. https://www.alcpu.com/CoreTemp/";
         }
         private static readonly object _allCoreTempsKey = new object();
         private static readonly object _allCoreLoadsKey = new object();

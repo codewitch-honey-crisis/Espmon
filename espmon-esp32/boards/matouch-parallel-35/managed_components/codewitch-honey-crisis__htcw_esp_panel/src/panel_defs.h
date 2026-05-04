@@ -163,6 +163,9 @@
 #endif
 #endif
 #ifdef TOUCH_BUS
+#ifndef TOUCH_TRANSFER_SIZE
+#define TOUCH_TRANSFER_SIZE (16*1024)
+#endif
 #ifndef TOUCH_DISABLE_CONTROL_PHASE
 #define TOUCH_DISABLE_CONTROL_PHASE 0
 #endif 

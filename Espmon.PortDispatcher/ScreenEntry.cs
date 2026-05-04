@@ -112,7 +112,7 @@ public partial class ScreenEntry : Component, INotifyPropertyChanged
         json.Add("label", Label);
         if (Color != -1)
         {
-            json.Add("color", Espmon.Screen.GetJsonColorString(Color));
+            json.Add("color", Espmon.ScreenController.GetJsonColorString(Color));
         }
         json.Add("value1", Value1.ToJson());
         json.Add("value2", Value2.ToJson());
@@ -152,7 +152,7 @@ public partial class ScreenEntry : Component, INotifyPropertyChanged
             int icol = -1;
             if (color is string str)
             {
-                if (!Screen.TryGetColor(str, out icol))
+                if (!ScreenController.TryGetColor(str, out icol))
                 {
                     throw new ScreenParseException($"Invalid color value: {str}", 0, 0, 0);
                 }

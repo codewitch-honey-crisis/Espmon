@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 
 namespace Espmon;
 
-internal sealed class OpenFlashProgressReporter : IOpenFlashProgress
+internal sealed class OpenFlashProgressReporter : IFlashProgress
 {
     readonly ObservableCollection<string> _log;
     public OpenFlashProgressReporter(ObservableCollection<string> log)

@@ -5,9 +5,9 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 using System;
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Runtime.Versioning;
 using System.Text;
 
 using Windows.Foundation;
@@ -47,7 +47,7 @@ public enum ScreenViewScalingMode
     None,           // Pixel-perfect, no DPI scaling
     DpiAware        // Scale with DPI like Avalonia version
 }
-
+[SupportedOSPlatform("windows")]
 public partial class ScreenView : Canvas
 {
     private WriteableBitmap? _bitmap;
@@ -59,7 +59,7 @@ public partial class ScreenView : Canvas
     private Abi.ResponseScreen _responseScreen = default;
     private Abi.ResponseData _responseData = default;
     private double _lastRasterizationScale = 1.0;
-
+    ScreenDataEventArgs? _lastDataArgs = null;
     public ScreenView()
     {
         _handle = Abi.Create();
@@ -104,38 +104,70 @@ public partial class ScreenView : Canvas
         if (d is ScreenView view)
         {
             view._screenInitialized = false;
-            view.InitializeBitmap();
+            view._bitmap = null;
+            view.EnsureBitmap();
             view.RefreshScreen();
         }
     }
-    public static readonly DependencyProperty ScreenProperty =
+    public static readonly DependencyProperty SessionProperty =
         DependencyProperty.Register(
-            nameof(Screen),
-            typeof(Screen),
+            nameof(Session),
+            typeof(SessionController),
             typeof(ScreenView),
-            new PropertyMetadata(null, OnScreenChanged));
+            new PropertyMetadata(null, OnSessionChanged));
 
-    public Screen? Screen
+    public SessionController? Session
     {
-        get => (Screen?)GetValue(ScreenProperty);
-        set => SetValue(ScreenProperty, value);
+        get => (SessionController?)GetValue(SessionProperty);
+        set => SetValue(SessionProperty, value);
+    }
+
+    private void UnsubscribeFromSession(SessionController session)
+    {
+        session.ScreenCleared -= Session_ScreenCleared;
+        session.ScreenChanged -= Session_ScreenChanged;
+        session.ScreenData -= Session_ScreenData;
+    }
+    private void SubscribeToSession(SessionController session)
+    {
+        session.ScreenCleared += Session_ScreenCleared;
+        session.ScreenChanged += Session_ScreenChanged;
+        session.ScreenData += Session_ScreenData;
     }
 
 
-    private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private void Session_ScreenData(object sender, ScreenDataEventArgs args)
+    {
+        _lastDataArgs = args;
+        RefreshValues();
+    }
+
+    private void Session_ScreenChanged(object sender, ScreenChangedEventArgs args)
+    {
+        _screenInitialized = false;
+        RefreshScreen();
+    }
+
+    private void Session_ScreenCleared(object sender, EventArgs args)
+    {
+        _screenInitialized = false;
+        ClearScreen();
+    }
+
+    private static void OnSessionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is ScreenView view)
         {
             // Unsubscribe from old screen tree
-            if (e.OldValue is Screen oldScreen)
+            if (e.OldValue is SessionController oldSession)
             {
-                view.UnsubscribeFromScreen(oldScreen);
+                view.UnsubscribeFromSession(oldSession);
             }
 
             // Subscribe to new screen tree
-            if (e.NewValue is Screen newScreen)
+            if (e.NewValue is SessionController newSession)
             {
-                view.SubscribeToScreen(newScreen);
+                view.SubscribeToSession(newSession);
                 view._requiresClear = true;
             }
             view._screenInitialized = false;
@@ -143,85 +175,15 @@ public partial class ScreenView : Canvas
     }
 
 
-    public void Refresh(bool refreshHardwareInfo = true)
-    {
-        if (Screen != null)
-        {
-            if (refreshHardwareInfo)
-            {
-                Screen.Refresh();
-            }
-            if (!_screenInitialized)
-            {
-                RefreshScreen();
-            }
-            RefreshValues();
-        }
-    }
+    //public void Refresh()
+    //{
+    //    if (Session != null)
+    //    { 
+    //       Session.Refresh();
+    //    }
+    //}
 
-    private void SubscribeToScreenEntry(ScreenEntry entry)
-    {
-        entry.PropertyChanged += ScreenModel_PropertyChanged;
-        if (entry.Value1 != null)
-        {
-            entry.Value1.PropertyChanged += ScreenModel_PropertyChanged;
-        }
-        if (entry.Value2 != null)
-        {
-            entry.Value2.PropertyChanged += ScreenModel_PropertyChanged;
-        }
-    }
-
-    private void UnsubscribeFromScreenEntry(ScreenEntry entry)
-    {
-        entry.PropertyChanged -= ScreenModel_PropertyChanged;
-        if (entry.Value1 != null)
-        {
-            entry.Value1.PropertyChanged -= ScreenModel_PropertyChanged;
-        }
-        if (entry.Value2 != null)
-        {
-            entry.Value2.PropertyChanged -= ScreenModel_PropertyChanged;
-        }
-    }
-
-    private void SubscribeToScreen(Screen screen)
-    {
-        screen.PropertyChanged += ScreenModel_PropertyChanged;
-
-        if (screen.Top != null)
-        {
-            SubscribeToScreenEntry(screen.Top);
-        }
-        if (screen.Bottom != null)
-        {
-            SubscribeToScreenEntry(screen.Bottom);
-        }
-    }
-
-    private void UnsubscribeFromScreen(Screen screen)
-    {
-        screen.PropertyChanged -= ScreenModel_PropertyChanged;
-
-        if (screen.Top != null)
-        {
-            UnsubscribeFromScreenEntry(screen.Top);
-        }
-        if (screen.Bottom != null)
-        {
-            UnsubscribeFromScreenEntry(screen.Bottom);
-        }
-    }
-
-    private void ScreenModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(ScreenValueEntry.Min) && e.PropertyName != nameof(ScreenValueEntry.Max) && e.PropertyName != nameof(ScreenValueEntry.Value))
-        {
-            _screenInitialized = false;
-            RefreshScreen();
-        }
-    }
-
+    
     private Abi.ResponseColor ToColor(int argb)
     {
         Abi.ResponseColor result;
@@ -234,13 +196,14 @@ public partial class ScreenView : Canvas
 
     private void BuildResponseScreen()
     {
-        if (Screen == null) return;
+        if (Session == null || Session.Screen==null) return;
+        var scr = Session.Screen;
         _responseScreen.Header.Flags = 0;
-        if (Screen.Top != null)
+        if (scr.Top != null)
         {
-            if (Screen.Top.Label != null)
+            if (scr.Top.Label != null)
             {
-                var bytes = Encoding.UTF8.GetBytes(Screen.Top.Label);
+                var bytes = Encoding.UTF8.GetBytes(scr.Top.Label);
                 bytes.CopyTo(_responseScreen.Top.Label, 0);
                 _responseScreen.Top.Label[bytes.Length] = 0;
             }
@@ -248,14 +211,14 @@ public partial class ScreenView : Canvas
             {
                 _responseScreen.Top.Label[0] = 0;
             }
-            _responseScreen.Top.Color = ToColor(Screen.Top.Color);
+            _responseScreen.Top.Color = ToColor(scr.Top.Color);
 
-            if (Screen.Top.Value1 != null)
+            if (scr.Top.Value1 != null)
             {
                 
-                if (!string.IsNullOrEmpty(Screen.Top.Value1.Unit))
+                if (!string.IsNullOrEmpty(scr.Top.Value1.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value1.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(scr.Top.Value1.Unit);
                     bytes.CopyTo(_responseScreen.Top.Value1.Suffix, 0);
                     _responseScreen.Top.Value1.Suffix[bytes.Length] = 0;
                 }
@@ -263,17 +226,17 @@ public partial class ScreenView : Canvas
                 {
                     _responseScreen.Top.Value1.Suffix[0] = 0;
                 }
-                _responseScreen.Top.Value1.Color = ToColor(Screen.Top.Value1.Color);
-                if (Screen.Top.Value1.HasGradient)
+                _responseScreen.Top.Value1.Color = ToColor(scr.Top.Value1.Color);
+                if (scr.Top.Value1.HasGradient)
                 {
                     _responseScreen.Header.Flags |= (1 << 0);
                 }
             }
-            if (Screen.Top.Value2 != null)
+            if (scr.Top.Value2 != null)
             {
-                if (!string.IsNullOrEmpty(Screen.Top.Value2.Entry.Unit))
+                if (!string.IsNullOrEmpty(scr.Top.Value2.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Top.Value2.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(scr.Top.Value2.Unit);
                     bytes.CopyTo(_responseScreen.Top.Value2.Suffix, 0);
                     _responseScreen.Top.Value2.Suffix[bytes.Length] = 0;
                 }
@@ -281,18 +244,18 @@ public partial class ScreenView : Canvas
                 {
                     _responseScreen.Top.Value2.Suffix[0] = 0;
                 }
-                _responseScreen.Top.Value2.Color = ToColor(Screen.Top.Value2.Color);
-                if (Screen.Top.Value2.HasGradient)
+                _responseScreen.Top.Value2.Color = ToColor(scr.Top.Value2.Color);
+                if (scr.Top.Value2.HasGradient)
                 {
                     _responseScreen.Header.Flags |= (1 << 1);
                 }
             }
         }
-        if (Screen.Bottom != null)
+        if (scr.Bottom != null)
         {
-            if (Screen.Bottom.Label != null)
+            if (scr.Bottom.Label != null)
             {
-                var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Label);
+                var bytes = Encoding.UTF8.GetBytes(scr.Bottom.Label);
                 bytes.CopyTo(_responseScreen.Bottom.Label, 0);
                 _responseScreen.Bottom.Label[bytes.Length] = 0;
             }
@@ -300,12 +263,12 @@ public partial class ScreenView : Canvas
             {
                 _responseScreen.Bottom.Label[0] = 0;
             }
-            _responseScreen.Bottom.Color = ToColor(Screen.Bottom.Color);
-            if (Screen.Bottom.Value1 != null)
+            _responseScreen.Bottom.Color = ToColor(scr.Bottom.Color);
+            if (scr.Bottom.Value1 != null)
             {
-                if (!string.IsNullOrEmpty(Screen.Bottom.Value1.Entry.Unit))
+                if (!string.IsNullOrEmpty(scr.Bottom.Value1.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value1.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(scr.Bottom.Value1.Unit);
                     bytes.CopyTo(_responseScreen.Bottom.Value1.Suffix, 0);
                     _responseScreen.Bottom.Value1.Suffix[bytes.Length] = 0;
                 }
@@ -313,17 +276,17 @@ public partial class ScreenView : Canvas
                 {
                     _responseScreen.Bottom.Value1.Suffix[0] = 0;
                 }
-                _responseScreen.Bottom.Value1.Color = ToColor(Screen.Bottom.Value1.Color);
-                if (Screen.Bottom.Value1.HasGradient)
+                _responseScreen.Bottom.Value1.Color = ToColor(scr.Bottom.Value1.Color);
+                if (scr.Bottom.Value1.HasGradient)
                 {
                     _responseScreen.Header.Flags |= (1 << 2);
                 }
             }
-            if (Screen.Bottom.Value2 != null)
+            if (scr.Bottom.Value2 != null)
             {
-                if (!string.IsNullOrEmpty(Screen.Bottom.Value2.Entry.Unit))
+                if (!string.IsNullOrEmpty(scr.Bottom.Value2.Entry.Unit))
                 {
-                    var bytes = Encoding.UTF8.GetBytes(Screen.Bottom.Value2.Unit);
+                    var bytes = Encoding.UTF8.GetBytes(scr.Bottom.Value2.Unit);
                     bytes.CopyTo(_responseScreen.Bottom.Value2.Suffix, 0);
                     _responseScreen.Bottom.Value2.Suffix[bytes.Length] = 0;
                 }
@@ -331,8 +294,8 @@ public partial class ScreenView : Canvas
                 {
                     _responseScreen.Bottom.Value2.Suffix[0] = 0;
                 }
-                _responseScreen.Bottom.Value2.Color = ToColor(Screen.Bottom.Value2.Color);
-                if (Screen.Bottom.Value2.HasGradient)
+                _responseScreen.Bottom.Value2.Color = ToColor(scr.Bottom.Value2.Color);
+                if (scr.Bottom.Value2.HasGradient)
                 {
                     _responseScreen.Header.Flags |= (1 << 3);
                 }
@@ -342,42 +305,33 @@ public partial class ScreenView : Canvas
 
     private void BuildResponseData()
     {
-        if (Screen == null || Screen.HardwareInfo == null) return;
+        if (_lastDataArgs==null) return;
 
-        if (Screen.Top != null)
-        {
-            if (Screen.Top.Value1 != null)
-            {
-                _responseData.Top.Value1.Value = Screen.Top.Value1.Value;
-                _responseData.Top.Value1.Scaled = Screen.Top.Value1.Scaled;
-            }
-            if (Screen.Top.Value2 != null)
-            {
-                _responseData.Top.Value2.Value = Screen.Top.Value2.Value;
-                _responseData.Top.Value2.Scaled = Screen.Top.Value2.Scaled;
-            }
-        }
-        if (Screen.Bottom != null)
-        {
-            if (Screen.Bottom.Value1 != null)
-            {
-                _responseData.Bottom.Value1.Value = Screen.Bottom.Value1.Value;
-                _responseData.Bottom.Value1.Scaled = Screen.Bottom.Value1.Scaled;
-            }
-            if (Screen.Bottom.Value2 != null)
-            {
-                _responseData.Bottom.Value2.Value = Screen.Bottom.Value2.Value;
-                _responseData.Bottom.Value2.Scaled = Screen.Bottom.Value2.Scaled;
-            }
-        }
+        _responseData.Top.Value1.Value = _lastDataArgs.TopValue1;
+        _responseData.Top.Value1.Scaled = _lastDataArgs.TopScaled1;
+           
+        _responseData.Top.Value2.Value = _lastDataArgs.TopValue2;
+        _responseData.Top.Value2.Scaled = _lastDataArgs.TopScaled2;
+
+        _responseData.Bottom.Value1.Value = _lastDataArgs.BottomValue1;
+        _responseData.Bottom.Value1.Scaled = _lastDataArgs.BottomScaled1;
+
+        _responseData.Bottom.Value2.Value = _lastDataArgs.BottomValue2;
+        _responseData.Bottom.Value2.Scaled = _lastDataArgs.BottomScaled2;
+
     }
-
+    private void ClearScreen()
+    {
+        if (!_screenInitialized) return;
+        if (_handle == IntPtr.Zero) return;
+        Abi.ClearData(_handle);
+    }
     private void RefreshScreen()
     {
         if (_screenInitialized) return;
-        if (Screen == null || _handle == IntPtr.Zero || _bitmap == null)
+        if ( _handle == IntPtr.Zero || !EnsureBitmap() || _bitmap==null)
             return;
-
+        Abi.ClearData(_handle);
         BuildResponseScreen();
 
         uint bufferBytes = (uint)(_bitmap.PixelWidth * _bitmap.PixelHeight * 4);
@@ -414,17 +368,20 @@ public partial class ScreenView : Canvas
 
     private void RefreshValues()
     {
+        if (_handle == IntPtr.Zero || !EnsureBitmap())
+            return;
+
         if (!_screenInitialized)
         {
             RefreshScreen();
         }
         if (!_screenInitialized) return;
         BuildResponseData();
-        if (Screen == null || Screen.HardwareInfo == null || _handle == IntPtr.Zero || _bitmap == null)
+        if ( _handle == IntPtr.Zero || _bitmap == null)
         {
             return;
         }
-
+     
         uint bufferBytes = (uint)(_bitmap.PixelWidth * _bitmap.PixelHeight * 4);
 
         using (var stream = _bitmap.PixelBuffer.AsStream())
@@ -464,7 +421,8 @@ public partial class ScreenView : Canvas
         if (e.NewSize.Width > 0 && e.NewSize.Height > 0 && e.NewSize != _lastSize)
         {
             _lastSize = e.NewSize;
-            InitializeBitmap();
+            _bitmap = null;
+            EnsureBitmap();
             RefreshScreen();
             RefreshValues();
         }
@@ -472,15 +430,15 @@ public partial class ScreenView : Canvas
 
     private void Control_Loaded(object sender, RoutedEventArgs e)
     {
-        InitializeBitmap();
+        EnsureBitmap();
     }
 
     private void Control_Unloaded(object sender, RoutedEventArgs e)
     {
         // Unsubscribe when unloading
-        if (Screen != null)
+        if (Session != null)
         {
-            UnsubscribeFromScreen(Screen);
+            UnsubscribeFromSession(Session);
         }
 
         if (_handle != IntPtr.Zero)
@@ -521,14 +479,15 @@ public partial class ScreenView : Canvas
         // Keep x, y in DIPs for the event args
         Hit?.Invoke(this, new ScreenViewHitEventArgs((ScreenViewHitType)index, x, y));
     }
-    private void InitializeBitmap()
+    private bool EnsureBitmap()
     {
+        if(_bitmap!=null) return true;
         double actualWidth = ActualWidth;
         double actualHeight = ActualHeight;
 
         if (actualWidth == 0 || actualHeight == 0)
         {
-            return;
+            return false;
         }
 
         // Get the scaling factor based on ScalingMode
@@ -573,6 +532,7 @@ public partial class ScreenView : Canvas
         }
 
         _screenInitialized = false;
+        return true;
     }
 
     private static class Abi

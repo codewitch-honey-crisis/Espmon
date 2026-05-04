@@ -27,6 +27,7 @@
             Grid.Column="0"
             Grid.Row="1"
             Text="{x:Bind PathPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            LostFocus="SuggestBox_LostFocus"
             ItemsSource="{x:Bind MatchingPaths, Mode=OneWay}"
             PlaceholderText="Enter an expression..."
             TextChanged="SuggestBox_TextChanged"

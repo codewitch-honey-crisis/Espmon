@@ -5,17 +5,65 @@ using System.ComponentModel;
 
 namespace Espmon;
 
-internal class ProviderEntry : IComparable<ProviderEntry>
+public class ProviderEntry : INotifyPropertyChanged
 {
-    public ProviderEntry(IHardwareInfoProvider provider)
+    public ProviderEntry(ProviderController provider)
     {
         Provider = provider;
+        provider.PropertyChanged += Provider_PropertyChanged;
     }
-    public IHardwareInfoProvider Provider { get; }
-    public string Name => Provider.DisplayName;
-    public int CompareTo(ProviderEntry? other)
+
+    private void Provider_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (other == null) return 1;
-        return Name.CompareTo(other.Name);
+        if(e.PropertyName==null || e.PropertyName==nameof(IsStarted))
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+        }
     }
+
+    public ProviderController Provider { get; }
+    public string Name => Provider.Name;
+    public string[] Paths => Provider.Paths;
+    public string Description => Provider.Description;
+    public string Identifier => Provider.Identifier;
+    public bool IsStarted
+    {
+        get
+        {
+            return Provider.IsStarted;
+        }
+        set
+        {
+            if(IsStarted!=value)
+            {
+                if(value)
+                {
+                    try
+                    {
+                        Provider.Start();
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                    }
+                    catch
+                    {
+
+                    }
+                } else
+                {
+                    try
+                    {
+                        Provider.Stop();
+                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                    }
+                    catch
+                    {
+
+                    }
+                }
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    
 }

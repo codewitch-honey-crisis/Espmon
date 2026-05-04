@@ -28,7 +28,7 @@ PlatformIO lib is `codewitch-honey-crisis/htcw_esp_panel`
 
 Use the example code therein to get started.
 
-You can also use the [Panel Generator Tool](panel_gen.html) to produce a `custom_panel.h` for your project. It runs locally in a browser.
+You can also use the [Panel Generator Tool](https://codewitch-honey-crisis.github.io/htcw_esp_panel/) to produce a `custom_panel.h` for your project. It runs locally in a browser.
 
 ## Configuration
 

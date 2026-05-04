@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
     <StackPanel>
-        <local:ScreenView x:Name="screenView" Screen="{x:Bind Screen, Mode=OneWay}" Hit="screenView_Hit" MinWidth="640" MinHeight="480" MaxHeight="600" MaxWidth="1024" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <local:ScreenView x:Name="screenView" Session="{x:Bind Session, Mode=OneWay}" Hit="screenView_Hit" MinWidth="640" MinHeight="480" MaxHeight="600" MaxWidth="1024" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
         <Border MinHeight="200" BorderBrush="Gray" BorderThickness="1" Padding="8">
             <StackPanel Spacing="8">
                 <StackPanel x:Name="screenPartPanel" Spacing="16">
@@ -32,7 +32,7 @@
                 <StackPanel x:Name="topLabelEditorPanel" Spacing="8">
                     <TextBox x:Name="toplabelTextBox" 
                          Header="Label Text" 
-                         Text="{x:Bind Screen.Top.Label, Mode=TwoWay}"
+                         Text="{x:Bind Session.Screen.Top.Label, Mode=TwoWay}"
                          PlaceholderText="Enter label text"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -52,7 +52,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1QuerySelector" Expression="{x:Bind Screen.Top.Value1.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1QuerySelector" Expression="{x:Bind Screen.Top.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -63,7 +63,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2QuerySelector" Expression="{x:Bind Screen.Top.Value2.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2QuerySelector" Expression="{x:Bind Screen.Top.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -74,7 +74,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -82,7 +82,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value1.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -102,7 +102,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -110,7 +110,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value2.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -120,7 +120,7 @@
                         <TextBlock Grid.Column="0">Color</TextBlock>
                         <local:ColorSelector Grid.Column= "1" x:Name="topValue2BarColorSelector" SelectedColorValue="{x:Bind Screen.Top.Value2.Color, Mode=TwoWay}"/>
                     </Grid>
-                    
+
 
                     <CheckBox x:Name="topValue2BarHasGradientCheckBox" Content="Has Gradient"  IsChecked="{x:Bind Screen.Top.Value2.HasGradient, Mode=TwoWay}"/>
                 </StackPanel>
@@ -128,7 +128,7 @@
                 <StackPanel x:Name="bottomLabelEditorPanel" Spacing="8">
                     <TextBox x:Name="bottomLabelTextBox" 
                          Header="Label Text"
-                         Text="{x:Bind Screen.Bottom.Label, Mode=TwoWay}"
+                         Text="{x:Bind Session.Screen.Bottom.Label, Mode=TwoWay}"
                          PlaceholderText="Enter label text"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -147,7 +147,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1QuerySelector" Expression="{x:Bind Screen.Bottom.Value1.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1QuerySelector" Expression="{x:Bind Screen.Bottom.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -158,7 +158,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2QuerySelector" Expression="{x:Bind Screen.Bottom.Value2.ValueExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2QuerySelector" Expression="{x:Bind Screen.Bottom.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -169,7 +169,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -177,7 +177,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -187,7 +187,7 @@
                         <TextBlock Grid.Column="0">Color</TextBlock>
                         <local:ColorSelector Grid.Column= "1" x:Name="bottomValue1BarColorSelector" SelectedColorValue="{x:Bind Screen.Bottom.Value1.Color, Mode=TwoWay}"/>
                     </Grid>
-                    
+
 
                     <CheckBox x:Name="bottomValue1BarHasGradientCheckBox" Content="Has Gradient"  IsChecked="{x:Bind Screen.Bottom.Value1.HasGradient, Mode=TwoWay}"/>
                 </StackPanel>
@@ -199,7 +199,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -207,7 +207,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MaxExpression, Mode=TwoWay}" HardwareInfo="{x:Bind Screen.HardwareInfo,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>

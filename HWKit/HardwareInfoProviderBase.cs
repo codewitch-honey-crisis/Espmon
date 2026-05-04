@@ -7,7 +7,7 @@ namespace HWKit
     public abstract class HardwareInfoProviderBase : IHardwareInfoProvider
     {
         private bool _disposed = false;
-        protected abstract HardwareInfoProviderState GetState();
+        protected abstract HardwareInfoProviderStatus GetState();
         protected virtual string GetIdentifier()
         {
             var name = GetDisplayName();
@@ -45,6 +45,7 @@ namespace HWKit
         {
 
         }
+        protected abstract string GetDescription();
         public string DisplayName { get { return GetDisplayName(); } }
         public string Identifier
         {
@@ -68,7 +69,7 @@ namespace HWKit
         }
         public void Start()
         {
-            if (State == HardwareInfoProviderState.Stopped)
+            if (Status == HardwareInfoProviderStatus.Stopped)
             {
                 OnStart();
 
@@ -77,7 +78,7 @@ namespace HWKit
         }
         public void Stop()
         {
-            if (State == HardwareInfoProviderState.Started)
+            if (Status == HardwareInfoProviderStatus.Started)
             {
                 OnStop();
                 StateChanged?.Invoke(this, EventArgs.Empty);
@@ -85,7 +86,10 @@ namespace HWKit
             
         }
 
-        public HardwareInfoProviderState State => GetState();
+        public HardwareInfoProviderStatus Status => GetState();
+
+        public string Description { get => GetDescription(); }
+
         public event EventHandler<HardwareInfoProviderPublishedEventArgs>? Published;
         public event EventHandler<HardwareInfoProviderRevokedEventArgs>? Revoked;
         public event EventHandler<EventArgs>? StateChanged;

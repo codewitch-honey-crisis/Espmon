@@ -5,9 +5,9 @@ namespace Espmon;
 
 public sealed class ScreenListEntry : INotifyPropertyChanged
 {
-    public ScreenListEntry(string name, Screen screen) { ArgumentNullException.ThrowIfNull(name); _name = name; ArgumentNullException.ThrowIfNull(screen); _screen = screen; }
-    private Screen? _screen;
-    public Screen? Screen { 
+    public ScreenListEntry(string name, ScreenController screen) { ArgumentNullException.ThrowIfNull(name); _name = name; ArgumentNullException.ThrowIfNull(screen); _screen = screen; }
+    private ScreenController? _screen;
+    public ScreenController? Screen { 
         get
         {
             return _screen;

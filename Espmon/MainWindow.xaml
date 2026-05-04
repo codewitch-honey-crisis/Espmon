@@ -22,31 +22,38 @@
                         <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}">
-                        <ListView x:Name="screenItemList" Loaded="screenItemList_Loaded"  ItemsSource="{x:Bind ViewModel.ScreenItems, Mode=OneWay}" SelectionChanged="screenItemList_SelectionChanged" SelectedIndex="{x:Bind ViewModel.SelectedScreenIndex, Mode=TwoWay}">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="local:ScreenListEntry">
-                                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="32" Loaded="screenItem_Loaded">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" x:Name="screenNameDisplay" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="screenNameDisplay_DoubleTapped"/>
-                                        <TextBlock Grid.Column="0" x:Name="screenNameDisplayDefault" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" Visibility="Collapsed"/>
-                                        <TextBox Grid.Column="0" x:Name="screenNameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="screenNameEdit_LostFocus" KeyDown="screenNameEdit_KeyDown"/>
-                                        <Button Grid.Column="1" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Save" Click="SaveButton_Click">
-                                             <FontIcon Glyph="&#xE74E;" FontSize="14"/>
-                                        </Button>
-                                        <Button Grid.Column="2" x:Name="screenDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="screenDeleteButton_Click">
-                                            <FontIcon Glyph="&#xE74D;" FontSize="14"/>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"></ColumnDefinition>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="screenNewButton" Click="screenNewButton_Click">
+                                    <FontIcon Glyph="&#xE8A5;" FontSize="14"/>
+                                </Button>
+                            </Grid>
+                            <ListView x:Name="screenItemList" Loaded="screenItemList_Loaded"  ItemsSource="{x:Bind ViewModel.ScreenItems, Mode=OneWay}" SelectionChanged="screenItemList_SelectionChanged" SelectedIndex="{x:Bind ViewModel.SelectedScreenIndex, Mode=TwoWay}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:ScreenListEntry">
+                                        <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="32" Loaded="screenItem_Loaded">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="screenNameDisplay" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="screenNameDisplay_DoubleTapped"/>
+                                            <TextBlock Grid.Column="0" x:Name="screenNameDisplayDefault" Text="{x:Bind Name}" VerticalAlignment="Center" Margin="4,0,8,0" Visibility="Collapsed"/>
+                                            <TextBox Grid.Column="0" x:Name="screenNameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="screenNameEdit_LostFocus" KeyDown="screenNameEdit_KeyDown"/>
+                                            <Button Grid.Column="2" x:Name="screenDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="screenDeleteButton_Click">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
                     </Border>
                     <ScrollViewer Grid.Column="2" VerticalScrollMode="Auto" HorizontalScrollMode="Auto">
-                        <local:ScreenEditor x:Name="preview" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                        <local:ScreenEditor x:Name="preview" ScalingMode="DpiAware" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Session="{x:Bind ViewModel.PortController.ViewSession, Mode=OneWay}" Screen="{x:Bind ViewModel.PortController.ViewSession.Screen, Mode=OneWay}"/>
                     </ScrollViewer>
                 </Grid>
                 <Grid x:Name="devicesPanel" Visibility="Collapsed">
@@ -64,18 +71,19 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" x:Name="deviceNameDisplay" Text="{x:Bind Name, Mode=OneWay}" VerticalAlignment="Center" Margin="4,0,8,0" DoubleTapped="deviceNameDisplay_DoubleTapped">
                                             <TextBlock.Foreground>
                                                 <SolidColorBrush Color="{x:Bind TextColor, Mode=OneWay}"/>
                                             </TextBlock.Foreground>
                                         </TextBlock>
-                                        <TextBox Grid.Column="0" x:Name="deviceNameEdit" Text="{x:Bind Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="deviceNameEdit_LostFocus" KeyDown="deviceNameEdit_KeyDown"/>
-                                        <Button Grid.Column="2" x:Name="deviceDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="deviceDeleteButton_Click">
+                                        <TextBox Grid.Column="0" x:Name="deviceNameEdit" Text="{x:Bind Session.Device.Name, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,2,4,2" Visibility="Collapsed" LostFocus="deviceNameEdit_LostFocus" KeyDown="deviceNameEdit_KeyDown"/>
+                                        <Button Grid.Column="2" x:Name="deviceDeleteButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="deviceDeleteButton_Click" Visibility="{x:Bind DeleteVisibility, Mode=OneWay}">
                                             <FontIcon Glyph="&#xE74D;" FontSize="14"/>
                                         </Button>
-                                        <Button Grid.Column="2" x:Name="deviceFlashButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Delete" Click="flashButton_Click">
-                                            <SymbolIcon Grid.Column="1" Symbol="Upload" Visibility="{x:Bind RequiresFlash, Mode=OneWay}" Foreground="Orange" Margin="8,0,0,0"/>
+                                        <Button Grid.Column="3" x:Name="deviceFlashButton" Background="Transparent" BorderThickness="0" Padding="4,0" VerticalAlignment="Center" ToolTipService.ToolTip="Flash" Click="flashButton_Click">
+                                            <SymbolIcon Grid.Column="3" Symbol="Upload" Visibility="{x:Bind CanFlash, Mode=OneWay}" Foreground="Orange" Margin="8,0,0,0"/>
                                         </Button>
                                     </Grid>
                                 </DataTemplate>
@@ -84,7 +92,7 @@
                     </Border>
                     <ScrollViewer Grid.Column="2" VerticalScrollMode="Auto" HorizontalScrollMode="Auto">
                         <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SessionOpenVisibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
+                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel1Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
                                 <TextBlock Text="Connect to device" HorizontalAlignment="Center"/>
                                 <ScrollViewer x:Name="openLogScroller" VerticalScrollBarVisibility="Auto" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
                                     <ItemsControl ItemsSource="{x:Bind ViewModel.Log, Mode=OneWay}">
@@ -97,15 +105,14 @@
                                 </ScrollViewer>
                                 <Button x:Name="openButton" Content="Connect" HorizontalAlignment="Center" Click="openButton_Click" />
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SessionRunningVisibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
-                                <local:ScreenView x:Name="currentScreenView" Width="{x:Bind ViewModel.SelectedSession.HorizontalResolution, Mode=OneWay}" Height="{x:Bind ViewModel.SelectedSession.VerticalResolution, Mode=OneWay}"/>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.DisplayName, Mode=OneWay}" HorizontalAlignment="Center"/>
+                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel2Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
+                                <local:ScreenView x:Name="currentScreenView" ScalingMode="DpiAware" Width="{x:Bind ViewModel.SelectedSession.HorizontalResolution, Mode=OneWay}" Height="{x:Bind ViewModel.SelectedSession.VerticalResolution, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.DeviceName, Mode=OneWay}" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{x:Bind ViewModel.SelectedSessionScreenMetrics, Mode=OneWay}" HorizontalAlignment="Center"/>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.InputType, Mode=OneWay}" HorizontalAlignment="Center"/>
-                                <local:ScreenSelector x:Name="deviceScreens"  Screens="{x:Bind ViewModel.ScreenItems,Mode=OneWay}" DeviceScreens="{x:Bind ViewModel.SelectedSession.Device.Screens, Mode=TwoWay}" SelectedScreenIndex="{x:Bind ViewModel.SelectedSession.CurrentScreenIndex, FallbackValue=-1, Mode=TwoWay}" ScreenSelectionChanged="deviceScreens_ScreenSelectionChanged"/>
-                                <Button Name="closeButton" Content="Disconnect" HorizontalAlignment="Center" Click="closeButton_Click"/>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.Input, Mode=OneWay}" HorizontalAlignment="Center"/>
+                                <local:ScreenSelector x:Name="deviceScreens" Visibility="{x:Bind ViewModel.SessionScreenListVisibility, Mode=OneWay}" Screens="{x:Bind ViewModel.ScreenItems,Mode=OneWay}" DeviceScreens="{x:Bind ViewModel.SelectedSession.Device.Screens, Mode=OneWay}" SelectedScreenIndex="{x:Bind ViewModel.SelectedSession.ScreenIndex, FallbackValue=-1, Mode=TwoWay}" ScreenSelectionChanged="deviceScreens_ScreenSelectionChanged"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SessionFlashVisibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
+                            <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel3Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
                                 <TextBlock Text="Flash firmware to device" HorizontalAlignment="Center"/>
                                 <ComboBox x:Name="flashCombo" ItemsSource="{x:Bind ViewModel.FirmwareEntries, Mode=OneWay}" PlaceholderText="Choose...">
                                     <ComboBox.ItemTemplate>
@@ -130,15 +137,62 @@
                         </Grid>
                     </ScrollViewer>
                 </Grid>
+
                 <Grid x:Name="providersPanel" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="250" MinWidth="150"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
+
                     <Border Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <ListView x:Name="providerList"
+                  ItemsSource="{x:Bind ViewModel.ProviderEntries, Mode=OneWay}"
+                  SelectedItem="{x:Bind ViewModel.SelectedProviderEntry, Mode=TwoWay}"
+                  SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="local:ProviderEntry">
+                                    <TextBlock x:Name="providerNameDisplay"
+                               Text="{x:Bind Identifier, Mode=OneWay}"
+                               VerticalAlignment="Center" Margin="4,0,8,0"/>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
                     </Border>
-                    <ScrollViewer Grid.Column="2" VerticalScrollMode="Auto" HorizontalScrollMode="Auto"></ScrollViewer>
+
+                    <Grid Grid.Column="2"
+          Visibility="{x:Bind ViewModel.ProviderPanelVisibility, Mode=OneWay}"
+          RowSpacing="12"
+          Padding="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                   Text="{x:Bind ViewModel.SelectedProviderEntry.Name, Mode=OneWay}"
+                   HorizontalAlignment="Center" FontWeight="Bold"/>
+
+                        <TextBlock Grid.Row="1"
+                   x:Name="providerDescriptionDisplay"
+                   Text="{x:Bind ViewModel.SelectedProviderEntry.Description, Mode=OneWay}"
+                   HorizontalAlignment="Center"
+                   TextWrapping="Wrap"/>
+
+                        <ScrollViewer Grid.Row="2"
+                      x:Name="providerPathScroller"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.SelectedProviderEntry.Paths, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Text="{x:Bind}" TextWrapping="NoWrap" Margin="0,2"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
                 <Grid x:Name="settingsPanel" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
@@ -156,7 +210,7 @@
                                 <FontIcon Glyph="&#xE7EF;" Visibility="{x:Bind ViewModel.RequiresElevation, Mode=OneWay}"/>
                             </StackPanel>
 
-                            <!-- Update Interval -->
+                            <!-- Update Interval
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <ComboBox x:Name="updateIntervalCombo" Header="Update Interval" SelectedItem="{x:Bind ViewModel.SelectedUpdateInterval, Mode=TwoWay}">
                                     <x:String>10 Hz</x:String>
@@ -164,7 +218,7 @@
                                     <x:String>1 Hz</x:String>
                                 </ComboBox>
                                 <FontIcon Glyph="&#xE7EF;" VerticalAlignment="Bottom" Margin="0,0,0,4" Visibility="{x:Bind ViewModel.RequiresElevation, Mode=OneWay}"/>
-                            </StackPanel>
+                            </StackPanel>-->
 
                             <!-- Start with Windows -->
                             <StackPanel Orientation="Horizontal" Spacing="8">

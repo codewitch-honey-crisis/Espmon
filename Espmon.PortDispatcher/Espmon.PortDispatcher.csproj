@@ -9,8 +9,13 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="default.screen.json" />
+  </ItemGroup>
   
   <ItemGroup>
+    <EmbeddedResource Include="providers.json" />
+    <EmbeddedResource Include="default.screen.json" />
     <EmbeddedResource Include="firmware\boards.json" />
     <EmbeddedResource Include="firmware\boards.zip" />
   </ItemGroup>

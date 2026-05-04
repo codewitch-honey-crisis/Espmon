@@ -1,10 +1,13 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+
+using System.Runtime.Versioning;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace Espmon;
 
+[SupportedOSPlatform("windows")]
 public sealed partial class ScreenEditor : UserControl
 {
     void CollapseAll()
@@ -24,48 +27,95 @@ public sealed partial class ScreenEditor : UserControl
     public ScreenEditor()
     {
         InitializeComponent();
-        screenView.ScalingMode = ScreenViewScalingMode.None;
         _suppressChange = true;
         screenPartComboBox.SelectedIndex = 0;
         _suppressChange = false;
         CollapseAll();
-        Screen = Screen.Default;
     }
+    public static readonly DependencyProperty ScalingModeProperty =
+       DependencyProperty.Register(
+           nameof(ScalingMode),
+           typeof(ScreenViewScalingMode),
+           typeof(ScreenEditor),
+           new PropertyMetadata(ScreenViewScalingMode.DpiAware, OnScalingModeChanged));
+    public ScreenViewScalingMode ScalingMode
+    {
+        get => (ScreenViewScalingMode)GetValue(ScalingModeProperty);
+        set => SetValue(ScalingModeProperty, value);
+    }
+    private static void OnScalingModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ScreenEditor editor)
+        {
+            editor.screenView.ScalingMode = (ScreenViewScalingMode)e.NewValue;
+        }
+    }
+    public static readonly DependencyProperty SessionProperty =
+    DependencyProperty.Register(
+        nameof(Session),
+        typeof(SessionController),
+        typeof(ScreenEditor),
+        new PropertyMetadata(null, OnSessionChanged));
+
+    public SessionController? Session
+    {
+        get => (SessionController?)GetValue(SessionProperty);
+        set => SetValue(SessionProperty, value);
+    }
+    
+
+    private static void OnSessionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ScreenEditor editor)
+        {
+            // Unsubscribe from old screen tree
+            if (e.OldValue is SessionController oldSession)
+            {
+                //oldSession.PropertyChanged -= Session_PropertyChanged;
+            }
+
+            // Subscribe to new screen tree
+            if (e.NewValue is SessionController newSession)
+            {
+                editor.screenView.Session=newSession;
+                //newSession.PropertyChanged += Session_PropertyChanged;
+            }
+        }
+    }
+
+ 
     public static readonly DependencyProperty ScreenProperty =
     DependencyProperty.Register(
         nameof(Screen),
-        typeof(Screen),
+        typeof(ScreenController),
         typeof(ScreenView),
         new PropertyMetadata(null, OnScreenChanged));
 
-    public Screen? Screen
+    public ScreenController? Screen
     {
-        get => (Screen?)GetValue(ScreenProperty);
+        get => (ScreenController?)GetValue(ScreenProperty);
         set => SetValue(ScreenProperty, value);
     }
-    
+
 
     private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is ScreenEditor editor)
         {
             // Unsubscribe from old screen tree
-            if (e.OldValue is Screen oldScreen)
+            if (e.OldValue is ScreenController oldScreen)
             {
-                
+
             }
 
-            // Subscribe to new screen tree
-            if (e.NewValue is Screen newScreen)
-            {
-                editor.screenView.Screen = newScreen;
-            }
+            //// Subscribe to new screen tree
+            //if (e.NewValue is ScreenController newScreen && editor.Session != null)
+            //{
+            //    editor.Session.Screen = newScreen;
+            //}
         }
     }
-    public void Refresh()
-    {
-        screenView.Refresh();
-    }
+   
     private bool _suppressChange = false;
     private void SetHit(ScreenViewHitType hitType)
     {

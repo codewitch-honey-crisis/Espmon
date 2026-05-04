@@ -24,10 +24,10 @@ namespace HWKit
         {
             return "cim_ram";
         }
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
 
-            return _started ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         void RunQuery()
         {
@@ -186,6 +186,10 @@ namespace HWKit
             _mutex = null;
             
 
+        }
+        protected override string GetDescription()
+        {
+            return "Provides RAM usage information via the Windows CIM subsystem";
         }
 
     }

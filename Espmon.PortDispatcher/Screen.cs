@@ -391,6 +391,42 @@ public partial class Screen : Component, INotifyPropertyChanged
         return result;
 
     }
+    internal static Screen FromJson(Device? parent, JsonObject json)
+    {
+        var result = new Screen(parent);
+        if (json.TryGetValue("top", out var top))
+        {
+            if (top is JsonObject obj)
+            {
+                result.Top = ScreenEntry.FromJson(result, obj);
+            }
+            else
+            {
+                throw new ScreenParseException($"Screen \"top\" field must be a valid JSON object.", 0, 0, 0);
+            }
+        }
+        else
+        {
+            throw new ScreenParseException($"Screen must have a \"top\" entry.", 0, 0, 0);
+        }
+        if (json.TryGetValue("bottom", out var bottom))
+        {
+            if (bottom is JsonObject obj)
+            {
+                result.Bottom = ScreenEntry.FromJson(result, obj);
+            }
+            else
+            {
+                throw new ScreenParseException($"Screen \"bottom\" field must be a valid JSON object.", 0, 0, 0);
+            }
+        }
+        else
+        {
+            throw new ScreenParseException($"Screen must have a \"bottom\" entry.", 0, 0, 0);
+        }
+
+        return result;
+    }
     internal JsonObject ToJson()
     {
         if (Top == null) throw new System.InvalidOperationException("Trying to serialize when Top is null");
@@ -430,42 +466,6 @@ public partial class Screen : Component, INotifyPropertyChanged
         return result;
     }
 
-    internal static Screen FromJson(Device? parent,JsonObject json)
-    {
-        var result = new Screen(parent);
-        if (json.TryGetValue("top", out var top))
-        {
-            if (top is JsonObject obj)
-            {
-                result.Top = ScreenEntry.FromJson(result, obj);
-            }
-            else
-            {
-                throw new ScreenParseException($"Screen \"top\" field must be a valid JSON object.", 0, 0, 0);
-            }
-        }
-        else
-        {
-            throw new ScreenParseException($"Screen must have a \"top\" entry.", 0, 0, 0);
-        }
-        if (json.TryGetValue("bottom", out var bottom))
-        {
-            if (bottom is JsonObject obj)
-            {
-                result.Bottom = ScreenEntry.FromJson(result, obj);
-            }
-            else
-            {
-                throw new ScreenParseException($"Screen \"bottom\" field must be a valid JSON object.", 0, 0, 0);
-            }
-        }
-        else
-        {
-            throw new ScreenParseException($"Screen must have a \"bottom\" entry.", 0, 0, 0);
-        }
-
-        return result;
-    }
     public void WriteTo(TextWriter writer, bool minimized=false)
     {
         var json = ToJson();

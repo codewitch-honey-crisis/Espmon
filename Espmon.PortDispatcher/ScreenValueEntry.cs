@@ -249,7 +249,7 @@ public partial class ScreenValueEntry : Component, INotifyPropertyChanged
         AddExprOrLit(json, "min", MinExpression);
         if (Color != -1)
         {
-            json.Add("color", Espmon.Screen.GetJsonColorString(Color));
+            json.Add("color", Espmon.ScreenController.GetJsonColorString(Color));
         }
         if(HasGradient)
         {
@@ -265,7 +265,7 @@ public partial class ScreenValueEntry : Component, INotifyPropertyChanged
             int icol = -1;
             if (color is string str)
             {
-                if (!Screen.TryGetColor(str, out icol))
+                if (!ScreenController.TryGetColor(str, out icol))
                 {
                     throw new ScreenParseException($"Invalid color value: {str}", 0, 0, 0);
                 }

@@ -1,6 +1,7 @@
 #ifndef INTERFACE_H
 #define INTERFACE_H
 #include <stdint.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -114,7 +115,7 @@ typedef struct { // 162 bytes on the wire
     char slug[64];
     uint16_t horizontal_resolution;
     uint16_t vertical_resolution;
-    uint8_t is_monochrome;
+    bool is_monochrome;
     float dpi;
     float pixel_size; // in millimeters
     input_type_t input_type;

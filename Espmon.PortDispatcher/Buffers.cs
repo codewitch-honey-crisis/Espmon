@@ -72,5 +72,36 @@ internal static class Buffers
         encoder.Convert(chars, dest, flush: true,
             out int charsUsed, out int bytesUsed, out bool completed);
     }
+
+    /// <summary>
+    /// Decode a fixed-length UTF-16BE byte field into a string.
+    /// Strips everything at and after the first null char (0x0000).
+    /// </summary>
+    internal static string DecodeUtf16BE(ReadOnlySpan<byte> span)
+    {
+        // Find first null char (two zero bytes aligned on even boundary)
+        // In BE, the high byte comes first: [0x00, 0x00] = null
+        int len = span.Length & ~1; // round down to even
+        for (int i = 0; i < len; i += 2)
+        {
+            if (span[i] == 0 && span[i + 1] == 0) { len = i; break; }
+        }
+        return Encoding.BigEndianUnicode.GetString(span.Slice(0, len));
+    }
+
+    /// <summary>
+    /// Encode a string as UTF-16BE into a fixed-length span, zero-padded.
+    /// Uses Encoder.Convert to guarantee truncation on a valid code-unit
+    /// boundary - surrogate pairs are never split.
+    /// </summary>
+    internal static void EncodeUtf16BE(string value, Span<byte> dest)
+    {
+        dest.Clear();
+        if (string.IsNullOrEmpty(value)) return;
+        var encoder = Encoding.BigEndianUnicode.GetEncoder();
+        var chars = value.AsSpan();
+        encoder.Convert(chars, dest, flush: true,
+            out int charsUsed, out int bytesUsed, out bool completed);
+    }
 }
 #nullable restore

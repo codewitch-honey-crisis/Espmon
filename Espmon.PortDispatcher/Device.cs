@@ -39,134 +39,7 @@ public partial class Device : Component, INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HardwareInfo)));
         }
     }
-    int _id = -1;
-    public int Id
-    {
-        get
-        {
-            return _id;
-        }
-        set
-        {
-            if (_id!= value)
-            {
-                _id = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Id)));
-            }
-        }
-    }
-    string? _displayName = null;
-    public string? DisplayName
-    {
-        get
-        {
-            return _displayName;
-        }
-        set
-        {
-            if (_displayName != value)
-            {
-                _displayName= value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
-            }
-        }
-    }
-    int _horizontalResolution=0;
-    public int HorizontalResolution
-    {
-        get
-        {
-            return _horizontalResolution;
-        }
-        set
-        {
-            if (_horizontalResolution != value)
-            {
-                _horizontalResolution = value;
-                PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(nameof(HorizontalResolution)));
-            }
-        }
-    }
-    int _verticalResolution=0;
-    public int VerticalResolution
-    {
-        get
-        {
-            return _verticalResolution;
-        }
-        set
-        {
-            if (_verticalResolution != value)
-            {
-                _verticalResolution = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VerticalResolution)));
-            }
-        }
-    }
-    bool _isMonochrome=false;
-    public bool IsMonochrome
-    {
-        get
-        {
-            return _isMonochrome;
-        }
-        set
-        {
-            if (_isMonochrome != value)
-            {
-                _isMonochrome = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMonochrome)));
-            }
-        }
-    }
-    float _dpi = 0f;
-    public float Dpi
-    {
-        get
-        {
-            return _dpi;
-        }
-        set
-        {
-            if (_dpi != value)
-            {
-                _dpi = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Dpi)));
-            }
-        }
-    }
-    float _pixelSize = 0f;
-    public float PixelSize
-    {
-        get
-        {
-            return _pixelSize;
-        }
-        set
-        {
-            if (_pixelSize != value)
-            {
-                _pixelSize = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PixelSize)));
-            }
-        }
-    }
-    DeviceInputType _inputType=DeviceInputType.None;
-    public DeviceInputType InputType
-    {
-        get
-        {
-            return _inputType;
-        }
-        set
-        {
-            if (_inputType != value)
-            {
-                _inputType = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(InputType)));
-            }
-        }
-    }
+  
     byte[] _macAddress=new byte[6];
     public byte[] MacAddress
     {
@@ -217,24 +90,12 @@ public partial class Device : Component, INotifyPropertyChanged
     internal JsonObject ToJson()
     {
         if (MacAddress== null) throw new System.InvalidOperationException("Trying to serialize when MAC address is null");
-        if (Id == -1) throw new System.InvalidOperationException("Trying to serialize when id is -1");
-        if (HorizontalResolution== 0) throw new System.InvalidOperationException("Trying to serialize when hres is 0");
-        if (VerticalResolution== 0) throw new System.InvalidOperationException("Trying to serialize when vres is 0");
         var json = new JsonObject();
-        json.Add("id", (double)Id);
-        if(!string.IsNullOrWhiteSpace(DisplayName))
-        {
-            json.Add("display", DisplayName);
-        }
-        json.Add("hres", (double)HorizontalResolution);
-        json.Add("vres", (double)VerticalResolution);
-        json.Add("is_monochrome", IsMonochrome);
-        json.Add("input_type", InputType.ToString().ToLowerInvariant());
         if(SerialNumbers.Length>0)
         {
             json.Add("serial_numbers", new JsonArray(SerialNumbers));
         }
-        json.Add("mac", MacToString(MacAddress));
+        json.Add("mac", _MacToString(MacAddress));
         var screens = new JsonArray();
         for(var i = 0; i < _screens.Count;++i)
         {
@@ -243,114 +104,19 @@ public partial class Device : Component, INotifyPropertyChanged
         json.Add("screens", screens);
         return json;
     }
-    static byte[] MacParse(string mac)
-    {
-        string[] parts = mac.Split(':');
-        byte[] bytes = new byte[6];
-
-        for (int i = 0; i < 6; i++)
-        {
-            bytes[i] = Convert.ToByte(parts[i], 16);
-        }
-
-        return bytes;
-    }
-    static string MacToString(byte[] mac)
-    {
-        return string.Join(":", mac.Select(b => b.ToString("X2")));
-    }
     internal static Device FromJson(JsonObject json)
     {
         var result = new Device();
-
-        if (json.TryGetValue("id", out var id))
-        {
-            if (id is double did)
-            {
-                result.Id = (int)did;
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"id\" field must be an integer.", 0, 0, 0);
-            }
-        }
-        else
-        {
-            throw new ScreenParseException($"Device must have an \"id\" field.", 0, 0, 0);
-        }
-        if (json.TryGetValue("display", out var display))
-        {
-            if (display is string sdisplay)
-            {
-                result.DisplayName = sdisplay;
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"display\" field must be a string.", 0, 0, 0);
-            }
-        }
-        if (json.TryGetValue("hres", out var hres))
-        {
-            if (hres is double dhres)
-            {
-                result.HorizontalResolution = (int)dhres;
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"hres\" field must be an integer.", 0, 0, 0);
-            }
-        }
-        else
-        {
-            throw new ScreenParseException($"Device must have a \"hres\" field.", 0, 0, 0);
-        }
-        if (json.TryGetValue("vres", out var vres))
-        {
-            if (vres is double dvres)
-            {
-                result.VerticalResolution= (int)dvres;
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"vres\" field must be an integer.", 0, 0, 0);
-            }
-        }
-        else
-        {
-            throw new ScreenParseException($"Device must have a \"vres\" field.", 0, 0, 0);
-        }
-        if (json.TryGetValue("is_monochrome", out var ismono))
-        {
-            if (ismono is bool bismono)
-            {
-                result.IsMonochrome=bismono;
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"is_monochrome\" field must be a boolean.", 0, 0, 0);
-            }
-        }
-        if (json.TryGetValue("input_type", out var itype))
-        {
-            if (itype is string sitype)
-            {
-                result.InputType = (DeviceInputType)Enum.Parse(typeof(DeviceInputType), sitype, true);
-            }
-            else
-            {
-                throw new ScreenParseException($"Device \"input_type\" field must be a string.", 0, 0, 0);
-            }
-        }
         if (json.TryGetValue("serial_numbers", out var serialNumbers))
         {
             if (serialNumbers is JsonArray arrSerialNumbers)
             {
                 var arr = new string[arrSerialNumbers.Count];
-                for(var i = 0;i<arr.Length;i++)
+                for (var i = 0; i < arr.Length; i++)
                 {
                     if (arrSerialNumbers[i] is string sno)
                     {
-                        arr[i] = sno;  
+                        arr[i] = sno;
                     }
                     else
                     {
@@ -368,11 +134,11 @@ public partial class Device : Component, INotifyPropertyChanged
         {
             if (mac is string smac)
             {
-                if(smac.Length!=17)
+                if (smac.Length != 17)
                 {
-                    throw new ScreenParseException("Device \"mac\" does not indicate a MAC address",0,0,0);
+                    throw new ScreenParseException("Device \"mac\" does not indicate a MAC address", 0, 0, 0);
                 }
-                result.MacAddress= MacParse(smac);
+                result.MacAddress = _MacParse(smac);
             }
             else
             {
@@ -392,7 +158,8 @@ public partial class Device : Component, INotifyPropertyChanged
                     if (ascreens[i] is string sscreen)
                     {
                         result.Screens.Add(sscreen);
-                    } else
+                    }
+                    else
                     {
                         throw new ScreenParseException("The screen was not a valid string", 0, 0, 0);
                     }
@@ -405,6 +172,23 @@ public partial class Device : Component, INotifyPropertyChanged
         }
         return result;
     }
+    static byte[] _MacParse(string mac)
+    {
+        string[] parts = mac.Split(':');
+        byte[] bytes = new byte[6];
+
+        for (int i = 0; i < 6; i++)
+        {
+            bytes[i] = Convert.ToByte(parts[i], 16);
+        }
+
+        return bytes;
+    }
+    static string _MacToString(byte[] mac)
+    {
+        return string.Join(":", mac.Select(b => b.ToString("X2")));
+    }
+    
     public void WriteTo(TextWriter writer, bool minimized = false)
     {
         var json = ToJson();

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using HWKit;
+using System.Diagnostics;
 namespace Espmon
 {
     public sealed partial class QuerySelector : UserControl, INotifyPropertyChanged
@@ -47,7 +48,6 @@ namespace Espmon
             OnPropertyChanged(nameof(EvaluatedText));
         }
         public Exception? ValidationException => _validationException;
-        #region Dependency Properties
         public static readonly DependencyProperty ExpressionProperty =
     DependencyProperty.Register(
         nameof(Expression),
@@ -62,37 +62,60 @@ namespace Espmon
         }
         private static void OnExpressionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is QuerySelector control && e.NewValue is HardwareInfoExpression expr)
+            if (d is QuerySelector control)
             {
-                
                 control.RerunQuery();
-                control._updatingExpression = true;
-                control.PathPattern = e.NewValue?.ToString()??"";
-                control._updatingExpression = false;
+
+                // Only sync text on external changes (screen switch, etc.),
+                // not when we're the ones who set Expression from parsed user input.
+                if (!control._updatingExpression)
+                {
+                    var newText = (e.NewValue as HardwareInfoExpression)?.ToString() ?? "";
+                    if (control._pathPattern != newText)
+                    {
+                        control._updatingExpression = true;
+                        control.PathPattern = newText;
+                        control._updatingExpression = false;
+                    }
+                }
             }
         }
-        public static readonly DependencyProperty HardwareInfoProperty =
+        public static readonly DependencyProperty SessionProperty =
             DependencyProperty.Register(
-                nameof(HardwareInfo),
-                typeof(HardwareInfoCollection),
+                nameof(Session),
+                typeof(SessionController),
                 typeof(QuerySelector),
-                new PropertyMetadata(null, OnHardwareInfoChanged));
+                new PropertyMetadata(null, OnSessionChanged));
 
-        public HardwareInfoCollection? HardwareInfo
+        public SessionController? Session
         {
-            get => (HardwareInfoCollection)GetValue(HardwareInfoProperty);
-            set => SetValue(HardwareInfoProperty, value);
+            get => (SessionController)GetValue(SessionProperty);
+            set => SetValue(SessionProperty, value);
         }
 
-        private static void OnHardwareInfoChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnSessionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is QuerySelector control && e.NewValue is HardwareInfoCollection hwInfo)
+            
+            if (d is QuerySelector control && e.NewValue is SessionController ctrl)
             {
-
+                if(e.OldValue is SessionController oldCtrl)
+                {
+                    oldCtrl.PropertyChanged -= control.Session_PropertyChanged;
+                }
+                ctrl.PropertyChanged += control.Session_PropertyChanged;
                 control.RerunQuery();
 
             }
         }
+
+        private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if(e.PropertyName==null||e.PropertyName.Equals("ScreenIndex",StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(Expression));
+            }
+        }
+
         public static readonly DependencyProperty SelectedPathProperty =
             DependencyProperty.Register(
                 nameof(SelectedPath),
@@ -117,7 +140,6 @@ namespace Espmon
             }
         }
 
-        #endregion
 
        
         private T? FindDescendant<T>(DependencyObject parent) where T : DependencyObject
@@ -140,8 +162,7 @@ namespace Espmon
             return null;
         }
 
-        #region Bindable Properties
-
+     
         public string PathPattern
         {
             get => _pathPattern;
@@ -174,7 +195,7 @@ namespace Espmon
       
         private IEnumerable<HardwareInfoEntry> Run()
         {
-            if (HardwareInfo == null) return Array.Empty<HardwareInfoEntry>();
+            if (Session == null) return Array.Empty<HardwareInfoEntry>();
             HardwareInfoExpression? expr = null;
             if (Expression == null)
             {
@@ -199,7 +220,7 @@ namespace Espmon
             {
                 try
                 {
-                    return expr.Evaluate(HardwareInfo);
+                    return Session.Parent.Evaluate(expr);
                 }
                 catch
                 {
@@ -258,7 +279,7 @@ namespace Espmon
             {
                 try
                 {
-                    return HardwareInfo != null ? Expression != null ? string.Join(", ", Expression.Evaluate(HardwareInfo).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
+                    return Session != null ? Expression != null ? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
                 }
                 catch (Exception e)
                 {
@@ -273,7 +294,7 @@ namespace Espmon
                 return IsQueryExpression ? Visibility.Visible : Visibility.Collapsed;
             }
         }
-        #endregion
+       
         void RerunQuery()
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchingPaths)));
@@ -422,40 +443,46 @@ namespace Espmon
                 }
             }
         }
-
+          private void SuggestBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            _updatingExpression = true;
+            PathPattern = Expression?.ToString() ?? "";
+            _updatingExpression = false;
+        }
         private void ChevronFlyout_Opening(object sender, object e)
         {
             var toSnapshot = this.MatchingPaths??[];
                         
             // Clear existing items and populate from event args
             ChevronFlyout.Items.Clear();
-            if(HardwareInfo!=null && Matches!=null)
+            if(Session!=null && Matches!=null)
             {
-                var context = new HardwareInfoSuggestionContext(Expression, Matches.ToList(), ValidationException as HardwareInfoParseException, HardwareInfo.Providers.ToArray());
-                foreach (var provider in HardwareInfo.Providers)
-                {
-                    foreach(var suggestion in provider.GetSuggestions(context))
-                    {
-                        var item = new MenuFlyoutItem();
-                        item.Tag = suggestion.Key;
-                        item.Text = suggestion.Action;
-                        ChevronFlyout.Items.Add(item);
-                        item.Click += (s, clickArgs) =>
-                        {
-                            var expr = provider.ApplySuggestion(context, item.Tag);
-                            if(expr!=null)
-                            {
-                                SuggestBox.Text = expr.ToString();
-                            } else
-                            {
-                                SuggestBox.Text = "";
-                            }
-                            SuggestBox.Focus(FocusState.Programmatic);
+                //var providers = Session.Parent.GetProviders();
+                //var context = new HardwareInfoSuggestionContext(Expression, Matches.ToList(), ValidationException as HardwareInfoParseException, providers);
+                //foreach (var provider in providers)
+                //{
+                //    foreach(var suggestion in provider.GetSuggestions(context))
+                //    {
+                //        var item = new MenuFlyoutItem();
+                //        item.Tag = suggestion.Key;
+                //        item.Text = suggestion.Action;
+                //        ChevronFlyout.Items.Add(item);
+                //        item.Click += (s, clickArgs) =>
+                //        {
+                //            var expr = provider.ApplySuggestion(context, item.Tag);
+                //            if(expr!=null)
+                //            {
+                //                SuggestBox.Text = expr.ToString();
+                //            } else
+                //            {
+                //                SuggestBox.Text = "";
+                //            }
+                //            SuggestBox.Focus(FocusState.Programmatic);
 
-                        };
+                //        };
 
-                    }
-                }
+                //    }
+                //}
             }
             if (ChevronFlyout.Items.Count== 0)
             {

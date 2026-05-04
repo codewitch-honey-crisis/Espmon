@@ -517,8 +517,10 @@ class espmon {
     bool m_has_graph;
     bool m_is_monochrome;
     bool m_is_screen_populated;
+    bool m_is_connected;
     gfx::size16 m_display_size;
     screen_t m_screen;
+    screen_t m_disconnected_screen;
     typedef struct {
         char value_buffer[16];
         char suffix_buffer[12];
@@ -548,7 +550,16 @@ class espmon {
             }
         }
     }
-    
+    void init_disconnected_screen() {
+        m_disconnected_label.bounds(gfx::srect16(0,0,m_disconnected_screen.dimensions().width/2,m_disconnected_screen.dimensions().width/8).center(m_disconnected_screen.bounds()));
+        uix::uix_pixel bg = uix_color_t::black;
+        m_disconnected_label.font(m_top.value1.label.font());
+        m_disconnected_label.color(uix_color_t::white);
+        m_disconnected_label.background_color(bg);
+        m_disconnected_label.text("[ disconnected ]");
+        m_disconnected_label.text_justify(uix::uix_justify::center);
+        m_disconnected_screen.register_control(m_disconnected_label);
+    }
     void init_screen() {
         m_screen.unregister_controls();
         int section_height_divisor = m_has_graph?4:2;
@@ -698,15 +709,6 @@ class espmon {
         if(m_has_graph) {
             m_screen.register_control(m_graph);
         }
-        m_disconnected_label.bounds(gfx::srect16(0,0,m_screen.dimensions().width/2,m_screen.dimensions().width/8).center(m_screen.bounds()));
-        uix::uix_pixel bg = uix_color_t::black;
-        //bg.opacity_inplace(.6f);
-        m_disconnected_label.font(m_top.value1.label.font());
-        m_disconnected_label.color(uix_color_t::white);
-        m_disconnected_label.background_color(bg);
-        m_disconnected_label.text("[ disconnected ]");
-        m_disconnected_label.text_justify(uix::uix_justify::center);
-        m_screen.register_control(m_disconnected_label);
         m_display.active_screen(m_screen);
         m_is_screen_populated = false;
     }
@@ -753,12 +755,12 @@ class espmon {
         }
         return result;
     }
-    void set_screen_value_entry(value_entry_t& entry, size_t index, const response_screen_value_entry_t& rentry) {
+    void set_screen_value_entry(value_entry_t& entry, size_t index, bool vert, const response_screen_value_entry_t& rentry) {
         entry.index = index;
         entry.bar.value(0);
         entry.label.text("---");
         strncpy(entry.suffix_buffer,rentry.suffix,sizeof(entry.suffix_buffer)-1);
-        if(utf8_len(rentry.suffix)>2) {
+        if(vert) {
             gfx::srect16 b = entry.label.bounds();
             gfx::srect16 bv = entry.vsuffix.bounds();
             entry.label.bounds(gfx::srect16(b.x1,b.y1,bv.x1-2,b.y2));
@@ -843,16 +845,23 @@ public:
         m_is_screen_populated=false;
         m_screen.validate_all();
         m_screen.invalidate();
+
+        m_disconnected_screen.unregister_controls();
+        m_disconnected_screen.dimensions((gfx::ssize16)dimensions);
+        init_disconnected_screen();
+        m_disconnected_screen.validate_all();
+        m_disconnected_screen.invalidate();
     }
     uix::size16 dimensions() const {
         return m_display_size;
     }
     void transfer_complete() { m_display.flush_complete(); }
     void disconnect() {
-        m_disconnected_label.visible(true);
+        m_is_connected = false;
+        m_display.active_screen(m_disconnected_screen);
     }
     bool connected() const {
-        return !m_disconnected_label.visible();
+        return m_is_connected;
     }
     void refresh(bool full = true) {
         refresh_display(full);
@@ -868,30 +877,40 @@ public:
         m_bottom.value2.bar.clear();
     }
     void accept_packet(command_t cmd, const response_t& resp, bool refresh = true) {
-        m_disconnected_label.visible(false);
         float v;
-        if(m_disconnected_label.visible()) {
-            m_disconnected_label.visible(false);
+        if(!m_is_connected) {
+            m_display.active_screen(m_screen);
+            m_is_connected = true;
             if(refresh) { refresh_display(); }
             m_is_screen_populated = false;
         }
         if(cmd==CMD_SCREEN) { // new screen
             const response_screen_t& scr = resp.screen;
+        
             m_screen_index = scr.header.index;
             uint8_t flags = scr.header.flags;
             if(m_is_monochrome) {
                 flags &= 0xF0; // turn off gradients for monochrome displays
             }
             
+            static const size_t vlen = 2;
+            bool is_vert;
+            size_t vert[] = {
+                utf8_len(scr.top.value1.suffix),
+                utf8_len(scr.top.value2.suffix),
+                utf8_len(scr.bottom.value1.suffix),
+                utf8_len(scr.bottom.value2.suffix)
+            };
+            is_vert = (vert[0]>vlen) || (vert[1]>vlen) || (vert[2]>vlen) || (vert[3]>vlen);
             m_screen_index = scr.header.index;
             
             set_screen_entry(m_top,scr.top);
-            set_screen_value_entry(m_top.value1,0,scr.top.value1);
-            set_screen_value_entry(m_top.value2,1,scr.top.value2);
+            set_screen_value_entry(m_top.value1,0,is_vert&&(vert[0]>1),scr.top.value1);
+            set_screen_value_entry(m_top.value2,1,is_vert&&(vert[1]>1),scr.top.value2);
 
             set_screen_entry(m_bottom,scr.bottom);
-            set_screen_value_entry(m_bottom.value1,2,scr.bottom.value1);
-            set_screen_value_entry(m_bottom.value2,3,scr.bottom.value2);
+            set_screen_value_entry(m_bottom.value1,2,is_vert&&(vert[2]>1),scr.bottom.value1);
+            set_screen_value_entry(m_bottom.value2,3,is_vert&&(vert[3]>1),scr.bottom.value2);
             
             set_gradients(scr);
             if(!m_is_screen_populated) {
@@ -906,7 +925,6 @@ public:
             m_screen.validate_all();
             m_screen.invalidate();
             if(refresh) { refresh_display(); }
-    
         }
         if(cmd==CMD_DATA) { // screen data
             const response_data_t& data = resp.data;
@@ -966,10 +984,18 @@ public:
         m_display.buffer_size(buffer_size);
         m_display.buffer1(buffer1);
         m_display.buffer2(buffer2);
-        m_display.active_screen(m_screen);
+        if(m_is_connected) {
+            m_display.active_screen(m_screen);    
+        } else {
+            m_display.active_screen(m_disconnected_screen);    
+        }
+        
     }
     void initialize() {
         init_screen();
+        init_disconnected_screen();
+        m_is_connected=false;
+        m_display.active_screen(m_disconnected_screen);
     }
 
 };

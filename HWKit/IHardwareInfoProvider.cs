@@ -29,7 +29,7 @@
         public string Path { get; }
 
     }
-    public enum HardwareInfoProviderState
+    public enum HardwareInfoProviderStatus
     {
         Stopped = 0,
         Started = 1
@@ -42,8 +42,9 @@
         public event EventHandler<HardwareInfoProviderRevokedEventArgs>? Revoked;
         public event EventHandler<EventArgs>? StateChanged;
         string DisplayName { get; }
+        string Description { get; }
         string Identifier { get; }
-        HardwareInfoProviderState State { get; }
+        HardwareInfoProviderStatus Status { get; }
         void Start();
         void Stop();
         HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context);

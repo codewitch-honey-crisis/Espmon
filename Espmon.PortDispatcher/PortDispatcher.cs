@@ -4,15 +4,56 @@ using HWKit;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
+
+using static System.Collections.Specialized.BitVector32;
 
 namespace Espmon;
 
+public sealed class ScreenChangedEventArgs : EventArgs
+{
+    public int ScreenIndex { get; }
+    public ScreenChangedEventArgs(int screenIndex) { ScreenIndex = screenIndex; }
+}
+
+public delegate void ScreenChangedEventHandler(object sender, ScreenChangedEventArgs args);
+
+public delegate void ScreenClearedEventHandler(object sender, EventArgs args);
+public delegate void SessionChangedEventHandler(object sender, EventArgs args);
+public sealed class ScreenDataEventArgs : EventArgs
+{
+    public int ScreenIndex { get; }
+    public float TopValue1 { get; }
+    public float TopScaled1 { get; }
+    public float TopValue2 { get; }
+    public float TopScaled2 { get; }
+    public float BottomValue1 { get; }
+    public float BottomScaled1 { get; }
+    public float BottomValue2 { get; }
+    public float BottomScaled2 { get; }
+
+    public ScreenDataEventArgs(int screenIndex, float topValue1, float topScaled1, float topValue2, float topScaled2, float bottomValue1, float bottomScaled1, float bottomValue2, float bottomScaled2)
+    {
+        ScreenIndex = screenIndex;
+        TopValue1 = topValue1;
+        TopScaled1 = topScaled1;
+        TopValue2 = topValue2;
+        TopScaled2 = topScaled2;
+        BottomValue1 = bottomValue1;
+        BottomScaled1 = bottomScaled1;
+        BottomValue2 = bottomValue2;
+        BottomScaled2 = bottomScaled2;
+    }
+}
+
+public delegate void ScreenDataEventHandler(object sender, ScreenDataEventArgs args);
 [SupportedOSPlatform("windows")]
-public partial class PortDispatcher : Component
+public sealed partial class PortDispatcher : Component
 {
     const int OpenInterval = 5 * 1000;
     readonly SynchronizationContext? _synchronizationContext;
@@ -22,15 +63,29 @@ public partial class PortDispatcher : Component
     private const string deviceFileSuffix = ".device.json";
     private const string deviceFilePattern = $"*{deviceFileSuffix}";
     private const string screenFileSuffix = ".screen.json";
-    
+    private FileSystemWatcher _fsw;
+    private Timer _timer;
+    private Timer _openTimer;
     private long _intervalMs=DefaultInterval;
     private string _path;
     public static int DefaultInterval => 100;
     public ObservableCollection<Session> Sessions { get; } = new ObservableCollection<Session>();
     public HardwareInfoCollection HardwareInfo { get; }
-    private FileSystemWatcher _fsw;
-    private Timer _timer;
-    private Timer _openTimer;
+    public event ScreenChangedEventHandler? ScreenChanged;
+    public event ScreenClearedEventHandler? ScreenCleared;
+    public event ScreenDataEventHandler? ScreenData;
+    internal void OnScreenScreenChanged(ScreenChangedEventArgs args)
+    {
+        ScreenChanged?.Invoke(this, args);
+    }
+    internal void OnScreenScreenCleared(EventArgs args)
+    {
+        ScreenCleared?.Invoke(this, args);
+    }
+    internal void OnScreenScreenData(ScreenDataEventArgs args)
+    {
+        ScreenData?.Invoke(this, args);
+    }
     private void Post(Action action)
     {
         if (_synchronizationContext != null)
@@ -45,33 +100,7 @@ public partial class PortDispatcher : Component
     
     public static int BaudRate => 115200;
 
-    public static FirmwareEntry[] GetFirmwareEntries()
-    {
-        using var stm = Assembly.GetExecutingAssembly().GetManifestResourceStream("Espmon.firmware.boards.json");
-        if (stm == null) throw new InvalidProgramException("The boards resource could not be found");
-        var reader = new StreamReader(stm, Encoding.UTF8);
-        var doc = (JsonObject?)JsonObject.ReadFrom(reader);
-        if (doc == null) throw new InvalidProgramException("The boards resource is invalid");
-        if (!doc.TryGetValue("boards", out var boards) || !(boards is JsonArray boardsArray))
-        {
-            throw new InvalidProgramException("The boards resource is invalid");
-        }
-        var firmwareEntrys = new List<FirmwareEntry>();
-        foreach (var board in boardsArray)
-        {
-
-            if (!(board is JsonObject boardObj)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!boardObj.TryGetValue("name", out var name) || !(name is string displayName)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!boardObj.TryGetValue("slug", out var sluggo) || !(sluggo is string slug)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!boardObj.TryGetValue("offsets", out var offsetso) || !(offsetso is JsonObject offsetsObj)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!offsetsObj.TryGetValue("bootloader", out var bootloader) || !(bootloader is double bootloaderObj)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!offsetsObj.TryGetValue("partitions", out var partitions) || !(partitions is double partitionsObj)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            if (!offsetsObj.TryGetValue("firmware", out var firmware) || !(firmware is double firmwareObj)) { throw new InvalidProgramException("The boards resource is invalid"); }
-            var entry = new FirmwareEntry(displayName, slug, new FirmwareOffsets((uint)bootloaderObj, (uint)partitionsObj, (uint)firmwareObj));
-            firmwareEntrys.Add(entry);
-        }
-        return firmwareEntrys.ToArray();
-    }
+   
     public string[] GetDeviceSerialNumbers()
     {
         var result = new List<string>(_serialToDevice.Count);
@@ -81,9 +110,12 @@ public partial class PortDispatcher : Component
         }
         return result.ToArray();
     }
+    
     internal DevicePortEntry[] GetDevicePortEntries(PortEntry[] ports) 
     {
         var result = new List<DevicePortEntry>(_macToDevice.Count);
+        var hashSerial = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hashPorts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in _macToDevice)
         {
             var mac = Convert.FromHexString(kvp.Key);
@@ -93,13 +125,34 @@ public partial class PortDispatcher : Component
                 var port = ports[i];
                 for (var j = 0; j < serialNumbers.Length; ++j)
                 {
+                    hashSerial.Add(serialNumbers[j]);
                     if (port.SerialNumber.Equals(serialNumbers[j], StringComparison.Ordinal))
                     {
-                        result.Add(new DevicePortEntry(port.PortName, serialNumbers, mac));
+                        Session? session = null;
+                        foreach(var sess in Sessions)
+                        {
+                            if(sess.PortName.Equals(port.PortName, StringComparison.OrdinalIgnoreCase)) 
+                            {
+                                session = sess;
+                                break; 
+                            }
+                        }
+                        result.Add(new DevicePortEntry(port.PortName, serialNumbers, serialNumbers[j], mac,  session));
+                        hashSerial.Add(port.PortName);
                         i = ports.Length; // break outer loop because we're done
                         break;
                     }
                 }
+            }
+        }
+        for(var i = 0; i < ports.Length;++i)
+        {
+            var port = ports[i];
+            if(!hashPorts.Contains(port.PortName) && !hashSerial.Contains(port.SerialNumber))
+            {
+                var sess = FindSessionEntryBySerial(port.SerialNumber);
+                result.Add(new DevicePortEntry(port.PortName, [port.SerialNumber],port.SerialNumber, sess?.MacAddess, sess));
+
             }
         }
         return result.ToArray();
@@ -290,7 +343,11 @@ public partial class PortDispatcher : Component
                         }
                         _deviceToFile.TryRemove(device, out _);
                         _macToDevice.TryRemove(Convert.ToHexString(device.MacAddress, 0, device.MacAddress.Length), out _);
+                        var sess = FindSessionEntryByMac(device.MacAddress);
                         device.Dispose();
+                        if (sess != null) {
+                            Sessions.Remove(sess);
+                        }
                         RefreshAllSessions();
                     }
                 });
@@ -473,38 +530,42 @@ public partial class PortDispatcher : Component
         {
             var portEntry = portEntries[i];
             var mac = portEntry.MacAddress;
-            var se = FindSessionEntryByMac(mac);
-            if (se != null)
+            if (mac != null)
             {
-                try
+                var se = FindSessionEntryByMac(mac);
+                if (se != null)
                 {
-                    if (se.Status == SessionStatus.Closed)
+                    try
                     {
-                        se.Open();
-                    }
-                }
-                catch { }
-            }
-            else if (_macToDevice.TryGetValue(Convert.ToHexString(mac), out var device)) 
-            {
-                for(var j = 0;j< device.SerialNumbers.Length;j++)
-                {
-                    var serialNo = device.SerialNumbers[j];
-                    var se2 = FindSessionEntryBySerial(serialNo);
-                    if (se2 != null)
-                    {
-                        try
+                        if (se.Status == SessionStatus.Closed)
                         {
-                            if (se2.Status == SessionStatus.Closed)
-                            {
-                                se2.Open();
-                            }
+                            se.Open();
+                            se.Update();
                         }
-                        catch { }
+                    }
+                    catch { }
+                }
+                else if (_macToDevice.TryGetValue(Convert.ToHexString(mac), out var device))
+                {
+                    for (var j = 0; j < device.SerialNumbers.Length; j++)
+                    {
+                        var serialNo = device.SerialNumbers[j];
+                        var se2 = FindSessionEntryBySerial(serialNo);
+                        if (se2 != null)
+                        {
+                            try
+                            {
+                                if (se2.Status == SessionStatus.Closed)
+                                {
+                                    se2.Open();
+                                    se2.Update();
+                                }
+                            }
+                            catch { }
+                        }
                     }
                 }
-            }
-                
+            }   
         }
     }
     public void Stop()
@@ -517,126 +578,72 @@ public partial class PortDispatcher : Component
         }
         HardwareInfo.StopAll();
     }
+   
     public void RefreshAllSessions()
     {
-        var hash = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<Session>();
+        var hashMac = new HashSet<string>(StringComparer.Ordinal);
+        var toAdd = new List<DevicePortEntry>();
+        var toRemove = new List<Session>(Sessions.Count);
         var serialPorts = EspSerialSession.GetPorts();
         var portEntries = GetDevicePortEntries(serialPorts);
-        for (int i = 0; i < portEntries.Length; i++)
+        for(var i = 0;i<portEntries.Length;++i)
         {
             var portEntry = portEntries[i];
-            if (_macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device))
+            if(portEntry.Session == null)
             {
-                var found = false;
-                for (var j = 0; j < device.SerialNumbers.Length; ++j)
-                {
-                    var serialNo = device.SerialNumbers[j];
-                    if (!hash.Add(serialNo))
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                if(!found) { 
-                    var se = FindSessionEntryByMac(portEntry.MacAddress);
-                    if (se != null)
-                    {
-                        result.Add(se);
-                    }
-                    else
-                    {
-                        if (_macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device2))
-                        {
-                            if (_deviceToFile.TryGetValue(device2, out var filename)) 
-                            {
-                                var name = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(filename));
-                                var session = new Session(this,_path, name, portEntry.PortName, device2.SerialNumbers);
-                                session.HardwareInfo = HardwareInfo;
-                                result.Add(session);
-                            }
-                        }
-                    }
-                }
-                //else if (_attemptedOpenDevices)
-                //{
-                //    var idx = Array.IndexOf(serialPorts, serialNo);
-                //    var se = result[idx];
-                //    try
-                //    {
-                //        if (se.Status == SessionStatus.Closed) 
-                //        {
-                //            se.Open();
-                //        }
-                //    }
-                //    catch { }
-                //}
-
+                toAdd.Add(portEntry);
             }
-
+            
         }
-        for (var i = 0; i < serialPorts.Length; ++i)
+        foreach (var session in Sessions)
         {
             var found = false;
-            if (_serialToDevice.TryGetValue(serialPorts[i].SerialNumber,out var device))
+            for(var i = 0;i<portEntries.Length;++i)
             {
-                for (var j = 0; j < device.SerialNumbers.Length; ++j)
+                if (portEntries[i].PortName.Equals(session.PortName,StringComparison.OrdinalIgnoreCase))
                 {
-                    var serialNo = device.SerialNumbers[j];
-                    if (!hash.Add(serialNo))
-                    {
-                        found = true;
-                        break;
-                    }
+                    found = true;
+                    break;
                 }
             }
-            if (!found)
+            if(!found)
             {
-                var se = FindSessionEntryBySerial(serialPorts[i].SerialNumber);
-
-                if (se != null)
-                {
-                    result.Add(se);
-                }
-                else
-                {
-                    
-                    var session = new Session(this,_path, "", serialPorts[i].PortName, [serialPorts[i].SerialNumber]);
-                    session.HardwareInfo = HardwareInfo;
-                    result.Add(session);
-                }
-            }
-        }
-        var toAdd = new List<Session>(Sessions.Count);
-        var toRemove = new List<Session>(Sessions.Count);
-        for (var i = 0;i<result.Count;++i)
-        {
-            var idx = Sessions.IndexOf(result[i]);
-            if (idx > -1)
-            {
-                Sessions[idx] = result[i];
-            }
-            else
-            {
-                toAdd.Add(result[i]);
-            }
-        }
-        for(var i = 0;i<Sessions.Count;++i)
-        {
-            var se = Sessions[i];
-            if(!result.Contains(Sessions[i]))
-            {
-                toRemove.Add(se);
+                toRemove.Add(session);
             }
         }
         for (var i = 0; i < toRemove.Count; ++i)
         {
             Sessions.Remove(toRemove[i]);
         }
-        for (var i = 0; i < toAdd.Count; ++i)
+        toRemove.Clear();
+        for (int i = 0; i < toAdd.Count; i++)
         {
-            Sessions.Add(toAdd[i]);
+            var portEntry = toAdd[i];
+            if (portEntry.MacAddress!=null && _macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device))
+            {
+                var se = FindSessionEntryByMac(portEntry.MacAddress);
+                if (se != null)
+                {
+                    continue;
+                }
+                if (_macToDevice.TryGetValue(Convert.ToHexString(portEntry.MacAddress), out var device2))
+                {
+                    if (_deviceToFile.TryGetValue(device2, out var filename)) 
+                    {
+                        var name = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(filename));
+                        var session = new Session(this,_path, name, portEntry.PortName, device2.SerialNumbers,portEntry.SerialNumber);
+                        session.HardwareInfo = HardwareInfo;
+                        Sessions.Add(session);
+                    }
+                }   
+            } else
+            {
+                var session = new Session(this, _path, "", portEntry.PortName, portEntry.SerialNumbers,portEntry.SerialNumber);
+                session.HardwareInfo = HardwareInfo;
+                Sessions.Add(session);
+            }
         }
+        toAdd.Clear();
         
     }
     // required because HardwareInfoCollection does not implement IComponent

@@ -105,7 +105,7 @@ namespace HWKit
         {
             if(sender is IHardwareInfoProvider provider)
             {
-                if(provider.State==HardwareInfoProviderState.Stopped)
+                if(provider.Status==HardwareInfoProviderStatus.Stopped)
                 {
                     foreach(var entry in _entries[provider].ToArray())
                     {
@@ -123,7 +123,7 @@ namespace HWKit
             {
                 return false;
             }
-            if (provider.State == HardwareInfoProviderState.Started)
+            if (provider.Status == HardwareInfoProviderStatus.Started)
             {
 
                 foreach (var entry in _entries[provider])

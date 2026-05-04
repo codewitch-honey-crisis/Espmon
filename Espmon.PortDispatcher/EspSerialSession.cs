@@ -174,7 +174,7 @@ internal partial class EspSerialSession : IDisposable
         var result = new List<PortEntry>();
         using var session = CimSession.Create(null); // null = local machine
         var instances = session.QueryInstances(@"root\cimv2", "WQL",
-            "SELECT DeviceID, Name, ClassGuid FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}'");
+            "SELECT DeviceID, Name FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}'");
 
         foreach (var instance in instances)
         {

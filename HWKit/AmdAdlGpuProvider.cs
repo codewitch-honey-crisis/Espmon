@@ -318,10 +318,10 @@ namespace HWKit
             }
             return true;
         }
-        protected override HardwareInfoProviderState GetState()
+        protected override HardwareInfoProviderStatus GetState()
         {
 
-            return _started ? HardwareInfoProviderState.Started : HardwareInfoProviderState.Stopped;
+            return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
         protected override void OnStart()
         {
@@ -357,6 +357,10 @@ namespace HWKit
                 ADL.ADL_Main_Control_Destroy();
             }
 
+        }
+        protected override string GetDescription()
+        {
+            return "Provides information for AMD APUs or installed AMD GPUs";
         }
     }
 }
