@@ -4,7 +4,7 @@ using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
-
+using Espmon.Elevation;
 static class Program
 {
     static async Task Main()

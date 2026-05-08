@@ -8,7 +8,7 @@ using System.IO;
 using System.Text;
 using Htcw;
 
-namespace Espmon;
+namespace Espmon.Elevation;
 
 public enum ElevatedCommand : byte
 {

@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Espmon.Json\Espmon.Json.csproj" />
     <ProjectReference Include="..\Espmon.PortDispatcher\Espmon.PortDispatcher.csproj" />
+    <ProjectReference Include="..\Espmon.Service.Interface\Espmon.Service.Interface.csproj" />
   </ItemGroup>
   <!--<Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>

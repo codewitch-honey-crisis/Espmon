@@ -7,6 +7,6 @@
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon --public --out . &quot;$(ProjectDir)interface.h&quot;" />
+    <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon.Elevation --public --out . &quot;$(ProjectDir)interface.h&quot;" />
   </Target>
 </Project>

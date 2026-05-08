@@ -86,7 +86,7 @@ public partial class ScreenView : Canvas
         Unloaded += Control_Unloaded;
     }
 
-    
+
     public static readonly DependencyProperty ScalingModeProperty =
         DependencyProperty.Register(
             nameof(ScalingMode),
@@ -107,6 +107,7 @@ public partial class ScreenView : Canvas
             view._bitmap = null;
             view.EnsureBitmap();
             view.RefreshScreen();
+            view.RefreshValues();
         }
     }
     public static readonly DependencyProperty SessionProperty =
@@ -183,7 +184,7 @@ public partial class ScreenView : Canvas
     //    }
     //}
 
-    
+
     private Abi.ResponseColor ToColor(int argb)
     {
         Abi.ResponseColor result;
@@ -196,7 +197,7 @@ public partial class ScreenView : Canvas
 
     private void BuildResponseScreen()
     {
-        if (Session == null || Session.Screen==null) return;
+        if (Session == null || Session.Screen == null) return;
         var scr = Session.Screen;
         _responseScreen.Header.Flags = 0;
         if (scr.Top != null)
@@ -215,7 +216,7 @@ public partial class ScreenView : Canvas
 
             if (scr.Top.Value1 != null)
             {
-                
+
                 if (!string.IsNullOrEmpty(scr.Top.Value1.Unit))
                 {
                     var bytes = Encoding.UTF8.GetBytes(scr.Top.Value1.Unit);
@@ -305,11 +306,11 @@ public partial class ScreenView : Canvas
 
     private void BuildResponseData()
     {
-        if (_lastDataArgs==null) return;
+        if (_lastDataArgs == null) return;
 
         _responseData.Top.Value1.Value = _lastDataArgs.TopValue1;
         _responseData.Top.Value1.Scaled = _lastDataArgs.TopScaled1;
-           
+
         _responseData.Top.Value2.Value = _lastDataArgs.TopValue2;
         _responseData.Top.Value2.Scaled = _lastDataArgs.TopScaled2;
 
@@ -329,7 +330,7 @@ public partial class ScreenView : Canvas
     private void RefreshScreen()
     {
         if (_screenInitialized) return;
-        if ( _handle == IntPtr.Zero || !EnsureBitmap() || _bitmap==null)
+        if (_handle == IntPtr.Zero || !EnsureBitmap() || _bitmap == null)
             return;
         Abi.ClearData(_handle);
         BuildResponseScreen();
@@ -377,11 +378,11 @@ public partial class ScreenView : Canvas
         }
         if (!_screenInitialized) return;
         BuildResponseData();
-        if ( _handle == IntPtr.Zero || _bitmap == null)
+        if (_handle == IntPtr.Zero || _bitmap == null)
         {
             return;
         }
-     
+
         uint bufferBytes = (uint)(_bitmap.PixelWidth * _bitmap.PixelHeight * 4);
 
         using (var stream = _bitmap.PixelBuffer.AsStream())
@@ -404,7 +405,7 @@ public partial class ScreenView : Canvas
                     }
                     // Update renders into the buffer
                     uint dirtyCount = 0;
-                    Abi.Update(_handle,2, ref _responseData, IntPtr.Zero, ref dirtyCount);
+                    Abi.Update(_handle, 2, ref _responseData, IntPtr.Zero, ref dirtyCount);
                 }
 
                 // Write modified buffer back to bitmap
@@ -459,7 +460,7 @@ public partial class ScreenView : Canvas
         double x = position.X;
         double y = position.Y;
 
-         // Get the scaling factor based on ScalingMode
+        // Get the scaling factor based on ScalingMode
         double scaling = 1.0;
         if (ScalingMode == ScreenViewScalingMode.DpiAware)
         {
@@ -481,7 +482,7 @@ public partial class ScreenView : Canvas
     }
     private bool EnsureBitmap()
     {
-        if(_bitmap!=null) return true;
+        if (_bitmap != null) return true;
         double actualWidth = ActualWidth;
         double actualHeight = ActualHeight;
 
@@ -504,7 +505,7 @@ public partial class ScreenView : Canvas
         // else ScalingMode.None uses scaling = 1.0 (pixel-perfect)
 
         // DIPs to pixels
-        int width = (int)Math.Ceiling(actualWidth *scaling);
+        int width = (int)Math.Ceiling(actualWidth * scaling);
         int height = (int)Math.Ceiling(actualHeight * scaling);
 
         if (_bitmap != null)
@@ -524,6 +525,19 @@ public partial class ScreenView : Canvas
             {
                 _image.Source = _bitmap;
             }
+        }
+
+        // Force the Image to render at the control's DIP size, NOT at the
+        // bitmap's pixel size. Without this, on high-DPI displays (e.g. 1.75x
+        // on a handheld) the Image measures itself at bitmap-pixel dimensions
+        // in DIPs and overflows the Canvas. With Stretch=Fill, the bitmap is
+        // scaled into this DIP rect: in DpiAware mode the bitmap has more
+        // pixels so it stays crisp; in None mode it's pixel-perfect (and may
+        // look chunky on a high-DPI screen, which is the intended behavior).
+        if (_image != null)
+        {
+            _image.Width = actualWidth;
+            _image.Height = actualHeight;
         }
 
         if (_handle != IntPtr.Zero)

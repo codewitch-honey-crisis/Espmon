@@ -12,12 +12,9 @@
    <Project Path="Espmon.Elevation/Espmon.Elevation.csproj" Id="382b840f-0c07-49d7-ac8e-9644caf9cf90">
       <Platform Project="x64" />
    </Project>
-   <Project Path="Espmon.Json/Espmon.Json.csproj">
-      <Platform Project="AnyCPU" />
-   </Project>
-   <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj">
-      <Platform Project="AnyCPU" />
-   </Project>
+   <Project Path="Espmon.Json/Espmon.Json.csproj" />
+   <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj" />
+   <Project Path="Espmon.Service.Interface/Espmon.Service.Interface.csproj" Id="d6e6668a-ee93-41de-ad8e-ac7493497fbc" />
    <Project Path="Espmon.Service/Espmon.Service.csproj" Id="c0a8aaf5-7ee3-43ce-b1a3-f7c3ceefd5c0">
       <Platform Project="x64" />
    </Project>
@@ -25,7 +22,5 @@
       <Platform Project="x64" />
       <Deploy />
    </Project>
-   <Project Path="HWKit/HWKit.csproj">
-      <Platform Project="AnyCPU" />
-   </Project>
+   <Project Path="HWKit/HWKit.csproj" />
 </Solution>
