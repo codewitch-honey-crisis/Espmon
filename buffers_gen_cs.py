@@ -3,7 +3,7 @@
 buffers_gen_cs.py - Parse wire structs from a C header and generate
                     C# read/write methods for each struct.
 
-Usage: python buffers_gen_cs.py [--fixed] [--big-endian] [--namespace <ns>] [--public] [--out <dir>] <header.h>
+Usage: python buffers_gen_cs.py [--fixed] [--big-endian] [--lengths] [--namespace <ns>] [--public] [--out <dir>] <header.h>
 
 Options:
   --fixed            Use fixed-size serialization for strings
@@ -11,6 +11,15 @@ Options:
                     strings are length-prefixed on the wire.
   --big-endian      Generate struct read/write methods using big-endian
                     serialization. Without this flag, little-endian is used.
+  --lengths         Treat any size_t field that immediately precedes a fixed
+                    array as the runtime element count for that array. The
+                    count is serialized first (as uint32_t on the wire), then
+                    only that many array elements follow. The count field is
+                    HIDDEN from the C# API: on write the count is taken from
+                    the array property's .Length / .Count; on read it is
+                    consumed but discarded (the array's length carries it).
+                    Strings (char[] / wchar_t[]) are unaffected. Mutually
+                    exclusive with --fixed.
   --namespace <ns>   File-scoped namespace for generated code (default: none)
   --public           Emit public visibility (default: implicit internal)
   --out <dir>        Overrides the output directory (default: input directory)
@@ -358,6 +367,35 @@ def parse_struct_body(body, struct_name, all_struct_names, known_enums):
     return fields
 
 
+def apply_lengths_pairing_cs(structs: dict, struct_name: str) -> None:
+    """When --lengths is in effect, pair each `size_t name; T arr[N];` pattern
+    so the count drives runtime element count for the array. The count field
+    is hidden from the C# API (no property emitted). On read, the count is
+    consumed from the wire but discarded; the resulting array's length is
+    the count. On write, the count is taken from the array's .Length.
+
+    Strings (char[]/wchar_t[]) keep their existing length-prefix behavior.
+    The size_t must immediately precede the array.
+    """
+    fields = structs[struct_name]['fields']
+    for i in range(len(fields) - 1):
+        cur = fields[i]
+        nxt = fields[i + 1]
+        if cur['array_len'] is not None:
+            continue
+        if cur['is_enum']:
+            continue
+        if cur['type'] != 'size_t':
+            continue
+        if nxt['array_len'] is None:
+            continue
+        # Strings keep their existing length-prefix behavior.
+        if nxt['type'] in ('char', 'wchar_t'):
+            continue
+        nxt['length_field'] = cur['c_name']
+        cur['is_length_for'] = nxt['c_name']
+
+
 # ---------------------------------------------------------------------------
 # Top-level struct extraction
 # ---------------------------------------------------------------------------
@@ -372,7 +410,7 @@ TYPEDEF_RE = re.compile(
 )
 
 
-def parse_header(text: str) -> tuple:
+def parse_header(text: str, lengths_mode: bool = False) -> tuple:
     """Returns (structs_dict, enums_dict)"""
     text = strip_comments(text)
     text = strip_preprocessor(text)
@@ -400,6 +438,10 @@ def parse_header(text: str) -> tuple:
                 error(f"Struct '{name}': duplicate field name '{f['c_name']}'")
             seen.add(f['c_name'])
         structs[name] = {"fields": fields, "cs_name": to_dotnet_name(name)}
+
+    if lengths_mode:
+        for name in structs:
+            apply_lengths_pairing_cs(structs, name)
 
     return structs, known_enums
 
@@ -586,6 +628,11 @@ def bp_write_be(wire_type: str, span_expr: str, offset_expr: str, value_expr: st
 def gen_field_declarations(fields: list, structs: dict, member_vis: str) -> list:
     lines = []
     for f in fields:
+        if f.get('is_length_for') is not None:
+            # The count field is hidden from the C# API; its value is
+            # derived from the paired array's .Length on write and discarded
+            # (consumed but not stored) on read.
+            continue
         cs_type = cs_field_type(f, structs)
         lines.append(f"    {member_vis}{cs_type} {f['cs_name']} {{ get; set; }}")
     return lines
@@ -614,6 +661,56 @@ def gen_span_read_core(cs_struct_name: str, fields: list, structs: dict,
         is_struct = wt in all_struct_names
         inner  = indent + "    "
         inner2 = inner  + "    "
+
+        # The size_t count field paired with a following array is hidden:
+        # its 4 bytes are consumed by the array's read block, not here.
+        if f.get('is_length_for') is not None:
+            continue
+
+        # Length-paired array: read 4-byte size_t count, then 'count'
+        # elements. The fixed array_len is the cap.
+        if arr is not None and f.get('length_field') is not None:
+            lp_sz = 4  # size_t -> uint32_t on the wire
+            read_count = bp_read('uint32_t', "span", "offset")
+            lines.append(f"{indent}{{")
+            lines.append(f"{inner}if (span.Length - offset < {lp_sz}) return false;")
+            lines.append(f"{inner}int _count_{cs_field} = (int)({read_count});")
+            lines.append(f"{inner}offset += {lp_sz};")
+            lines.append(f"{inner}if (_count_{cs_field} < 0 || _count_{cs_field} > {arr}) return false;")
+            if is_struct_array(f, all_struct_names):
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{inner}var _list_{cs_field} = new List<{nested_cs}>(_count_{cs_field});")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (!{nested_cs}.TryRead(span.Slice(offset), out {nested_cs} _item_{cs_field}, out int _n_{cs_field})) return false;")
+                lines.append(f"{inner2}_list_{cs_field}.Add(_item_{cs_field});")
+                lines.append(f"{inner2}offset += _n_{cs_field};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _list_{cs_field};")
+            else:
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                enum_cs = to_dotnet_name(f['enum_c_name']) if is_enum else None
+                native = CS_NATIVE_TYPE_MAP.get(f['type'])
+                arr_type = enum_cs if is_enum else (native if native else cs_t)
+                lines.append(f"{inner}var _arr_{cs_field} = new {arr_type}[_count_{cs_field}];")
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                read_expr = bp_read(wt, "span", "offset")
+                if is_enum:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({enum_cs}){read_expr};")
+                elif f['type'] == 'bool':
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr} != 0;")
+                elif native:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = ({native}){read_expr};")
+                else:
+                    lines.append(f"{inner2}_arr_{cs_field}[i] = {read_expr};")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+                lines.append(f"{inner}result.{cs_field} = _arr_{cs_field};")
+            lines.append(f"{indent}}}")
+            continue
 
         if arr is not None and is_char_array(f):
             if fixed_mode:
@@ -747,6 +844,57 @@ def gen_span_write_core(cs_struct_name: str, fields: list, structs: dict,
         is_struct = wt in all_struct_names
         inner  = indent + "    "
         inner2 = inner  + "    "
+
+        # The size_t count field paired with a following array is hidden:
+        # its 4 bytes are written by the array's write block.
+        if f.get('is_length_for') is not None:
+            continue
+
+        # Length-paired array: take the runtime element count from the
+        # property's .Length/.Count, error if it exceeds the declared cap,
+        # then write a 4-byte count followed by exactly that many elements.
+        if arr is not None and f.get('length_field') is not None:
+            lp_sz = 4  # size_t -> uint32_t on the wire
+            lp_cs = cs_wire_type('uint32_t')
+            count_expr_for_struct = f"({cs_field} != null ? {cs_field}.Count : 0)"
+            count_expr_for_array  = f"({cs_field} != null ? {cs_field}.Length : 0)"
+            count_expr = count_expr_for_struct if is_struct_array(f, all_struct_names) else count_expr_for_array
+            lines.append(f"{indent}{{")
+            lines.append(f"{inner}int _count_{cs_field} = {count_expr};")
+            lines.append(f"{inner}if (_count_{cs_field} > {arr}) return false;")
+            lines.append(f"{inner}if (span.Length - offset < {lp_sz}) return false;")
+            write_count = bp_write('uint32_t', "span", "offset", f"({lp_cs})_count_{cs_field}")
+            lines.append(f"{inner}{write_count}")
+            lines.append(f"{inner}offset += {lp_sz};")
+            if is_struct_array(f, all_struct_names):
+                nested_cs = to_dotnet_name(wt)
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}var _item_{cs_field} = {cs_field}[i];")
+                lines.append(f"{inner2}if (_item_{cs_field} == null) return false;")
+                lines.append(f"{inner2}if (!_item_{cs_field}.TryWrite(span.Slice(offset), out int _w_{cs_field})) return false;")
+                lines.append(f"{inner2}offset += _w_{cs_field};")
+                lines.append(f"{inner}}}")
+            else:
+                cs_t = cs_wire_type(wt)
+                is_enum = f['is_enum']
+                lines.append(f"{inner}for (int i = 0; i < _count_{cs_field}; i++)")
+                lines.append(f"{inner}{{")
+                lines.append(f"{inner2}if (span.Length - offset < {sz}) return false;")
+                if is_enum:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                elif f['type'] == 'bool':
+                    val_expr = f"(byte)({cs_field}[i] ? 1 : 0)"
+                elif f['type'] in CS_NATIVE_TYPE_MAP:
+                    val_expr = f"({cs_t}){cs_field}[i]"
+                else:
+                    val_expr = f"{cs_field}[i]"
+                write_stmt = bp_write(wt, "span", "offset", val_expr)
+                lines.append(f"{inner2}{write_stmt}")
+                lines.append(f"{inner2}offset += {sz};")
+                lines.append(f"{inner}}}")
+            lines.append(f"{indent}}}")
+            continue
 
         if arr is not None and is_char_array(f):
             if fixed_mode:
@@ -896,6 +1044,24 @@ def gen_size_of_struct_body(fields: list, structs: dict, prefix: str = "        
         sz = WIRE_TYPE_SIZES.get(wt, 0)
         arr = f['array_len']
         is_struct = wt in all_struct_names
+
+        # Hidden count field: its 4 bytes are folded into the paired array's
+        # size contribution, so skip it here.
+        if f.get('is_length_for') is not None:
+            continue
+
+        if arr is not None and f.get('length_field') is not None:
+            # Length-paired array: 4-byte count + actual element count * elem size.
+            if is_struct_array(f, all_struct_names):
+                lines.append(f"{prefix}{{")
+                lines.append(f"{prefix}    size += 4;")
+                lines.append(f"{prefix}    if ({cs_field} != null)")
+                lines.append(f"{prefix}        for (int i = 0; i < Math.Min({cs_field}.Count, {arr}); i++)")
+                lines.append(f"{prefix}            size += {cs_field}[i].SizeOfStruct;")
+                lines.append(f"{prefix}}}")
+            else:
+                lines.append(f"{prefix}size += 4 + ({cs_field} != null ? Math.Min({cs_field}.Length, {arr}) : 0) * {sz};")
+            continue
 
         if arr is not None:
             if is_char_array(f):
@@ -1257,6 +1423,7 @@ def main():
     out_dir = ""
     fixed_mode = False  # Default: variable-length (length-prefixed) serialization
     big_endian = False
+    lengths_mode = False
     while args and args[0].startswith('--'):
         opt = args.pop(0)
         if opt == '--namespace':
@@ -1273,13 +1440,18 @@ def main():
             fixed_mode = True
         elif opt == '--big-endian':
             big_endian = True
+        elif opt == '--lengths':
+            lengths_mode = True
         else:
             error(f"Unknown option: {opt}")
 
     if len(args) != 1:
-        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--namespace <Ns>] [--public] [--buffers] <header.h>",
+        print(f"Usage: {sys.argv[0]} [--fixed] [--big-endian] [--lengths] [--namespace <Ns>] [--public] [--buffers] <header.h>",
               file=sys.stderr)
         sys.exit(1)
+
+    if lengths_mode and fixed_mode:
+        error("--lengths and --fixed are mutually exclusive")
 
     path = args[0]
     try:
@@ -1288,7 +1460,7 @@ def main():
     except OSError as e:
         error(f"Cannot open file: {e}")
 
-    structs, enums = parse_header(text)
+    structs, enums = parse_header(text, lengths_mode=lengths_mode)
     if not structs:
         error("No structs found in header")
 

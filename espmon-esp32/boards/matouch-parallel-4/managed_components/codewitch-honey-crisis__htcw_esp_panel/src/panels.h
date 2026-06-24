@@ -85,7 +85,7 @@
 #ifdef ESP_WROVER_KIT // Should work (Mine has a short)
 #ifdef PANEL_DEPENDENCIES
 // lib_deps = codewitch-honey-crisis/htcw_esp_lcd_panel_ili9341
-#include "esp_lcd_panel_ili9341.h"
+#include "esp_lcd_ili9341.h"
 #endif
 #define LCD_BCKL_ON_LEVEL 0
 #define LCD_SPI_HOST    SPI_3
@@ -878,7 +878,7 @@ st7703_vendor_config_t vendor_config = { \
 
 #ifdef CYD_2432S028
 #ifdef PANEL_DEPENDENCIES
-    #include "esp_lcd_panel_ili9341.h"
+    #include "esp_lcd_ili9341.h"
     #include "esp_lcd_touch_xpt2046.h"
 #endif // PANEL_DEPENDENCIES
 // BEGIN LCD configuration

@@ -1,30 +1,30 @@
+#pragma once
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
 enum ServiceCommand
 {
-    Initialize = 1,
-    StartService,
-    StopService
-};
-struct ErrorInfo {
-    int Code; // 0 = success
-    wchar_t Message[256];
-};
-struct InitializeRequest {
-    wchar_t Path[1024];
-};
-struct InitializeResponse {
-    ErrorInfo Error;
+    AppStart = 1,
+    AppEnd = 2
 };
 
-struct StartRequest {
+struct ServiceAppStartRequest {
+
+};
+struct ServiceDeviceEntry {
+    wchar_t SerialNumber[64];
+    int ScreenIndex;
+};
+struct ServiceAppStartResponse {
+    size_t Count;
+    ServiceDeviceEntry Entries[1024];
 };
 
-struct StopRequest {
-};
 
-struct StartResponse {
-    ErrorInfo Error;
-};
+struct ServiceAppStopRequest {
 
-struct StopResponse {
-    ErrorInfo Error;
+};
+struct ServiceAppStopResponse {
+
 };

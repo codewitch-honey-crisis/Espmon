@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+﻿using Espmon.Service;
+
+using Microsoft.UI.Xaml;
 
 using System;
 using System.Collections.Generic;
@@ -11,6 +13,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+
+using Windows.System;
 
 namespace Espmon;
 
@@ -167,11 +171,41 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     
     public void Load()
     {
-        RefreshStartWithWindowsAsync();
-        if (!_startWithWindows)
+        if (StartWithWindows)
         {
-            PortController.Start();
+            using var pipe = new NamedPipeClientStream(".","Espmon.Service",PipeDirection.InOut,PipeOptions.Asynchronous);
+            // retry loop
+            Exception? lastException = null;
+            bool loaded = false;
+            for (int i = 0; i < 10; i++)
+            {
+                try { pipe.Connect(500);
+                    var req = new Espmon.Service.ServiceAppStartRequest();
+                    var payload = new byte[req.SizeOfStruct];
+                    PipeFrame.WriteFrame(pipe, (byte)ServiceCommand.AppStart, payload);
+                    var res = PipeFrame.ReadFrame(pipe);
+                    ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
+                    // TODO: set the screens.
+                    loaded = true;
+                    Thread.Sleep(100);
+                    break;
+                    
+                }
+                catch (Exception e) { lastException = e; Thread.Sleep(200); }
+            }
+            if(!loaded)
+            {
+                if (lastException != null)
+                {
+                    throw lastException;
+                } else
+                {
+                    throw new Exception("The service could not be communicated with");
+                }
+            }
         }
+        PortController.Start();
+
     }
     private ProviderEntry[] GetProviderEntries()
     {
@@ -504,20 +538,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            try
-            {
-                using var client = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.InOut);
-                client.Connect(0); // 0ms timeout = non-blocking
-                return true; 
-            }
-            catch (TimeoutException)
-            {
-                return false; // pipe not found 
-            }
-            catch (Exception)
-            {
-                return false; // treat any error as not running
-            }
+            return File.Exists(@"\\.\pipe\Espmon.Service");
         }
     }
     public bool IsRunning
@@ -587,66 +608,48 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             return IsNotElevated && IsServiceRunning;
         }
     }
-    private bool _startWithWindows;
-    private static async Task<bool> IsServiceRunningAsync()
-    {
-        try
-        {
-            using var pipe = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.In, PipeOptions.Asynchronous);
-            await pipe.ConnectAsync(200);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    
 
-    private void RefreshStartWithWindowsAsync()
-    {
-        _startWithWindows = WindowsServiceManager.IsInstalled;
-        OnPropertyChanged(nameof(StartWithWindows));
-    }
     public bool StartWithWindows
     {
-        get => _startWithWindows;
-        set => _ = SetStartWithWindowsAsync(value);
-    }
-
-    private async Task SetStartWithWindowsAsync(bool value)
-    {
-        if (!_elevator.IsConnected)
+        get => File.Exists(@"\\.\pipe\Espmon.Service");
+        set
         {
-            await _elevator.ConnectAsync();
-            OnPropertyChanged(nameof(IsNotElevated));
-            OnPropertyChanged(nameof(IsServiceRunning));
-        }
-
-        var isInstalled = _elevator.IsInstalled;
-        if (value != isInstalled)
-        {
-            if (!value)
-                await _elevator.UninstallServiceAsync();
-            else
+            try
             {
-                await _elevator.InstallServiceAsync(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon"));
-                await _elevator.StartServiceAsync();
+                if (!_elevator.IsConnected)
+                {
+                    _elevator.Connect();
+                    OnPropertyChanged(nameof(IsNotElevated));
+                }
+                if (value)
+                {
+                    if(!StartWithWindows)
+                    {
+                        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
+                        _elevator.InstallService(path);
+                        // TODO: Finish negotiation
+                    }
+                }
+                else
+                {
+                    if (StartWithWindows)
+                    {
+                        _elevator.StopService();
+                        _elevator.UninstallService();
+                    }
+                }
             }
-            RefreshStartWithWindowsAsync();
+            catch
+            {
+
+            }
         }
     }
-    
-    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
-    // ~MainViewModel()
-    // {
-    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-    //     Dispose(disposing: false);
-    // }
 
-    public void Dispose()
+    
+      public void Dispose()
     {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 }

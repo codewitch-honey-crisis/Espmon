@@ -423,3 +423,11 @@ FodyWeavers.xsd
 /espmon-esp32/boards/matouch-parallel-43/managed_components/espressif__esp_lcd_touch_gt911/esp_lcd_touch_gt911.c
 /espmon-esp32/boards/matouch-parallel-43/managed_components/espressif__esp_lcd_touch_gt911/idf_component.yml
 /espmon-esp32/boards/matouch-parallel-4/dependencies.lock
+/espmon-esp32/boards/cyd-2432S028/managed_components
+/espmon-esp32/boards/cyd-2432S028/build
+/espmon-esp32/boards/matouch-parallel-35/managed_components
+/espmon-esp32/boards/matouch-parallel-35/build
+/espmon-esp32/boards/matouch-parallel-4/managed_components
+/espmon-esp32/boards/matouch-parallel-4/build
+/espmon-esp32/boards/matouch-parallel-43/managed_components
+/espmon-esp32/boards/matouch-parallel-43/build

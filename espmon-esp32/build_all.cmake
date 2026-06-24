@@ -80,10 +80,6 @@ foreach(INDEX RANGE ${BOARDS_LAST})
     message(STATUS "✓ ${BOARD_NAME} built successfully")
 endforeach()
 
-# Copy boards.json to firmware directory as manifest
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/boards.json"
-     DESTINATION "${CMAKE_CURRENT_LIST_DIR}/firmware")
-
 message(STATUS "")
 message(STATUS "========================================")
 message(STATUS "All boards built successfully!")

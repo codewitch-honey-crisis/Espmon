@@ -12,50 +12,178 @@ namespace Espmon.Service;
 
 public enum ServiceCommand : byte
 {
-    Initialize = 1,
-    StartService = 2,
-    StopService = 3,
+    AppStart = 1,
+    AppEnd = 2,
 }
 
 public struct InterfaceMaxSize
 {
-    public const int Value = 2050;
+    public const int Value = 136196;
 }
 
-public partial class ErrorInfo
+public partial class ServiceAppStartRequest
 {
-    public const int StructMaxSize = 518;
+    public const int StructMaxSize = 0;
 
-    public int Code { get; set; }
-    public string Message { get; set; }
+    public int SizeOfStruct => 0;
+
+    public static bool TryRead(ReadOnlySpan<byte> span, out ServiceAppStartRequest result, out int bytesRead)
+    {
+        result = new ServiceAppStartRequest();
+        bytesRead = 0;
+        return true;
+    }
+
+    public bool TryWrite(Span<byte> destination, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        return true;
+    }
+
+    public static bool TryRead(Stream stream, out ServiceAppStartRequest result, out int bytesRead)
+    {
+        result = new ServiceAppStartRequest();
+        bytesRead = 0;
+        return true;
+    }
+
+    public bool TryWrite(Stream stream, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        return true;
+    }
+
+}
+
+public partial class ServiceDeviceEntry
+{
+    public const int StructMaxSize = 133;
+
+    public string SerialNumber { get; set; }
+    public int ScreenIndex { get; set; }
 
     public int SizeOfStruct
     {
         get
         {
             int size = 0;
+            size += 1 + (string.IsNullOrEmpty(SerialNumber) ? 0 : Math.Min(SerialNumber.Length, 64) * 2);
             size += 4;
-            size += 2 + (string.IsNullOrEmpty(Message) ? 0 : Math.Min(Message.Length, 256) * 2);
             return size;
         }
     }
 
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out ErrorInfo result, out int bytesRead)
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out ServiceDeviceEntry result, out int bytesRead)
     {
         bytesRead = 0;
-        result = new ErrorInfo();
+        result = new ServiceDeviceEntry();
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        result.Code = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(offset));
-        offset += 4;
-        if (span.Length - offset < 2) return false;
+        if (span.Length - offset < 1) return false;
         {
-            int _len_Message = (int)(BinaryPrimitives.ReadUInt16LittleEndian(span.Slice(offset)));
-            offset += 2;
-            int _byteLen_Message = _len_Message * 2;
-            if (_len_Message > 256 || span.Length - offset < _byteLen_Message) return false;
-            result.Message = Encoding.Unicode.GetString(span.Slice(offset, _byteLen_Message));
-            offset += _byteLen_Message;
+            int _len_SerialNumber = (int)(span[offset]);
+            offset += 1;
+            int _byteLen_SerialNumber = _len_SerialNumber * 2;
+            if (_len_SerialNumber > 64 || span.Length - offset < _byteLen_SerialNumber) return false;
+            result.SerialNumber = Encoding.Unicode.GetString(span.Slice(offset, _byteLen_SerialNumber));
+            offset += _byteLen_SerialNumber;
+        }
+        if (span.Length - offset < 4) return false;
+        result.ScreenIndex = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(offset));
+        offset += 4;
+        bytesRead = offset;
+        return true;
+    }
+
+    private bool TryWriteCore(Span<byte> span, out int bytesWritten)
+    {
+        bytesWritten = 0;
+        int offset = 0;
+        {
+            int _charLen_SerialNumber = string.IsNullOrEmpty(SerialNumber) ? 0 : Math.Min(SerialNumber.Length, 64);
+            int _byteLen_SerialNumber = _charLen_SerialNumber * 2;
+            if (span.Length - offset < 1 + _byteLen_SerialNumber) return false;
+            span[offset] = (byte)_charLen_SerialNumber;
+            offset += 1;
+            if (_byteLen_SerialNumber > 0)
+            {
+                Encoding.Unicode.GetBytes(SerialNumber.AsSpan(0, _charLen_SerialNumber), span.Slice(offset, _byteLen_SerialNumber));
+                offset += _byteLen_SerialNumber;
+            }
+        }
+        if (span.Length - offset < 4) return false;
+        BinaryPrimitives.WriteInt32LittleEndian(span.Slice(offset), ScreenIndex);
+        offset += 4;
+        bytesWritten = offset;
+        return true;
+    }
+
+    public static bool TryRead(ReadOnlySpan<byte> span, out ServiceDeviceEntry result, out int bytesRead)
+    {
+        return TryReadCore(span, out result, out bytesRead);
+    }
+
+    public bool TryWrite(Span<byte> destination, out int bytesWritten)
+    {
+        return TryWriteCore(destination, out bytesWritten);
+    }
+
+    public static bool TryRead(Stream stream, out ServiceDeviceEntry result, out int bytesRead)
+    {
+        Span<byte> buf = stackalloc byte[133];
+        int n = stream.Read(buf);
+        if (n < 133) { result = null; bytesRead = n; return false; }
+        return TryReadCore(buf, out result, out bytesRead);
+    }
+
+    public bool TryWrite(Stream stream, out int bytesWritten)
+    {
+        Span<byte> buf = stackalloc byte[133];
+        if (!TryWriteCore(buf, out bytesWritten)) return false;
+        stream.Write(buf.Slice(0, bytesWritten));
+        return true;
+    }
+
+}
+
+public partial class ServiceAppStartResponse
+{
+    public const int StructMaxSize = 136196;
+
+    public IList<ServiceDeviceEntry> Entries { get; set; }
+
+    public int SizeOfStruct
+    {
+        get
+        {
+            int size = 0;
+            {
+                size += 4;
+                if (Entries != null)
+                    for (int i = 0; i < Math.Min(Entries.Count, 1024); i++)
+                        size += Entries[i].SizeOfStruct;
+            }
+            return size;
+        }
+    }
+
+    private static bool TryReadCore(ReadOnlySpan<byte> span, out ServiceAppStartResponse result, out int bytesRead)
+    {
+        bytesRead = 0;
+        result = new ServiceAppStartResponse();
+        int offset = 0;
+        {
+            if (span.Length - offset < 4) return false;
+            int _count_Entries = (int)(BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset)));
+            offset += 4;
+            if (_count_Entries < 0 || _count_Entries > 1024) return false;
+            var _list_Entries = new List<ServiceDeviceEntry>(_count_Entries);
+            for (int i = 0; i < _count_Entries; i++)
+            {
+                if (!ServiceDeviceEntry.TryRead(span.Slice(offset), out ServiceDeviceEntry _item_Entries, out int _n_Entries)) return false;
+                _list_Entries.Add(_item_Entries);
+                offset += _n_Entries;
+            }
+            result.Entries = _list_Entries;
         }
         bytesRead = offset;
         return true;
@@ -65,26 +193,25 @@ public partial class ErrorInfo
     {
         bytesWritten = 0;
         int offset = 0;
-        if (span.Length - offset < 4) return false;
-        BinaryPrimitives.WriteInt32LittleEndian(span.Slice(offset), Code);
-        offset += 4;
         {
-            int _charLen_Message = string.IsNullOrEmpty(Message) ? 0 : Math.Min(Message.Length, 256);
-            int _byteLen_Message = _charLen_Message * 2;
-            if (span.Length - offset < 2 + _byteLen_Message) return false;
-            BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(offset), (ushort)_charLen_Message);
-            offset += 2;
-            if (_byteLen_Message > 0)
+            int _count_Entries = (Entries != null ? Entries.Count : 0);
+            if (_count_Entries > 1024) return false;
+            if (span.Length - offset < 4) return false;
+            BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(offset), (uint)_count_Entries);
+            offset += 4;
+            for (int i = 0; i < _count_Entries; i++)
             {
-                Encoding.Unicode.GetBytes(Message.AsSpan(0, _charLen_Message), span.Slice(offset, _byteLen_Message));
-                offset += _byteLen_Message;
+                var _item_Entries = Entries[i];
+                if (_item_Entries == null) return false;
+                if (!_item_Entries.TryWrite(span.Slice(offset), out int _w_Entries)) return false;
+                offset += _w_Entries;
             }
         }
         bytesWritten = offset;
         return true;
     }
 
-    public static bool TryRead(ReadOnlySpan<byte> span, out ErrorInfo result, out int bytesRead)
+    public static bool TryRead(ReadOnlySpan<byte> span, out ServiceAppStartResponse result, out int bytesRead)
     {
         return TryReadCore(span, out result, out bytesRead);
     }
@@ -94,17 +221,17 @@ public partial class ErrorInfo
         return TryWriteCore(destination, out bytesWritten);
     }
 
-    public static bool TryRead(Stream stream, out ErrorInfo result, out int bytesRead)
+    public static bool TryRead(Stream stream, out ServiceAppStartResponse result, out int bytesRead)
     {
-        Span<byte> buf = stackalloc byte[518];
+        Span<byte> buf = stackalloc byte[136196];
         int n = stream.Read(buf);
-        if (n < 518) { result = null; bytesRead = n; return false; }
+        if (n < 136196) { result = null; bytesRead = n; return false; }
         return TryReadCore(buf, out result, out bytesRead);
     }
 
     public bool TryWrite(Stream stream, out int bytesWritten)
     {
-        Span<byte> buf = stackalloc byte[518];
+        Span<byte> buf = stackalloc byte[136196];
         if (!TryWriteCore(buf, out bytesWritten)) return false;
         stream.Write(buf.Slice(0, bytesWritten));
         return true;
@@ -112,164 +239,15 @@ public partial class ErrorInfo
 
 }
 
-public partial class InitializeRequest
-{
-    public const int StructMaxSize = 2050;
-
-    public string Path { get; set; }
-
-    public int SizeOfStruct
-    {
-        get
-        {
-            int size = 0;
-            size += 2 + (string.IsNullOrEmpty(Path) ? 0 : Math.Min(Path.Length, 1024) * 2);
-            return size;
-        }
-    }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out InitializeRequest result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new InitializeRequest();
-        int offset = 0;
-        if (span.Length - offset < 2) return false;
-        {
-            int _len_Path = (int)(BinaryPrimitives.ReadUInt16LittleEndian(span.Slice(offset)));
-            offset += 2;
-            int _byteLen_Path = _len_Path * 2;
-            if (_len_Path > 1024 || span.Length - offset < _byteLen_Path) return false;
-            result.Path = Encoding.Unicode.GetString(span.Slice(offset, _byteLen_Path));
-            offset += _byteLen_Path;
-        }
-        bytesRead = offset;
-        return true;
-    }
-
-    private bool TryWriteCore(Span<byte> span, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        {
-            int _charLen_Path = string.IsNullOrEmpty(Path) ? 0 : Math.Min(Path.Length, 1024);
-            int _byteLen_Path = _charLen_Path * 2;
-            if (span.Length - offset < 2 + _byteLen_Path) return false;
-            BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(offset), (ushort)_charLen_Path);
-            offset += 2;
-            if (_byteLen_Path > 0)
-            {
-                Encoding.Unicode.GetBytes(Path.AsSpan(0, _charLen_Path), span.Slice(offset, _byteLen_Path));
-                offset += _byteLen_Path;
-            }
-        }
-        bytesWritten = offset;
-        return true;
-    }
-
-    public static bool TryRead(ReadOnlySpan<byte> span, out InitializeRequest result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Span<byte> destination, out int bytesWritten)
-    {
-        return TryWriteCore(destination, out bytesWritten);
-    }
-
-    public static bool TryRead(Stream stream, out InitializeRequest result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[2050];
-        int n = stream.Read(buf);
-        if (n < 2050) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Stream stream, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[2050];
-        if (!TryWriteCore(buf, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-public partial class InitializeResponse
-{
-    public const int StructMaxSize = 518;
-
-    public ErrorInfo Error { get; set; }
-
-    public int SizeOfStruct
-    {
-        get
-        {
-            int size = 0;
-            size += Error != null ? Error.SizeOfStruct : 0;
-            return size;
-        }
-    }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out InitializeResponse result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new InitializeResponse();
-        int offset = 0;
-        if (!ErrorInfo.TryRead(span.Slice(offset), out ErrorInfo _Error_val, out int _n_Error)) return false;
-        result.Error = _Error_val;
-        offset += _n_Error;
-        bytesRead = offset;
-        return true;
-    }
-
-    private bool TryWriteCore(Span<byte> span, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (Error == null) return false;
-        if (!Error.TryWrite(span.Slice(offset), out int _w_Error)) return false;
-        offset += _w_Error;
-        bytesWritten = offset;
-        return true;
-    }
-
-    public static bool TryRead(ReadOnlySpan<byte> span, out InitializeResponse result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Span<byte> destination, out int bytesWritten)
-    {
-        return TryWriteCore(destination, out bytesWritten);
-    }
-
-    public static bool TryRead(Stream stream, out InitializeResponse result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        int n = stream.Read(buf);
-        if (n < 518) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Stream stream, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        if (!TryWriteCore(buf, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-public partial class StartRequest
+public partial class ServiceAppStopRequest
 {
     public const int StructMaxSize = 0;
 
     public int SizeOfStruct => 0;
 
-    public static bool TryRead(ReadOnlySpan<byte> span, out StartRequest result, out int bytesRead)
+    public static bool TryRead(ReadOnlySpan<byte> span, out ServiceAppStopRequest result, out int bytesRead)
     {
-        result = new StartRequest();
+        result = new ServiceAppStopRequest();
         bytesRead = 0;
         return true;
     }
@@ -280,9 +258,9 @@ public partial class StartRequest
         return true;
     }
 
-    public static bool TryRead(Stream stream, out StartRequest result, out int bytesRead)
+    public static bool TryRead(Stream stream, out ServiceAppStopRequest result, out int bytesRead)
     {
-        result = new StartRequest();
+        result = new ServiceAppStopRequest();
         bytesRead = 0;
         return true;
     }
@@ -295,15 +273,15 @@ public partial class StartRequest
 
 }
 
-public partial class StopRequest
+public partial class ServiceAppStopResponse
 {
     public const int StructMaxSize = 0;
 
     public int SizeOfStruct => 0;
 
-    public static bool TryRead(ReadOnlySpan<byte> span, out StopRequest result, out int bytesRead)
+    public static bool TryRead(ReadOnlySpan<byte> span, out ServiceAppStopResponse result, out int bytesRead)
     {
-        result = new StopRequest();
+        result = new ServiceAppStopResponse();
         bytesRead = 0;
         return true;
     }
@@ -314,9 +292,9 @@ public partial class StopRequest
         return true;
     }
 
-    public static bool TryRead(Stream stream, out StopRequest result, out int bytesRead)
+    public static bool TryRead(Stream stream, out ServiceAppStopResponse result, out int bytesRead)
     {
-        result = new StopRequest();
+        result = new ServiceAppStopResponse();
         bytesRead = 0;
         return true;
     }
@@ -324,140 +302,6 @@ public partial class StopRequest
     public bool TryWrite(Stream stream, out int bytesWritten)
     {
         bytesWritten = 0;
-        return true;
-    }
-
-}
-
-public partial class StartResponse
-{
-    public const int StructMaxSize = 518;
-
-    public ErrorInfo Error { get; set; }
-
-    public int SizeOfStruct
-    {
-        get
-        {
-            int size = 0;
-            size += Error != null ? Error.SizeOfStruct : 0;
-            return size;
-        }
-    }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out StartResponse result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new StartResponse();
-        int offset = 0;
-        if (!ErrorInfo.TryRead(span.Slice(offset), out ErrorInfo _Error_val, out int _n_Error)) return false;
-        result.Error = _Error_val;
-        offset += _n_Error;
-        bytesRead = offset;
-        return true;
-    }
-
-    private bool TryWriteCore(Span<byte> span, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (Error == null) return false;
-        if (!Error.TryWrite(span.Slice(offset), out int _w_Error)) return false;
-        offset += _w_Error;
-        bytesWritten = offset;
-        return true;
-    }
-
-    public static bool TryRead(ReadOnlySpan<byte> span, out StartResponse result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Span<byte> destination, out int bytesWritten)
-    {
-        return TryWriteCore(destination, out bytesWritten);
-    }
-
-    public static bool TryRead(Stream stream, out StartResponse result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        int n = stream.Read(buf);
-        if (n < 518) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Stream stream, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        if (!TryWriteCore(buf, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
-        return true;
-    }
-
-}
-
-public partial class StopResponse
-{
-    public const int StructMaxSize = 518;
-
-    public ErrorInfo Error { get; set; }
-
-    public int SizeOfStruct
-    {
-        get
-        {
-            int size = 0;
-            size += Error != null ? Error.SizeOfStruct : 0;
-            return size;
-        }
-    }
-
-    private static bool TryReadCore(ReadOnlySpan<byte> span, out StopResponse result, out int bytesRead)
-    {
-        bytesRead = 0;
-        result = new StopResponse();
-        int offset = 0;
-        if (!ErrorInfo.TryRead(span.Slice(offset), out ErrorInfo _Error_val, out int _n_Error)) return false;
-        result.Error = _Error_val;
-        offset += _n_Error;
-        bytesRead = offset;
-        return true;
-    }
-
-    private bool TryWriteCore(Span<byte> span, out int bytesWritten)
-    {
-        bytesWritten = 0;
-        int offset = 0;
-        if (Error == null) return false;
-        if (!Error.TryWrite(span.Slice(offset), out int _w_Error)) return false;
-        offset += _w_Error;
-        bytesWritten = offset;
-        return true;
-    }
-
-    public static bool TryRead(ReadOnlySpan<byte> span, out StopResponse result, out int bytesRead)
-    {
-        return TryReadCore(span, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Span<byte> destination, out int bytesWritten)
-    {
-        return TryWriteCore(destination, out bytesWritten);
-    }
-
-    public static bool TryRead(Stream stream, out StopResponse result, out int bytesRead)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        int n = stream.Read(buf);
-        if (n < 518) { result = null; bytesRead = n; return false; }
-        return TryReadCore(buf, out result, out bytesRead);
-    }
-
-    public bool TryWrite(Stream stream, out int bytesWritten)
-    {
-        Span<byte> buf = stackalloc byte[518];
-        if (!TryWriteCore(buf, out bytesWritten)) return false;
-        stream.Write(buf.Slice(0, bytesWritten));
         return true;
     }
 
