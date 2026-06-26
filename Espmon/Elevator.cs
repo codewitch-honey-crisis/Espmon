@@ -273,7 +273,7 @@ sealed class Elevator : IAsyncDisposable, IDisposable
     public void InstallService(string appPath)
     {
         var req = new InstallRequest();
-        req.FromAppPath = Path.Combine(AppContext.BaseDirectory, "Espmon.Service.exe");
+        req.FromAppPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         var resp = Send(req);
         if (!resp.Succeeded)
         {

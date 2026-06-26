@@ -166,6 +166,8 @@ internal partial class EspSerialSession : IDisposable
     bool _logging;
     SynchronizationContext? _sync;
     Task? _readTask, _statTask;
+    IntPtr _powerNotifyHandle;
+    DeviceNotifyCallbackRoutine? _powerCallback; // kept rooted: native code holds a pointer to it
     public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
     public event EventHandler<FrameReceivedEventArgs>? FrameError;
@@ -201,7 +203,7 @@ internal partial class EspSerialSession : IDisposable
                 if (lidx > -1)
                 {
                     string extractedName = nameValue.Substring(idx + 1, lidx - idx - 1);
-                    result.Add(new PortEntry(extractedName,serialNo));
+                    result.Add(new PortEntry(extractedName, serialNo));
                 }
             }
 
@@ -217,6 +219,11 @@ internal partial class EspSerialSession : IDisposable
             {
                 Close();
             }
+            // Also runs on the finalizer path (disposing == false), where
+            // Close() is not called. Only touches the IntPtr handle, so it is
+            // finalizer-safe, and prevents the callback delegate from being
+            // collected while the native registration is still live.
+            UnregisterPowerNotification();
             _disposed = true;
         }
     }
@@ -516,6 +523,9 @@ internal partial class EspSerialSession : IDisposable
         {
             throw new Win32Exception(Marshal.GetLastWin32Error());
         }
+
+        RegisterPowerNotification();
+
         _statTask = Task.Factory.StartNew(async () =>
         {
             try
@@ -537,7 +547,7 @@ internal partial class EspSerialSession : IDisposable
                     OnConnectionError(EventArgs.Empty);
                 }
             }
-        }, default,TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+        }, default, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
 
         _readTask = Task.Run(async () =>
         {
@@ -592,12 +602,13 @@ internal partial class EspSerialSession : IDisposable
                     OnConnectionError(EventArgs.Empty);
                 }
             }
-            
+
         });
     }
     public void Close()
     {
-        if(!IsOpen)
+        UnregisterPowerNotification();
+        if (!IsOpen)
         {
             return;
         }
@@ -628,11 +639,11 @@ internal partial class EspSerialSession : IDisposable
                     }
                     if (_statTask.Status == TaskStatus.Running)
                     {
-                        tasks[taskCount++]=_statTask;
+                        tasks[taskCount++] = _statTask;
                     }
-                    if(taskCount > 0) 
+                    if (taskCount > 0)
                     {
-                        Task.WaitAll(tasks.AsSpan(0,taskCount));
+                        Task.WaitAll(tasks.AsSpan(0, taskCount));
                     }
                 }
             }
@@ -645,6 +656,79 @@ internal partial class EspSerialSession : IDisposable
         _handle?.Dispose();
         _closing = false;
         _connErrorFired = false;
+    }
+
+    private void RegisterPowerNotification()
+    {
+        // Keep the delegate in a field so it stays rooted for the lifetime of
+        // the registration; the OS holds a raw function pointer to it.
+        _powerCallback = PowerCallback;
+        var sub = new DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+        {
+            Callback = Marshal.GetFunctionPointerForDelegate(_powerCallback),
+            Context = IntPtr.Zero
+        };
+        // Callback-based notification: no window or message pump required, so
+        // this works identically in a WinUI3 app and a headless service.
+        uint rc = PowerRegisterSuspendResumeNotification(
+            DEVICE_NOTIFY_CALLBACK, ref sub, out _powerNotifyHandle);
+        if (rc != 0)
+        {
+            _powerCallback = null;
+            _powerNotifyHandle = IntPtr.Zero;
+            throw new Win32Exception((int)rc);
+        }
+    }
+
+    private void UnregisterPowerNotification()
+    {
+        var h = Interlocked.Exchange(ref _powerNotifyHandle, IntPtr.Zero);
+        if (h != IntPtr.Zero)
+        {
+            // Blocks until any in-progress callback returns, so after this the
+            // delegate is safe to release. Must NOT be called from inside the
+            // callback itself (would deadlock) — see OnSuspend.
+            try { PowerUnregisterSuspendResumeNotification(h); }
+            catch (Win32Exception) { }
+        }
+        _powerCallback = null;
+    }
+
+    private uint PowerCallback(IntPtr context, uint type, IntPtr setting)
+    {
+        // Runs on an OS power-management thread. Must return promptly and must
+        // not block the suspend transition.
+        if (type == PBT_APMSUSPEND)
+        {
+            OnSuspend();
+        }
+        return 0; // ERROR_SUCCESS
+    }
+
+    private void OnSuspend()
+    {
+        if (_closing || _disposed) return;
+
+        // Abort any pending overlapped ReadFile / WaitCommEvent so the read and
+        // status loops unwind immediately. This is the same teardown path as a
+        // cable unplug: the loops complete with ERROR_OPERATION_ABORTED and
+        // raise ConnectionError themselves.
+        try
+        {
+            var h = _handle;
+            if (h != null && !h.IsInvalid && !h.IsClosed)
+            {
+                CancelIoEx(h, IntPtr.Zero);
+            }
+        }
+        catch (Win32Exception) { }
+
+        // Notify the host off this callback thread. Raising it inline risks a
+        // synchronous ConnectionError handler calling Close(), which would
+        // re-enter PowerUnregisterSuspendResumeNotification on the callback
+        // thread and deadlock. OnConnectionError is idempotent, so firing here
+        // in addition to the loop paths above is harmless.
+        ThreadPool.QueueUserWorkItem(_ => OnConnectionError(EventArgs.Empty));
     }
     public EspSerialSession(string port, bool logging = false, SynchronizationContext? syncContext = null)
     {
@@ -704,6 +788,8 @@ internal partial class EspSerialSession : IDisposable
     const uint OPEN_EXISTING = 3;
     const uint FILE_FLAG_OVERLAPPED = 0x40000000;
     const uint EV_RLSD = 0x0020;
+    const uint DEVICE_NOTIFY_CALLBACK = 0x00000002;
+    const uint PBT_APMSUSPEND = 0x0004;
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern SafeFileHandle CreateFile(
@@ -775,6 +861,25 @@ internal partial class EspSerialSession : IDisposable
     private static extern bool CancelIoEx(
         SafeFileHandle hFile,
         IntPtr lpOverlapped);  // IntPtr.Zero = cancel all
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate uint DeviceNotifyCallbackRoutine(IntPtr context, uint type, IntPtr setting);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+    {
+        public IntPtr Callback; // PDEVICE_NOTIFY_CALLBACK_ROUTINE (function pointer)
+        public IntPtr Context;
+    }
+
+    [DllImport("powrprof.dll", SetLastError = false)]
+    private static extern uint PowerRegisterSuspendResumeNotification(
+        uint flags,
+        ref DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS recipient,
+        out IntPtr registrationHandle);
+
+    [DllImport("powrprof.dll", SetLastError = false)]
+    private static extern uint PowerUnregisterSuspendResumeNotification(IntPtr registrationHandle);
     #endregion
 }
 #pragma warning restore

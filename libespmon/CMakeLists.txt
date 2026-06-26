@@ -12,9 +12,9 @@ include(FetchContent)
 
 FetchContent_Declare(htcw_uix
     GIT_REPOSITORY https://github.com/codewitch-honey-crisis/uix.git
-    GIT_TAG 1.8.14
+    GIT_TAG 1.9.2
     GIT_SHALLOW ON
-    FIND_PACKAGE_ARGS 1.8.14
+    FIND_PACKAGE_ARGS 1.9.2
 )
 FetchContent_MakeAvailable(htcw_uix)
 

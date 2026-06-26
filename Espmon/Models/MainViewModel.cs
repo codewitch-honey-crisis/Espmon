@@ -191,7 +191,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     break;
                     
                 }
-                catch (Exception e) { lastException = e; Thread.Sleep(200); }
+                catch (Exception e) {  lastException = e; Thread.Sleep(200); }
             }
             if(!loaded)
             {
@@ -334,7 +334,6 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     public MainViewModel()
     {
         _elevator = new Elevator();
-        var scr = Screen.Default;
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         if (!Directory.Exists(path))
         {
@@ -517,7 +516,31 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             if (disposing)
             {
-                if(_elevator!=null)
+                if (StartWithWindows)
+                {
+                    using var pipe = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.InOut, PipeOptions.Asynchronous);
+                    // retry loop
+                    Exception? lastException = null;
+                    for (int i = 0; i < 10; i++)
+                    {
+                        try
+                        {
+                            pipe.Connect(500);
+                            var req = new Espmon.Service.ServiceAppStopRequest();
+                            var payload = new byte[req.SizeOfStruct];
+                            PipeFrame.WriteFrame(pipe, (byte)ServiceCommand.AppEnd, payload);
+                            var res = PipeFrame.ReadFrame(pipe);
+                            ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
+                            // TODO: set the screens.
+                            Thread.Sleep(100);
+                            break;
+
+                        }
+                        catch (Exception e) { lastException = e; Thread.Sleep(200); }
+                    }
+                }
+
+                if (_elevator!=null)
                 {
                     _elevator.Dispose();
                 }

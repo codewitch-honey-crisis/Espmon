@@ -28,20 +28,6 @@
     <ProjectReference Include="..\HWKit\HWKit.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Update="Device.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Screen.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="ScreenEntry.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="ScreenValueEntry.cs">
-      <SubType>Component</SubType>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
     <None Update="esptool.exe">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

@@ -352,7 +352,20 @@ public sealed partial class MainWindow : Window
                 ViewModel.DevicePanelIndex = 2;
                 ViewModel.Log.Clear();
                 var reporter = new OpenFlashProgressReporter(ViewModel.Log);
-                await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                try
+                {
+                    await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                } catch
+                {
+                    try
+                    {
+                        await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                    }
+                    catch
+                    {
+                        await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                    }
+                }
                 ViewModel.Log.Clear();
                 ViewModel.DevicePanelIndex = 0;
                 

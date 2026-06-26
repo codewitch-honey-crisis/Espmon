@@ -156,7 +156,7 @@ namespace HWKit
                     {
                         _mutex.ReleaseMutex();
                     }
-                    Thread.Sleep(100);
+                    Thread.Sleep(1000);
                 }
             });
             _mutex.WaitOne();

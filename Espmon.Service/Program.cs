@@ -16,26 +16,123 @@ namespace Espmon;
 
 public class Program
 {
-    // Backing controller. Same instance is used whether we are running as a
-    // console (debug) or a Windows service. All RPC handlers funnel here.
-    private static LocalPortController? _controller;
-    // Cancellation drives shutdown across both pipe loops and the console
-    // wait loop.
-    private static readonly CancellationTokenSource _cts = new();
+    public static void Main(string[] args)
+    {
+        // One code path for both modes. AddWindowsService() inspects the
+        // environment at runtime and wires up the right lifetime:
+        //   * launched by the SCM     -> WindowsServiceLifetime (SCM stop/start)
+        //   * launched from a console -> ConsoleLifetime (Ctrl-C to stop)
+        // The hosted service below runs identically in either case, so running
+        // "as a service" behaves exactly like the old console mode. The only
+        // thing that goes away is the legacy "press any key to stop" behavior,
+        // since a service can't read keystrokes -- Ctrl-C still works when you
+        // run the exe directly for debugging.
+        HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+        builder.Services.AddWindowsService(options =>
+        {
+            options.ServiceName = "Espmon Hardware Monitor Service";
+        });
+        LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
 
-    // One writer per pipe, serialized. Reads are unsynchronized because
-    // each pipe has only one reader.
-    private static readonly SemaphoreSlim _requestPipeWriteLock = new(1, 1);
+        builder.Services.AddHostedService<PortControllerService>();
 
-    // Set when a client has issued Subscribe; cleared on Unsubscribe or
-    // event-pipe disconnect. While false the event pump drops events
-    // (or buffers them; see PumpEvent).
-    private static volatile NamedPipeServerStream? _pipe;
+        IHost host = builder.Build();
+        host.Run();
+    }
+}
 
-    private static Task? _requestPipeTask;
+// The actual work, hosted by the generic host. Owns the LocalPortController and
+// the request named pipe. A single instance is created and managed by the host
+// in both console and service mode.
+public sealed class PortControllerService : BackgroundService
+{
+    // Backing controller. All RPC handlers funnel here.
+    private LocalPortController? _controller;
+
+    // One writer per pipe, serialized. Reads are unsynchronized because each
+    // pipe has only one reader.
+    private readonly SemaphoreSlim _requestPipeWriteLock = new(1, 1);
+
+    // The currently connected request pipe, or null when no client is attached.
+    private volatile NamedPipeServerStream? _pipe;
+
+    // ---- lifecycle --------------------------------------------------------
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Get off the host's start thread so a slow controller startup can't
+        // delay the service from reporting "Running" to the SCM.
+        await Task.Yield();
+
+        var appPath = ResolveAppPath();
+
+        var controller = new LocalPortController(appPath);
+        _controller = controller;
+
+        //Console.Error.Write("Starting port controller");
+        controller.Start();
+
+        try
+        {
+            await RequestPipeLoop(controller, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown.
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        // Cancels the stoppingToken passed to ExecuteAsync and waits for the
+        // pipe loop to drain before we tear down the controller.
+        await base.StopAsync(cancellationToken);
+
+        var controller = _controller;
+        if (controller != null)
+        {
+            //Console.Error.Write("Stopping port controller");
+            try { controller.Stop(); } catch { }
+            controller.Dispose();
+            _controller = null;
+        }
+    }
+
+    public override void Dispose()
+    {
+        _controller?.Dispose();
+        _requestPipeWriteLock.Dispose();
+        base.Dispose();
+    }
+
+    // ---- config -----------------------------------------------------------
+
+    static string ResolveAppPath()
+    {
+        // BaseDirectory (not the current working dir) is used deliberately: a
+        // service's working directory is C:\Windows\System32, but the config
+        // file sits next to the exe.
+        var appPath = AppContext.BaseDirectory;
+        var readPath = Path.Combine(AppContext.BaseDirectory, "espmon.service.config.json");
+        try
+        {
+            using var reader = File.OpenText(readPath);
+            if (JsonObject.ReadFrom(reader) is JsonObject obj
+                && obj.TryGetValue("app_path", out var value)
+                && value is string str)
+            {
+                appPath = str;
+            }
+            else
+            {
+                throw new InvalidProgramException("The service configuration is invalid");
+            }
+        }
+        catch (FileNotFoundException) { /* run with default path */ }
+        return appPath;
+    }
 
     // ---- pipe lifecycle ---------------------------------------------------
-
 
     static PipeSecurity BuildSecurity()
     {
@@ -47,14 +144,13 @@ public class Program
         return security;
     }
 
-    static async Task RequestPipeLoop(LocalPortController controller, CancellationToken ct)
+    async Task RequestPipeLoop(LocalPortController controller, CancellationToken ct)
     {
         var security = BuildSecurity();
         while (!ct.IsCancellationRequested)
         {
-            // Pipe is created fresh per client connection. The previous code
-            // declared this with `using var` inside the outer scope and
-            // captured it in a Task -- the dispose ran before the task did.
+            // Pipe is created fresh per client connection. maxNumberOfServerInstances
+            // is 1, so only a single client can be connected at a time.
             NamedPipeServerStream pipe;
             try
             {
@@ -90,17 +186,14 @@ public class Program
                     catch (IOException) { break; }
                     catch (OperationCanceledException) { break; }
 
-                    
                     try
                     {
                         await DispatchAsync(controller, request.cmd, request.payload, ct);
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"Exception: {ex.Message}");
+                        Console.Error.WriteLine($"Exception: {ex.Message} {ex.StackTrace}");
                     }
-
-                   
                 }
             }
             catch (OperationCanceledException) { }
@@ -113,25 +206,22 @@ public class Program
         }
     }
 
-  
-
-    // ---- framing ----------------------------------------------------------
-
-    
-
     // ---- dispatch ---------------------------------------------------------
 
-    static async Task DispatchAsync(
+    async Task DispatchAsync(
         LocalPortController controller, byte cmd, byte[] payload, CancellationToken ct)
     {
         switch ((ServiceCommand)cmd)
         {
             case ServiceCommand.AppStart:
                 {
-                    if (_pipe != null)
+                    var pipe = _pipe;
+                    if (pipe != null)
                     {
+                        //Console.Error.WriteLine("Dispatch app start");
                         ServiceAppStartRequest.TryRead(payload, out var req, out var _);
                         var resp = new ServiceAppStartResponse();
+                        resp.Entries = [];
                         for (var i = 0; i < controller.Sessions.Count; ++i)
                         {
                             var session = controller.Sessions[i];
@@ -145,25 +235,28 @@ public class Program
                         }
                         payload = new byte[resp.SizeOfStruct];
                         resp.TryWrite(payload, out var _);
+                        //Console.Error.Write("Stopping port controller");
                         controller.Stop();
                         await _requestPipeWriteLock.WaitAsync(ct);
                         try
                         {
-                            await PipeFrame.WriteFrameAsync(_pipe, cmd, payload, ct);
+                            await PipeFrame.WriteFrameAsync(pipe, cmd, payload, ct);
                         }
                         finally
                         {
                             _requestPipeWriteLock.Release();
                         }
-                        
                     }
                 }
                 break;
             case ServiceCommand.AppEnd:
                 {
-                    if (_pipe != null)
+                    var pipe = _pipe;
+                    if (pipe != null)
                     {
+                        //Console.Error.WriteLine("Dispatch app end");
                         ServiceAppStopRequest.TryRead(payload, out var req, out var _);
+                        //onsole.Error.Write("Starting port controller");
                         controller.Start();
                         var resp = new ServiceAppStopResponse();
                         payload = new byte[resp.SizeOfStruct];
@@ -171,7 +264,7 @@ public class Program
                         await _requestPipeWriteLock.WaitAsync(ct);
                         try
                         {
-                            await PipeFrame.WriteFrameAsync(_pipe, cmd, payload, ct);
+                            await PipeFrame.WriteFrameAsync(pipe, cmd, payload, ct);
                         }
                         finally
                         {
@@ -184,94 +277,5 @@ public class Program
             default:
                 throw new InvalidDataException($"Unknown ServiceCommand 0x{cmd:X2}");
         }
-    }
-
-   
-  
-    // ---- main -------------------------------------------------------------
-
-    public static void Main(string[] args)
-    {
-        if (Environment.UserInteractive)
-        {
-            // Console / debug mode. Acts like the service will, just with
-            // Ctrl-C handling instead of SCM stop.
-            var appPath = AppContext.BaseDirectory;
-            var readPath = Path.Combine(AppContext.BaseDirectory, "espmon.service.config.json");
-            try
-            {
-                using var reader = File.OpenText(readPath);
-                if (JsonObject.ReadFrom(reader) is JsonObject obj
-                    && obj.TryGetValue("app_path", out var value)
-                    && value is string str)
-                {
-                    appPath = str;
-                } else
-                {
-                    throw new InvalidProgramException("The service configuration is invalid");
-                }
-            }
-            catch (FileNotFoundException) { /* run with default path */ }
-
-            using var controller = new LocalPortController(appPath);
-            _controller = controller;
-            controller.Start();
-
-            _requestPipeTask = Task.Run(() => RequestPipeLoop(controller, _cts.Token), _cts.Token);
-            Console.CancelKeyPress += (_, e) =>
-            {
-                e.Cancel = true;
-                _cts.Cancel();
-            };
-
-            Console.WriteLine("[Espmon.Service] running in console mode. Ctrl-C to stop.");
-
-            // Wait for either Ctrl-C or any keypress (legacy behavior).
-            try
-            {
-                while (!_cts.IsCancellationRequested)
-                {
-                    if (Console.KeyAvailable)
-                    {
-                        Console.ReadKey(true);
-                        _cts.Cancel();
-                        break;
-                    }
-                    Thread.Sleep(100);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                // Console.KeyAvailable throws when stdin is redirected (e.g.
-                // when actually running as a service). Fall back to waiting
-                // on the cancellation token alone.
-                try { Task.Delay(Timeout.Infinite, _cts.Token).Wait(); }
-                catch (AggregateException) { }
-            }
-
-            try
-            {
-                (_requestPipeTask ?? Task.CompletedTask).Wait(TimeSpan.FromSeconds(5));
-            }
-            catch (AggregateException) { }
-
-            controller.Dispose();
-            _controller = null;
-            return;
-        }
-
-        // Real Windows-service path. Worker is still old/stub code per the
-        // current state of the project; the pipe servers will move into the
-        // worker (or a hosted service) once that gets revamped. Leaving the
-        // existing scaffold in place for now.
-        HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-        builder.Services.AddWindowsService(options =>
-        {
-            options.ServiceName = "Espmon Hardware Monitor Service";
-        });
-        LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
-        //builder.Services.AddHostedService<Worker>();
-        IHost host = builder.Build();
-        host.Run();
     }
 }

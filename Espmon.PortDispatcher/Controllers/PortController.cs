@@ -9,6 +9,43 @@ using System.Xml.Linq;
 
 namespace Espmon;
 
+public sealed class ScreenChangedEventArgs : EventArgs
+{
+    public int ScreenIndex { get; }
+    public ScreenChangedEventArgs(int screenIndex) { ScreenIndex = screenIndex; }
+}
+
+public delegate void ScreenChangedEventHandler(object sender, ScreenChangedEventArgs args);
+
+public delegate void ScreenClearedEventHandler(object sender, EventArgs args);
+public delegate void SessionChangedEventHandler(object sender, EventArgs args);
+public sealed class ScreenDataEventArgs : EventArgs
+{
+    public int ScreenIndex { get; }
+    public float TopValue1 { get; }
+    public float TopScaled1 { get; }
+    public float TopValue2 { get; }
+    public float TopScaled2 { get; }
+    public float BottomValue1 { get; }
+    public float BottomScaled1 { get; }
+    public float BottomValue2 { get; }
+    public float BottomScaled2 { get; }
+
+    public ScreenDataEventArgs(int screenIndex, float topValue1, float topScaled1, float topValue2, float topScaled2, float bottomValue1, float bottomScaled1, float bottomValue2, float bottomScaled2)
+    {
+        ScreenIndex = screenIndex;
+        TopValue1 = topValue1;
+        TopScaled1 = topScaled1;
+        TopValue2 = topValue2;
+        TopScaled2 = topScaled2;
+        BottomValue1 = bottomValue1;
+        BottomScaled1 = bottomScaled1;
+        BottomValue2 = bottomValue2;
+        BottomScaled2 = bottomScaled2;
+    }
+}
+
+public delegate void ScreenDataEventHandler(object sender, ScreenDataEventArgs args);
 public abstract class PortController : ControllerBase, IDisposable
 {
     public ObservableCollection<DeviceController> Devices { get; } = [];
@@ -44,7 +81,7 @@ public abstract class PortController : ControllerBase, IDisposable
     private void Screens_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (IsDisposed) return;
-        Debug.WriteLine($"Collection change: {e.Action}");
+        //Debug.WriteLine($"Collection change: {e.Action}");
         switch(e.Action)
         {
             case NotifyCollectionChangedAction.Add:
@@ -354,7 +391,7 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     public void RefreshSessions()
     {
-        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        if (IsDisposed) return;
         if (!IsStarted)
         {
             return;
@@ -440,26 +477,41 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     private void TryConnectSessions()
     {
+       
+        RefreshSessions();
+        //Console.Error.WriteLine();
+        //Console.Error.WriteLine($"TryConnectSessions() called with {_sessions.Count} sessions");
         for (var i = 0; i < _sessions.Count; ++i)
         {
             var session = _sessions[i];
-            if(session.Device!=null && session.Device.MacAddress!=null&& session.Device.MacAddress[0] != 0)
+            if (session.Device != null && session.Device.MacAddress != null && session.Device.MacAddress[0] != 0)
             {
-                if (session.Status == SessionStatus.Closed)
+                if (session.Status == SessionStatus.Closed || session.Status == SessionStatus.RequiresFlash)
                 {
                     try
                     {
+                        //Console.Error.WriteLine($"Trying to connect {session.PortName}");
                         session.Connect();
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        //Console.Error.WriteLine($"Error trying to connect {session.PortName}: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    //Console.Error.WriteLine($"Trying session {session.PortName} status is {session.Status}");
+
                 }
             }
         }
+        
     }
     private static void _timer_Tick(object? state)
     {
         if(state is PortController cntrl)
         {
+            if (cntrl.IsDisposed) return;
             cntrl.Post(() =>
             {
                 int iter = cntrl._timerIteration++;
@@ -542,19 +594,29 @@ public abstract class PortController : ControllerBase, IDisposable
             OnStop();
             UpdateProperty(nameof(IsStarted), () => {
                 IsStarted = false;
-                foreach (var provider in Providers)
-                {
-                    try
-                    {
-                        provider.Stop();
-                    }
-                    catch { }
-                }
-                _sessions.Clear();
-                Devices.Clear();
-                Screens.Clear();
-
+                
             });
+            foreach (var session in _sessions)
+            {
+                try
+                {
+                    session.Disconnect();
+                }
+                catch { }
+            }
+
+            foreach (var provider in Providers)
+            {
+                try
+                {
+                    provider.Stop();
+                }
+                catch { }
+            }
+            _sessions.Clear();
+            Devices.Clear();
+            Screens.Clear();
+
         }
     }
     

@@ -2,6 +2,13 @@
 
 namespace Espmon;
 
+[Flags]
+public enum DeviceInputType
+{
+    None = 0,
+    Touch = 1,
+    Button = 2
+}
 public class DeviceController : ControllerBase
 {
     public PortController Parent { get; }

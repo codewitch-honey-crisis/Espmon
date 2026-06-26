@@ -100,7 +100,7 @@ dependencies:
       type: service
     version: 0.2.9
   codewitch-honey-crisis/htcw_uix:
-    component_hash: 556c848e38d669455469d623e51879294b6ff8fee91f06b13b7d45a08a7e6076
+    component_hash: 58d8559463ba011650d0c653603b929988dc12e7faf59a2902387b6027754b24
     dependencies:
     - name: codewitch-honey-crisis/htcw_gfx
       registry_url: https://components.espressif.com
@@ -112,7 +112,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.8.15
+    version: 1.9.3
   espressif/cmake_utilities:
     component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
     dependencies:
@@ -158,6 +158,6 @@ direct_dependencies:
 - codewitch-honey-crisis/htcw_uix
 - espressif/esp_lcd_ili9341
 - idf
-manifest_hash: 7961ba6f2ba7d5fb8169b1b7e067f4b655f4088f680970eafa54a0952146d51a
+manifest_hash: 98e038a12f518227c38908f62dc70c733d9b6b2acc72e173f4a7b35935977d30
 target: esp32
 version: 2.0.0

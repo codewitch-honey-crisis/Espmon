@@ -46,7 +46,7 @@ internal class LocalSessionController : SessionController
                         {
                             _needScreen = req.ScreenIndex;
                             _dataReady = false;
-
+                            //Console.Error.WriteLine($"Screen request for {PortName}");
                         }
                     }
                     break;
@@ -58,6 +58,7 @@ internal class LocalSessionController : SessionController
                             {
                                 if (!_dataReady)
                                 {
+                                    //Console.Error.WriteLine($"Data request for {PortName}");
                                     _dataReady = true;
                                 }
                             }
@@ -80,6 +81,7 @@ internal class LocalSessionController : SessionController
 
     private void _transport_ConnectionError(object? sender, EventArgs e)
     {
+        //Console.Error.WriteLine($"{PortName} was forcibly disconneted");
         Disconnect();
     }
 
@@ -88,13 +90,17 @@ internal class LocalSessionController : SessionController
 
         if (Status == SessionStatus.Closed || Status == SessionStatus.RequiresFlash)
         {
-            Status = SessionStatus.Connecting;
+            if(_transport.IsOpen)
+            {
+                _transport.Close();
+            }
             _dataReady = false;
             _needScreen = ScreenIndex;
             _startIdentTicks = 0;
             _gotIdentTicks = 0;
             _needsFlash = false;
             _transport.Open();
+            Status = SessionStatus.Connecting;
         }
     }
     protected override void OnDisconnect()
@@ -102,7 +108,12 @@ internal class LocalSessionController : SessionController
         if (_transport.IsOpen)
         {
             _transport.Close();
-        }
+            //Console.Error.WriteLine($"Transport on {PortName} closed.");
+        } 
+        _dataReady = false;
+        _startIdentTicks = 0;
+        _gotIdentTicks = 0;
+        _needsFlash = false;
         Status = SessionStatus.Closed;
     }
     private sealed class InnerOpenFlashProgress : IProgress<int>
@@ -465,22 +476,25 @@ internal class LocalSessionController : SessionController
                     try
                     {
                         _transport.Send((byte)Command.CmdIdent, Array.Empty<byte>());
+                        //Console.Error.WriteLine($"Negotiation on {PortName} started.");
                         Status = SessionStatus.Negotiating;
                     }
                     catch (Win32Exception)
                     {
                         Disconnect();
                     }
-                }
+                } 
                 break;
             case SessionStatus.Busy:
 
                 if (_needScreen > -1 && _transport != null && _transport.IsOpen && Device != null && Device.Screens.Count > 0)
                 {
-                    ScreenIndex = _needScreen % Device.Screens.Count;
+                    //Console.Error.WriteLine($"Set {PortName} screen index to {_needScreen}");
+                    ForceScreenIndex(_needScreen % Device.Screens.Count);
                     _needScreen = -1;
                 } else if (_dataReady && ScreenIndex > -1 && _transport != null && _transport.IsOpen)
                 {
+                    //Console.Error.WriteLine($"Sending {PortName} data");
                     var scr = Screen;
                     if (scr != null)
                     {
@@ -541,11 +555,14 @@ internal class LocalSessionController : SessionController
                         _ident = null;
                         if (GetUpgrade() == FirmwareUpgrade.Required)
                         {
+                            //Console.Error.WriteLine($"Negotiation on {PortName} unsuccessful. (Requires flash)");
                             _needsFlash = true;
                             Status = SessionStatus.RequiresFlash;
                         }
                         else
                         {
+                            //Console.Error.WriteLine($"Negotiation on {PortName} successful.");
+                            _needScreen = ScreenIndex;
                             Status = SessionStatus.Busy;
                         }
                     }

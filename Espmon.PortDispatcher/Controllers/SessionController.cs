@@ -3,12 +3,41 @@ using System.Diagnostics;
 
 namespace Espmon;
 
+public enum SessionStatus
+{
+    Closed = 0,
+    Connecting,
+    Resetting,
+    Negotiating,
+    Busy,
+    ReadyForData,
+    NeedScreen,
+    RequiresFlash,
+    Flashing
+}
 public enum FirmwareUpgrade
 {
     Required=0,
     Suggested=1,
     NotRequired=2
 }
+
+public struct FlashProgressEntry
+{
+    public string Action { get; }
+    public int Progress { get; }
+
+    public FlashProgressEntry(string action, int progress)
+    {
+        Action = action;
+        Progress = progress;
+    }
+}
+public interface IFlashProgress : IProgress<FlashProgressEntry>
+{
+
+}
+
 public abstract class SessionController : ControllerBase, INotifyPropertyChanged
 {
     public event ScreenChangedEventHandler? ScreenChanged;
@@ -47,6 +76,43 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
     }
     
     private int _screenIndex = -1;
+    internal void ForceScreenIndex(int value)
+    {
+        if (value>-1 && _device != null && _device.Screens.Count > 0)
+        {
+            if (_status == SessionStatus.NeedScreen || _status == SessionStatus.Busy)
+            {
+                var si = value % _device.Screens.Count;
+                //Console.Error.WriteLine($"Screen for {PortName} set to {si}");
+                var name = _device.Screens[si];
+                var found = false;
+                ScreenController? scr = null;
+                for (var i = 0; i < Parent.Screens.Count; ++i)
+                {
+                    scr = Parent.Screens[i];
+                    if (scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    throw new InvalidOperationException("The device has a screen named that doesn't exist");
+                }
+                UpdateProperties(() => { _screenIndex = si; _screen = scr; }, nameof(ScreenIndex), nameof(Screen));
+                //if (!IsWaitingForScreenChange)
+                //{
+                //    IsWaitingForScreenChange = true;
+                //    OnPropertyChanged(nameof(IsWaitingForScreenChange));
+                //}
+                OnScreenIndexChanged();
+                OnScreenChanged();
+                return;
+            }
+            throw new InvalidOperationException("The session is not in a valid state to switch screens");
+        }
+    }
     public int ScreenIndex
     {
         get
@@ -69,39 +135,7 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
             }
             if (value != _screenIndex && value>-1)
             {
-                if (_device != null && _device.Screens.Count>0)
-                {
-                    if (_status == SessionStatus.NeedScreen || _status == SessionStatus.Busy) {
-                        
-                        var si = value % _device.Screens.Count;
-                        var name = _device.Screens[si];
-                        var found = false;
-                        ScreenController? scr = null;
-                        for(var i = 0;i<Parent.Screens.Count;++i)
-                        {
-                            scr = Parent.Screens[i];
-                            if(scr.Name.Equals(name,StringComparison.OrdinalIgnoreCase))
-                            {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if(!found)
-                        {
-                            throw new InvalidOperationException("The device has a screen named that doesn't exist");
-                        }
-                        UpdateProperties(() => { _screenIndex = si; _screen = scr; }, nameof(ScreenIndex), nameof(Screen));
-                        //if (!IsWaitingForScreenChange)
-                        //{
-                        //    IsWaitingForScreenChange = true;
-                        //    OnPropertyChanged(nameof(IsWaitingForScreenChange));
-                        //}
-                        OnScreenIndexChanged();
-                        OnScreenChanged();
-                        return;
-                    }
-                }
-                throw new InvalidOperationException("The session is not in a valid state to switch screens");
+                ForceScreenIndex(value);
             }
             
         }
@@ -471,10 +505,6 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
     public void Disconnect()
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
-        if (!Parent.IsStarted)
-        {
-            throw new InvalidOperationException("The port controller has not been started.");
-        }
         if (Status != SessionStatus.Closed)
         {
             if (IsWaitingForScreenChange)
@@ -488,12 +518,9 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
     public void Connect()
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
-        if(!Parent.IsStarted)
+        if (Status == SessionStatus.Closed || Status==SessionStatus.RequiresFlash)
         {
-            throw new InvalidOperationException("The port controller has not been started.");
-        }
-        if (Status == SessionStatus.Closed)
-        {
+
             if (IsWaitingForScreenChange)
             {
                 IsWaitingForScreenChange = false;

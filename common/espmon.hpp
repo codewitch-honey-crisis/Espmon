@@ -843,6 +843,7 @@ public:
         m_display_size = dimensions;
         init_screen();
         m_is_screen_populated=false;
+        m_screen.update_strategy(uix::screen_update_strategy::minimize_paints);
         m_screen.validate_all();
         m_screen.invalidate();
 
