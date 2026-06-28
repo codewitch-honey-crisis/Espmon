@@ -91,5 +91,8 @@
   <Target Name="BuildAndCopyService" AfterTargets="Build">
     <MSBuild Projects="..\Espmon.Service\Espmon.Service.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
-  
+  <Target Name="CreateSfx" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <Delete Files="$(SolutionDir)$(TargetName)-Install.exe" />
+    <Exec Command='"%ProgramFiles%\7-Zip\7z.exe" a -t7z -mx9 -sfx7z.sfx "$(SolutionDir)$(TargetName)-Install.exe" "$(TargetDir)*"' />
+  </Target>
 </Project>

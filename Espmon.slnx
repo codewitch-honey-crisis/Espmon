@@ -4,6 +4,7 @@
    </Configurations>
    <Folder Name="/Solution Items/">
       <File Path="espmon-esp32/LICENSE" />
+      <File Path="Espmon-Install.exe" />
       <File Path="README.md" />
    </Folder>
    <Project Path="Espmon.Elevation.Interface/Espmon.Elevation.Interface.csproj" Id="2097d9ee-7915-4f54-8d6b-c4f8c17ed042">

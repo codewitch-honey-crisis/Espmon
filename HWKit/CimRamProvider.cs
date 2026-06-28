@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Management.Infrastructure;
+﻿using Microsoft.Management.Infrastructure;
 
 using System.Runtime.Versioning;
 
@@ -10,12 +9,33 @@ namespace HWKit
     public class CimRamProvider : HardwareInfoProviderBase
     {
         const float _multiplicand = 1000f;
-        const float _divisor = (1024*1024);
-        Mutex? _mutex;
-        bool _started = false;
+        const float _divisor = (1024 * 1024);
+
+        // How fresh the cache must be before an accessor triggers a refresh.
+        const long FreshnessMs = 1000;
+        // How long with no accessor activity before the refresh loop parks itself.
+        const long IdleMs = 5000;
+
+        // Guards the cached values below. Created once and reused across start/stop
+        // cycles so accessors can never hit a disposed handle.
+        readonly Mutex _dataMutex = new Mutex();
+        // Wakes the parked worker when an accessor needs fresh data.
+        readonly AutoResetEvent _wake = new AutoResetEvent(false);
+        // Signals the worker to exit on stop (and interrupts its 1s sleep).
+        readonly ManualResetEventSlim _stop = new ManualResetEventSlim(false);
+
+        Thread? _worker;
+        volatile bool _started = false;
+
+        // Environment.TickCount64 timestamps. 64-bit aligned reads/writes are atomic
+        // on supported runtimes; Volatile is used for ordering.
+        long _lastQuery = 0;
+        long _lastAccess = 0;
+
         float _total = 0;
         float _free = 0;
         float _freeVirtual = 0;
+
         protected override string GetDisplayName()
         {
             return "Windows CIM RAM Provider";
@@ -26,11 +46,28 @@ namespace HWKit
         }
         protected override HardwareInfoProviderStatus GetState()
         {
-
             return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
+
+        // Called by every accessor. Records activity and, if the cached data has aged
+        // past FreshnessMs, nudges the worker so it starts (or keeps) refreshing.
+        // Never blocks on a query: the accessor that calls this still gets the last
+        // value immediately.
+        void Touch()
+        {
+            if (!_started) return;
+            long now = Environment.TickCount64;
+            Volatile.Write(ref _lastAccess, now);
+            if (now - Volatile.Read(ref _lastQuery) >= FreshnessMs)
+            {
+                _wake.Set();
+            }
+        }
+
         void RunQuery()
         {
+            float total = float.NaN, free = float.NaN, freeVirtual = float.NaN;
+
             using (CimSession session = CimSession.Create(null))
             {
                 var instances = session.QueryInstances(
@@ -40,31 +77,72 @@ namespace HWKit
 
                 foreach (CimInstance procObj in instances)
                 {
-                    _total = (UInt64)procObj.CimInstanceProperties["TotalVisibleMemorySize"].Value;
-                    _free = (UInt64)procObj.CimInstanceProperties["FreePhysicalMemory"].Value;
-                    _freeVirtual = (UInt64)procObj.CimInstanceProperties["FreeVirtualMemory"].Value;
+                    total = (UInt64)procObj.CimInstanceProperties["TotalVisibleMemorySize"].Value;
+                    free = (UInt64)procObj.CimInstanceProperties["FreePhysicalMemory"].Value;
+                    freeVirtual = (UInt64)procObj.CimInstanceProperties["FreeVirtualMemory"].Value;
                     break;
                 }
             }
 
+            _dataMutex.WaitOne();
+            try
+            {
+                _total = total;
+                _free = free;
+                _freeVirtual = freeVirtual;
+            }
+            finally
+            {
+                _dataMutex.ReleaseMutex();
+            }
+            Volatile.Write(ref _lastQuery, Environment.TickCount64);
         }
+
+        // Worker lifecycle: park on _wake until an accessor needs data, then refresh
+        // once a second until IdleMs passes with no access, then park again.
+        void Worker()
+        {
+            while (_started)
+            {
+                _wake.WaitOne();
+                while (_started)
+                {
+                    try
+                    {
+                        RunQuery();
+                    }
+                    catch
+                    {
+                        // Best-effort telemetry: a transient CIM failure shouldn't kill
+                        // the loop. The cached values simply remain as they were.
+                    }
+
+                    if (Environment.TickCount64 - Volatile.Read(ref _lastAccess) >= IdleMs)
+                    {
+                        break; // no recent access -> go back to parking
+                    }
+                    if (_stop.Wait(1000))
+                    {
+                        break; // stop requested
+                    }
+                }
+            }
+        }
+
         private float SafeTotal
         {
             get
             {
-                if(_mutex==null)
-                {
-                    return float.NaN;
-                }
-                _mutex.WaitOne();
+                Touch();
+                _dataMutex.WaitOne();
                 try
                 {
-                    if(!_started) { return float.NaN; }
-                    return _total*_multiplicand/_divisor;
+                    if (!_started) { return float.NaN; }
+                    return _total * _multiplicand / _divisor;
                 }
                 finally
                 {
-                    _mutex.ReleaseMutex();
+                    _dataMutex.ReleaseMutex();
                 }
             }
         }
@@ -72,11 +150,8 @@ namespace HWKit
         {
             get
             {
-                if (_mutex == null)
-                {
-                    return float.NaN;
-                }
-                _mutex.WaitOne();
+                Touch();
+                _dataMutex.WaitOne();
                 try
                 {
                     if (!_started) { return float.NaN; }
@@ -84,7 +159,7 @@ namespace HWKit
                 }
                 finally
                 {
-                    _mutex.ReleaseMutex();
+                    _dataMutex.ReleaseMutex();
                 }
             }
         }
@@ -92,19 +167,16 @@ namespace HWKit
         {
             get
             {
-                if (_mutex == null)
-                {
-                    return float.NaN;
-                }
-                _mutex.WaitOne();
+                Touch();
+                _dataMutex.WaitOne();
                 try
                 {
                     if (!_started) { return float.NaN; }
-                    return _freeVirtual *_multiplicand/ _divisor;
+                    return _freeVirtual * _multiplicand / _divisor;
                 }
                 finally
                 {
-                    _mutex.ReleaseMutex();
+                    _dataMutex.ReleaseMutex();
                 }
             }
         }
@@ -112,19 +184,17 @@ namespace HWKit
         {
             get
             {
-                if (_mutex == null)
-                {
-                    return float.NaN;
-                }
-                _mutex.WaitOne();
+                Touch();
+                _dataMutex.WaitOne();
                 try
                 {
                     if (!_started) { return float.NaN; }
-                    return 100-((float)Math.Round(_free * 100 / _total));
+                    if (_total <= 0) { return float.NaN; }
+                    return 100 - ((float)Math.Round(_free * 100 / _total));
                 }
                 finally
                 {
-                    _mutex.ReleaseMutex();
+                    _dataMutex.ReleaseMutex();
                 }
             }
         }
@@ -134,58 +204,34 @@ namespace HWKit
             {
                 return;
             }
-            _mutex = new Mutex();
 
-            var thread = new Thread(() =>
-            {
-                _mutex.WaitOne();
-                var started = _started;
-                _mutex.ReleaseMutex();
-                while (started && _mutex != null)
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        started = _started;
-                        if (started)
-                        {
-                            RunQuery();
-                        }
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                    Thread.Sleep(1000);
-                }
-            });
-            _mutex.WaitOne();
-            try
-            {
-                RunQuery();
-                
-            }
-            finally { _mutex.ReleaseMutex(); }
-
-            Publish($"/ram/total","MB", new Func<float>(() => SafeTotal));
-            Publish($"/ram/free", "MB",new Func<float>(() => SafeFree));
-            Publish($"/ram/free/virtual","MB", new Func<float>(() => SafeFreeVirtual));
-            Publish($"/ram/load", "%",new Func<float>(() => SafeLoad));
-
+            _stop.Reset();
             _started = true;
-            thread.Start();
 
+            // Populate once up front so published values are valid immediately.
+            RunQuery();
+            Volatile.Write(ref _lastAccess, 0); // no accessor activity yet -> stay parked
+
+            Publish($"/ram/total", "MB", new Func<float>(() => SafeTotal));
+            Publish($"/ram/free", "MB", new Func<float>(() => SafeFree));
+            Publish($"/ram/free/virtual", "MB", new Func<float>(() => SafeFreeVirtual));
+            Publish($"/ram/load", "%", new Func<float>(() => SafeLoad));
+
+            _worker = new Thread(Worker)
+            {
+                IsBackground = true,
+                Name = "cim_ram_refresh"
+            };
+            _worker.Start();
         }
         protected override void OnStop()
         {
-            if (_mutex == null) return;
-            _mutex.WaitOne();
+            if (!_started) return;
             _started = false;
-            _mutex.ReleaseMutex();
-            _mutex?.Dispose();
-            _mutex = null;
-            
-
+            _stop.Set();   // break the 1s sleep
+            _wake.Set();   // unpark the worker if it's waiting
+            _worker?.Join();
+            _worker = null;
         }
         protected override string GetDescription()
         {

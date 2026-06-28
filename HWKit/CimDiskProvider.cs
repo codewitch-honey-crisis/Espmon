@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Management.Infrastructure;
+﻿using Microsoft.Management.Infrastructure;
 
 using System.Runtime.ExceptionServices;
 using System.Runtime.Versioning;
@@ -30,13 +29,19 @@ namespace HWKit
             public ulong Size { get; set; }
             public ulong SizeRemaining { get; set; }
         }
-        
+
+        // Reads the owning provider's current entry array live (under its lock), so it
+        // always reflects the latest refresh and records accessor activity via Touch().
         sealed class DiskAccessor
         {
-            Mutex _mutex;
-            int _index;
-            PhysicalDiskInfo[] _entries;
-            public DiskAccessor(Mutex mutex, int index, PhysicalDiskInfo[] entries) { ArgumentNullException.ThrowIfNull(mutex, nameof(mutex)); _mutex = mutex; _index = index; ArgumentNullException.ThrowIfNull(entries, nameof(entries)); _entries = entries; }
+            readonly CimDiskProvider _owner;
+            readonly int _index;
+            public DiskAccessor(CimDiskProvider owner, int index)
+            {
+                ArgumentNullException.ThrowIfNull(owner, nameof(owner));
+                _owner = owner;
+                _index = index;
+            }
             static float ValueOrNaN<T>(T? value)
             {
                 if (value == null) return float.NaN;
@@ -46,7 +51,7 @@ namespace HWKit
                 }
                 catch
                 {
-                    return float.NaN; 
+                    return float.NaN;
                 }
             }
             static float ValueOrZero<T>(T? value)
@@ -61,228 +66,115 @@ namespace HWKit
                     return 0f;
                 }
             }
-            public float Load
+            float Read(Func<PhysicalDiskInfo, float> selector)
             {
-                get
+                _owner.Touch();
+                _owner._dataMutex.WaitOne();
+                try
                 {
-                    try
+                    var entries = _owner._entries;
+                    if (entries == null || _index < 0 || _index >= entries.Length)
                     {
-                        _mutex.WaitOne();
-                        double totalSize=0;
-                        double totalRemaining = 0;
-                        var d = _entries[_index];
-                        for(var i = 0;i<d.Volumes.Length;++i)
-                        {
-                            var v = d.Volumes[i];
-                            if (v == null) continue;
-                            totalSize += v.Size;
-                            totalRemaining += v.SizeRemaining;
-                        }
-                        return (float)((1.0-(totalRemaining / totalSize)) * 100.0f);
+                        return float.NaN;
                     }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
+                    return selector(entries[_index]);
+                }
+                catch
+                {
+                    return float.NaN;
+                }
+                finally
+                {
+                    _owner._dataMutex.ReleaseMutex();
                 }
             }
-            public float SlotNumber
+            public float Load => Read(d =>
             {
-                get {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrNaN(_entries[_index].SlotNumber);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float Health 
-            { 
-                get
+                double totalSize = 0;
+                double totalRemaining = 0;
+                for (var i = 0; i < d.Volumes.Length; ++i)
                 {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrNaN(_entries[_index].HealthStatus);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }                    
-                }  
-            }
-            public float Type
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrNaN(_entries[_index].MediaType);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
+                    var v = d.Volumes[i];
+                    if (v == null) continue;
+                    totalSize += v.Size;
+                    totalRemaining += v.SizeRemaining;
                 }
-            }
-            public float Size
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrZero(_entries[_index].Size)/(1024.0f*1024.0f);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float AllocatedSize
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrZero(_entries[_index].AllocatedSize) / (1024.0f * 1024.0f);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float SpindleRpm
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrNaN(_entries[_index].SpindleSpeed);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float PhysicalSectorSize
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrZero(_entries[_index].PhysicalSectorSize) / (1024.0f * 1024.0f);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float LogicalSectorSize
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        return ValueOrZero(_entries[_index].LogicalSectorSize) / (1024.0f * 1024.0f);
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
+                if (totalSize <= 0) return float.NaN;
+                return (float)((1.0 - (totalRemaining / totalSize)) * 100.0f);
+            });
+            public float SlotNumber => Read(d => ValueOrNaN(d.SlotNumber));
+            public float Health => Read(d => ValueOrNaN(d.HealthStatus));
+            public float Type => Read(d => ValueOrNaN(d.MediaType));
+            public float Size => Read(d => ValueOrZero(d.Size) / (1024.0f * 1024.0f));
+            public float AllocatedSize => Read(d => ValueOrZero(d.AllocatedSize) / (1024.0f * 1024.0f));
+            public float SpindleRpm => Read(d => ValueOrNaN(d.SpindleSpeed));
+            public float PhysicalSectorSize => Read(d => ValueOrZero(d.PhysicalSectorSize) / (1024.0f * 1024.0f));
+            public float LogicalSectorSize => Read(d => ValueOrZero(d.LogicalSectorSize) / (1024.0f * 1024.0f));
         }
         sealed class VolumeAccessor
         {
-            Mutex _mutex;
-            int _diskIndex;
-            int _volumeIndex;
-            PhysicalDiskInfo[] _entries;
-            public VolumeAccessor(Mutex mutex, int diskIndex, int volumeIndex, PhysicalDiskInfo[] entries)
+            readonly CimDiskProvider _owner;
+            readonly int _diskIndex;
+            readonly int _volumeIndex;
+            public VolumeAccessor(CimDiskProvider owner, int diskIndex, int volumeIndex)
             {
-                _mutex = mutex;
+                ArgumentNullException.ThrowIfNull(owner, nameof(owner));
+                _owner = owner;
                 _diskIndex = diskIndex;
                 _volumeIndex = volumeIndex;
-                _entries = entries;
             }
-            public float Load
+            float Read(Func<VolumeInfo, float> selector)
             {
-                get
+                _owner.Touch();
+                _owner._dataMutex.WaitOne();
+                try
                 {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        var v = _entries[_diskIndex].Volumes[_volumeIndex];
-                        return (v.SizeRemaining / v.Size)*100.0f;
-                    }
-                    catch
+                    var entries = _owner._entries;
+                    if (entries == null || _diskIndex < 0 || _diskIndex >= entries.Length)
                     {
                         return float.NaN;
                     }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
-                }
-            }
-            public float Total
-            {
-                get
-                {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        var v = _entries[_diskIndex].Volumes[_volumeIndex];
-                        return (v.Size / (1024.0f * 1024.0f));
-                    }
-                    catch
+                    var vols = entries[_diskIndex].Volumes;
+                    if (vols == null || _volumeIndex < 0 || _volumeIndex >= vols.Length)
                     {
                         return float.NaN;
                     }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
+                    var v = vols[_volumeIndex];
+                    if (v == null) return float.NaN;
+                    return selector(v);
                 }
-            }
-            public float Free
-            {
-                get
+                catch
                 {
-                    try
-                    {
-                        _mutex.WaitOne();
-                        var v = _entries[_diskIndex].Volumes[_volumeIndex];
-                        return (v.SizeRemaining / (1024.0f * 1024.0f));
-                    }
-                    catch
-                    {
-                        return float.NaN;
-                    }
-                    finally
-                    {
-                        _mutex.ReleaseMutex();
-                    }
+                    return float.NaN;
+                }
+                finally
+                {
+                    _owner._dataMutex.ReleaseMutex();
                 }
             }
+            // NOTE: original semantics preserved (integer division of the two ulongs).
+            public float Load => Read(v => (v.SizeRemaining / v.Size) * 100.0f);
+            public float Total => Read(v => v.Size / (1024.0f * 1024.0f));
+            public float Free => Read(v => v.SizeRemaining / (1024.0f * 1024.0f));
         }
-        Mutex? _mutex;
-        bool _started = false;
+
+        // How fresh the cache must be before an accessor triggers a refresh.
+        const long FreshnessMs = 1000;
+        // How long with no accessor activity before the refresh loop parks itself.
+        const long IdleMs = 5000;
+
+        readonly Mutex _dataMutex = new Mutex();
+        readonly AutoResetEvent _wake = new AutoResetEvent(false);
+        readonly ManualResetEventSlim _stop = new ManualResetEventSlim(false);
+
+        Thread? _worker;
+        volatile bool _started = false;
+
+        long _lastQuery = 0;
+        long _lastAccess = 0;
+
         PhysicalDiskInfo[]? _entries = null;
+
         protected override string GetDisplayName()
         {
             return "Windows CIM Disk Provider";
@@ -293,24 +185,37 @@ namespace HWKit
         }
         protected override HardwareInfoProviderStatus GetState()
         {
-
             return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
+
+        // Called by every accessor. Records activity and nudges the worker if the cache
+        // has gone stale. Never blocks on a query.
+        void Touch()
+        {
+            if (!_started) return;
+            long now = Environment.TickCount64;
+            Volatile.Write(ref _lastAccess, now);
+            if (now - Volatile.Read(ref _lastQuery) >= FreshnessMs)
+            {
+                _wake.Set();
+            }
+        }
+
         private static T? ValueOrDef<T>(object? value, T? def = default)
         {
-            if(value is T val)
+            if (value is T val)
             {
-                if(val!=null)
+                if (val != null)
                 {
                     return val;
                 }
             }
             return def;
         }
-        
+
         void RunQuery()
         {
-            if (_mutex == null) return;
+            PhysicalDiskInfo[] result;
             using (CimSession session = CimSession.Create(null))
             {
                 var physicalDisks = session.QueryInstances(@"root\Microsoft\Windows\Storage", "WQL", "SELECT * FROM MSFT_PhysicalDisk").ToList();
@@ -324,7 +229,7 @@ namespace HWKit
                 foreach (var physDisk in physicalDisks)
                 {
                     var serialNumber = physDisk.CimInstanceProperties["SerialNumber"]?.Value?.ToString();
-                    
+
                     var info = new PhysicalDiskInfo
                     {
                         HealthStatus = ValueOrDef<ushort>(physDisk.CimInstanceProperties["HealthStatus"]?.Value),
@@ -334,13 +239,13 @@ namespace HWKit
                         LogicalSectorSize = ValueOrDef<ulong>(physDisk.CimInstanceProperties["LogicalSectorSize"]?.Value),
                         PhysicalSectorSize = ValueOrDef<ulong>(physDisk.CimInstanceProperties["PhysicalSectorSize"]?.Value),
                         Size = ValueOrDef<ulong>(physDisk.CimInstanceProperties["Size"]?.Value),
-                        AllocatedSize=ValueOrDef<ulong>(physDisk.CimInstanceProperties["AllocatedSize"]?.Value)
+                        AllocatedSize = ValueOrDef<ulong>(physDisk.CimInstanceProperties["AllocatedSize"]?.Value)
                     };
 
                     // Find matching MSFT_Disk by SerialNumber
                     var matchingDisk = disks.FirstOrDefault(d =>
                         d.CimInstanceProperties["SerialNumber"]?.Value?.ToString() == serialNumber);
-                    
+
                     if (matchingDisk != null)
                     {
                         var diskNumber = (uint)(matchingDisk.CimInstanceProperties["Number"]?.Value ?? 0);
@@ -364,7 +269,7 @@ namespace HWKit
                                     var volumesNew = new VolumeInfo[info.Volumes.Length + 1];
                                     info.Volumes.CopyTo(volumesNew, 0);
 
-                                    volumesNew[info.Volumes.Length]=new VolumeInfo
+                                    volumesNew[info.Volumes.Length] = new VolumeInfo
                                     {
                                         Size = ValueOrDef<ulong>(volume.CimInstanceProperties["Size"]?.Value),
                                         SizeRemaining = ValueOrDef<ulong>(volume.CimInstanceProperties["SizeRemaining"]?.Value),
@@ -377,61 +282,71 @@ namespace HWKit
 
                     physicalDiskInfos.Add(info);
                 }
-                if (_mutex != null)
+
+                result = physicalDiskInfos.ToArray();
+            }
+
+            _dataMutex.WaitOne();
+            try
+            {
+                _entries = result;
+            }
+            finally
+            {
+                _dataMutex.ReleaseMutex();
+            }
+            Volatile.Write(ref _lastQuery, Environment.TickCount64);
+        }
+
+        void Worker()
+        {
+            while (_started)
+            {
+                _wake.WaitOne();
+                while (_started)
                 {
-                    _mutex.WaitOne();
                     try
                     {
-                        _entries = physicalDiskInfos.ToArray();
+                        RunQuery();
                     }
-                    finally
+                    catch
                     {
-                        _mutex.ReleaseMutex();
+                        // Best-effort: keep the last good values on a transient failure.
+                    }
+
+                    if (Environment.TickCount64 - Volatile.Read(ref _lastAccess) >= IdleMs)
+                    {
+                        break;
+                    }
+                    if (_stop.Wait(1000))
+                    {
+                        break;
                     }
                 }
             }
         }
-        
+
         protected override void OnStart()
         {
             if (_started)
             {
                 return;
             }
-            _mutex = new Mutex();
 
-            var thread = new Thread(() =>
-            {
-                _mutex.WaitOne();
-                var started = _started;
-                _mutex.ReleaseMutex();
-                while (started && _mutex != null)
-                {
-                    if(_mutex==null)
-                    {
-                        break;
-                    }
-                    _mutex.WaitOne();
-                    started = _started;
-                    _mutex.ReleaseMutex();
-                    if (started)
-                    {
-                        RunQuery();
-                    }
-                    if (_mutex == null)
-                    {
-                        break;
-                    }
-                    Thread.Sleep(1000);
-                }
-            });
+            _stop.Reset();
+            _started = true;
+
+            // Populate once up front, both to publish valid values immediately and so we
+            // know how many disks/volumes to enumerate.
             RunQuery();
+            Volatile.Write(ref _lastAccess, 0);
 
-            if (_entries != null)
+            PhysicalDiskInfo[]? snapshot = _entries;
+            if (snapshot != null)
             {
-                for (var i = 0; i < _entries.Length; i++)
+                for (var i = 0; i < snapshot.Length; i++)
                 {
-                    var acc = new DiskAccessor(_mutex, i, _entries);
+                    var acc = new DiskAccessor(this, i);
                     Publish($"/disk/{i}/slot", "", new Func<float>(() => acc.SlotNumber));
                     Publish($"/disk/{i}/health", "STAT", new Func<float>(() => acc.Health));
                     Publish($"/disk/{i}/type", "", new Func<float>(() => acc.Type));
@@ -441,10 +356,10 @@ namespace HWKit
                     Publish($"/disk/{i}/speed", "RPM", new Func<float>(() => acc.SpindleRpm));
                     Publish($"/disk/{i}/sector_size", "MB", new Func<float>(() => acc.PhysicalSectorSize));
                     Publish($"/disk/{i}/logical_sector_size", "MB", new Func<float>(() => acc.LogicalSectorSize));
-                    var vols = _entries[i].Volumes;
-                    for(var j = 0; j < vols.Length; j++)
+                    var vols = snapshot[i].Volumes;
+                    for (var j = 0; j < vols.Length; j++)
                     {
-                        var vacc = new VolumeAccessor(_mutex, i, j, _entries);
+                        var vacc = new VolumeAccessor(this, i, j);
                         Publish($"/disk/{i}/volume/{j}/total", "MB", new Func<float>(() => vacc.Total));
                         Publish($"/disk/{i}/volume/{j}/free", "MB", new Func<float>(() => vacc.Free));
                         Publish($"/disk/{i}/volume/{j}/load", "%", new Func<float>(() => vacc.Load));
@@ -452,24 +367,31 @@ namespace HWKit
                 }
             }
 
-
-            _mutex.WaitOne();
-            _started = true;
-            _mutex.ReleaseMutex();
-            thread.Start();
-
+            _worker = new Thread(Worker)
+            {
+                IsBackground = true,
+                Name = "cim_disk_refresh"
+            };
+            _worker.Start();
         }
         protected override void OnStop()
         {
-            if (_mutex == null) return;
-            _mutex.WaitOne();
+            if (!_started) return;
             _started = false;
-            
-            _mutex.ReleaseMutex();
-            _mutex?.Dispose();
-            _mutex = null;
-            
+            _stop.Set();
+            _wake.Set();
+            _worker?.Join();
+            _worker = null;
 
+            _dataMutex.WaitOne();
+            try
+            {
+                _entries = null;
+            }
+            finally
+            {
+                _dataMutex.ReleaseMutex();
+            }
         }
         protected override string GetDescription()
         {

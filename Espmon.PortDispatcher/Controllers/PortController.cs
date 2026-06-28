@@ -477,8 +477,6 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     private void TryConnectSessions()
     {
-       
-        RefreshSessions();
         //Console.Error.WriteLine();
         //Console.Error.WriteLine($"TryConnectSessions() called with {_sessions.Count} sessions");
         for (var i = 0; i < _sessions.Count; ++i)
@@ -517,7 +515,7 @@ public abstract class PortController : ControllerBase, IDisposable
                 int iter = cntrl._timerIteration++;
                 RefreshSessions(cntrl.GatherForInterval(0));
                 RefreshSessions(cntrl.GatherForInterval(100));
-                switch (iter)
+                switch (iter % 10)
                 {
                     case 0:
                         RefreshSessions(cntrl.GatherForInterval(500));
@@ -529,9 +527,14 @@ public abstract class PortController : ControllerBase, IDisposable
                     case 9:
                         cntrl.OnRefresh();
                         cntrl.TryConnectSessions();
-                        cntrl._timerIteration = 0;
                         break;
                 }
+                if(iter==49)
+                {
+                    cntrl._timerIteration = 0;
+                    cntrl.RefreshSessions();
+                }
+                
             });
         }
     }
