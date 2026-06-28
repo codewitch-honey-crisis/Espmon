@@ -1,9 +1,10 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-
+using Windows.ApplicationModel.DataTransfer;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -22,6 +23,8 @@ namespace Espmon
         private string? _validationErrorMessage = null;
         private Exception? _validationException = null;
         private string _validationIcon = "\uE946"; // Search icon
+        private TextBox? _innerTextBox;
+        private string _lastNonEmptySelection = "";
         private DispatcherTimer _timer = new DispatcherTimer();
 
 
@@ -31,17 +34,152 @@ namespace Espmon
             _timer.Tick += _timer_Tick;
             //AvailablePaths = new ObservableCollection<string>();
             _validationBrush = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-            this.Loaded += (s, e) =>
+            ;
+            // in the constructor, alongside this.Loaded:
+            this.Loaded += (s, e) => { EnsureInnerTextBox(); _timer.Interval = TimeSpan.FromMilliseconds(100); };
+            SuggestBox.GotFocus += (s, e) => EnsureInnerTextBox();   // fallback if Loaded was too early
+        }
+        private void EnsureInnerTextBox()
+        {
+            if (_innerTextBox != null) return;
+
+            _innerTextBox = FindDescendant<TextBox>(SuggestBox);
+            if (_innerTextBox == null)
             {
-                var textBox = FindDescendant<TextBox>(SuggestBox);
-                if (textBox != null)
-                {
-                    textBox.IsSpellCheckEnabled = false;
-                }
-                _timer.Interval = TimeSpan.FromMilliseconds(100);
+                Debug.WriteLine("[init] inner TextBox NOT found yet");
+                return;
+            }
+
+            _innerTextBox.IsSpellCheckEnabled = false;
+            _innerTextBox.ContextFlyout = BuildClipboardFlyout();
+            _innerTextBox.SelectionChanged += (s, e) =>
+            {
+                if (_innerTextBox.SelectionLength > 0)          // don't overwrite when native cut zeroes it
+                    _lastNonEmptySelection = _innerTextBox.SelectedText;
             };
+
+            _innerTextBox.KeyDown += InnerTextBox_KeyDown;       // one subscription, normal bubbling
+            // handledEventsToo so our handler still runs even though TextBox marks Ctrl+C/X/V handled
+            //_innerTextBox.AddHandler(
+            //    UIElement.KeyDownEvent,
+            //    new Microsoft.UI.Xaml.Input.KeyEventHandler(InnerTextBox_KeyDown),
+            //    handledEventsToo: true);
+
+            Debug.WriteLine("[init] inner TextBox acquired + wired");
+        }
+        private MenuFlyout BuildClipboardFlyout()
+        {
+            var flyout = new MenuFlyout();
+
+            var cut = new MenuFlyoutItem { Text = "Cut", Icon = new SymbolIcon(Symbol.Cut) };
+            var copy = new MenuFlyoutItem { Text = "Copy", Icon = new SymbolIcon(Symbol.Copy) };
+            var paste = new MenuFlyoutItem { Text = "Paste", Icon = new SymbolIcon(Symbol.Paste) };
+            var selectAll = new MenuFlyoutItem { Text = "Select All" };
+
+            cut.Click += (s, e) => CutToClipboard();
+            copy.Click += (s, e) => CopyToClipboard();
+            paste.Click += (s, e) => PasteFromClipboard();
+            selectAll.Click += (s, e) => _innerTextBox?.SelectAll();
+
+            flyout.Items.Add(cut);
+            flyout.Items.Add(copy);
+            flyout.Items.Add(paste);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(selectAll);
+
+            // Enable/disable based on selection + clipboard contents at open time
+            flyout.Opening += (s, e) =>
+            {
+                bool hasSelection = (_innerTextBox?.SelectionLength ?? 0) > 0;
+                cut.IsEnabled = hasSelection;
+                copy.IsEnabled = hasSelection;
+                paste.IsEnabled = Win32Clipboard.HasText();
+            };
+
+            return flyout;
+        }
+        private void CopyToClipboard()
+        {
+            if (_innerTextBox == null || _innerTextBox.SelectionLength == 0)
+            {
+                Debug.WriteLine($"[copy] skipped: tb={_innerTextBox != null}, sel={_innerTextBox?.SelectionLength}");
+                return;
+            }
+            bool ok = Win32Clipboard.SetText(_innerTextBox.SelectedText);
+            Debug.WriteLine($"[copy] SetText('{_innerTextBox.SelectedText}') -> {ok}");
+        }
+        private void CutToClipboard()
+        {
+            if (_innerTextBox == null || _innerTextBox.SelectionLength == 0) return;
+            if (Win32Clipboard.SetText(_innerTextBox.SelectedText))
+                ReplaceSelection(string.Empty);
         }
 
+        private void PasteFromClipboard()
+        {
+            if (_innerTextBox == null) return;
+            var text = Win32Clipboard.GetText();
+            if (string.IsNullOrEmpty(text)) return;
+            ReplaceSelection(text);
+        }
+        private static bool ClipboardHasText()
+        {
+            try { return Clipboard.GetContent().Contains(StandardDataFormats.Text); }
+            catch { return false; }
+        }
+
+
+
+        // The important bit: edit the inner TextBox.Text directly. That fires the
+        // same TextChanged path normal typing uses, so it flows out through the
+        // AutoSuggestBox Text binding into PathPattern -> validation. The default
+        // menu's paste skips that path, which is why it looked dead.
+        private void ReplaceSelection(string replacement)
+        {
+            if (_innerTextBox == null) return;
+            Debug.WriteLine($"[replace] '{replacement}' caret={_innerTextBox.SelectionStart}");
+            var current = _innerTextBox.Text ?? string.Empty;
+            int start = _innerTextBox.SelectionStart;
+            int len = _innerTextBox.SelectionLength;
+
+            // clamp defensively in case selection got stale
+            start = Math.Clamp(start, 0, current.Length);
+            len = Math.Clamp(len, 0, current.Length - start);
+
+            _innerTextBox.Text = current.Substring(0, start) + replacement + current.Substring(start + len);
+            _innerTextBox.SelectionStart = start + replacement.Length;
+            _innerTextBox.SelectionLength = 0;
+            _innerTextBox.Focus(FocusState.Programmatic);
+        }
+
+        private void InnerTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            bool ctrl = Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            if (!ctrl || _innerTextBox == null) return;
+
+            switch (e.Key)
+            {
+                case Windows.System.VirtualKey.C:
+                    Debug.WriteLine($"[kb] copy sel='{_innerTextBox.SelectedText}'");
+                    if (_innerTextBox.SelectionLength > 0)
+                        Win32Clipboard.SetText(_innerTextBox.SelectedText);
+                    break;
+
+                case Windows.System.VirtualKey.X:
+                    // native already deleted the selection by now, so use the cache
+                    var text = _innerTextBox.SelectionLength > 0
+                        ? _innerTextBox.SelectedText
+                        : _lastNonEmptySelection;
+                    Debug.WriteLine($"[kb] cut text='{text}'");
+                    if (!string.IsNullOrEmpty(text))
+                        Win32Clipboard.SetText(text);
+                    break;
+
+                    // V and A intentionally NOT handled — native paste & select-all work fine.
+            }
+        }
         private void _timer_Tick(object? sender, object e)
         {
             RerunQuery();
@@ -419,8 +557,8 @@ namespace Espmon
         {
             var canonical = Expression?.ToString();
             if (canonical == null) return;                                          // invalid/empty: leave their text alone
-            if (string.Equals(_pathPattern, canonical, StringComparison.Ordinal))   // already canonical:
-                return;                                                             //   don't touch -> selection survives
+            if (string.Equals(_pathPattern, canonical, StringComparison.Ordinal))   // already canonical: don't touch
+                return;
 
             _syncingTextFromExpression = true;
             PathPattern = canonical;

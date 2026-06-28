@@ -491,7 +491,7 @@ public abstract class PortController : ControllerBase, IDisposable
                         //Console.Error.WriteLine($"Trying to connect {session.PortName}");
                         session.Connect();
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         //Console.Error.WriteLine($"Error trying to connect {session.PortName}: {ex.Message}");
                     }
