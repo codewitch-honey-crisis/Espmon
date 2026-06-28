@@ -46,7 +46,6 @@ namespace Espmon
             _innerTextBox = FindDescendant<TextBox>(SuggestBox);
             if (_innerTextBox == null)
             {
-                Debug.WriteLine("[init] inner TextBox NOT found yet");
                 return;
             }
 
@@ -59,13 +58,7 @@ namespace Espmon
             };
 
             _innerTextBox.KeyDown += InnerTextBox_KeyDown;       // one subscription, normal bubbling
-            // handledEventsToo so our handler still runs even though TextBox marks Ctrl+C/X/V handled
-            //_innerTextBox.AddHandler(
-            //    UIElement.KeyDownEvent,
-            //    new Microsoft.UI.Xaml.Input.KeyEventHandler(InnerTextBox_KeyDown),
-            //    handledEventsToo: true);
-
-            Debug.WriteLine("[init] inner TextBox acquired + wired");
+          
         }
         private MenuFlyout BuildClipboardFlyout()
         {
@@ -122,18 +115,7 @@ namespace Espmon
             if (string.IsNullOrEmpty(text)) return;
             ReplaceSelection(text);
         }
-        private static bool ClipboardHasText()
-        {
-            try { return Clipboard.GetContent().Contains(StandardDataFormats.Text); }
-            catch { return false; }
-        }
 
-
-
-        // The important bit: edit the inner TextBox.Text directly. That fires the
-        // same TextChanged path normal typing uses, so it flows out through the
-        // AutoSuggestBox Text binding into PathPattern -> validation. The default
-        // menu's paste skips that path, which is why it looked dead.
         private void ReplaceSelection(string replacement)
         {
             if (_innerTextBox == null) return;
