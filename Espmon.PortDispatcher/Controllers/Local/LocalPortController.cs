@@ -312,7 +312,7 @@ public class LocalPortController : PortController
         {
             for(var i = 0;i<_hookedScreens.Count;++i)
             {
-                _hookedScreens[i].PropertyChanged -= Screen_PropertyChanged;
+                UnsubscribeFromScreen(_hookedScreens[i]);
             }
             _hookedScreens.Clear();
             var screenFiles = Directory.GetFiles(Path, "*.screen.json");
@@ -340,24 +340,100 @@ public class LocalPortController : PortController
                 if (scr != null)
                 {
                     _screenFiles.Add(scr.Name, scr);
-                    scr.PropertyChanged += Screen_PropertyChanged;
+                    SubscribeToScreen(scr);
                     _hookedScreens.Add(scr);
                 }
             }
         }
         return _screenFiles.Values.ToArray();
     }
+    private void SubscribeToScreenValues(ScreenValuesController? target)
+    {
+        if (target == null) return;
+        if (target.Value1 != null)
+        {
+            target.Value1.PropertyChanged += ScreenValue_PropertyChanged;
+        }
+        if (target.Value2 != null)
+        {
+            target.Value2.PropertyChanged += ScreenValue_PropertyChanged;
+        }
+    }
+    private void SubscribeToScreen(ScreenController? screen)
+    {
+        if (screen == null) return;
+        screen.PropertyChanged += Screen_PropertyChanged;
+        if(screen.Top!=null)
+        {
+            screen.Top.PropertyChanged += ScreenValues_PropertyChanged;
+            SubscribeToScreenValues(screen.Top);
+        }
+        if (screen.Bottom != null)
+        {
+            screen.Bottom.PropertyChanged += ScreenValues_PropertyChanged;
+            SubscribeToScreenValues(screen.Bottom);
+        }
+
+    }
+    private void UnsubscribeFromScreenValues(ScreenValuesController? target)
+    {
+        if (target == null) return;
+        if (target.Value1 != null)
+        {
+            target.Value1.PropertyChanged -= ScreenValue_PropertyChanged;
+        }
+        if (target.Value2 != null)
+        {
+            target.Value2.PropertyChanged -= ScreenValue_PropertyChanged;
+        }
+    }
+    private void UnsubscribeFromScreen(ScreenController? screen)
+    {
+        if (screen == null) return;
+        screen.PropertyChanged -= Screen_PropertyChanged;
+        if (screen.Top != null)
+        {
+            screen.Top.PropertyChanged -= ScreenValues_PropertyChanged;
+            UnsubscribeFromScreenValues(screen.Top);
+        }
+        if (screen.Bottom != null)
+        {
+            screen.Bottom.PropertyChanged -= ScreenValues_PropertyChanged;
+            UnsubscribeFromScreenValues(screen.Bottom);
+        }
+
+    }
+
+    private void ScreenValue_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_hooksEnabled && sender is ScreenValueController screenValue && screenValue.Parent != null && screenValue.Parent.Parent!=null)
+        {
+            TrySaveScreen(screenValue.Parent.Parent);
+        }
+    }
+
+    private void ScreenValues_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_hooksEnabled && sender is ScreenValuesController screenValues && screenValues.Parent!=null)
+        {
+            TrySaveScreen(screenValues.Parent);
+        }
+    }
     private bool TrySaveDevice(DeviceController device)
     {
         if(device.MacAddress!=null && !string.IsNullOrEmpty(device.Name))
         {
-            var obj = device.ToJson();
-            using (var writer = new StreamWriter(System.IO.Path.Combine(Path, $"{device.Name}.device.json"), false, Encoding.UTF8))
+            try
             {
-                Debug.Write($"Saving {device.Name}");
-                obj.WriteTo(writer);
-                return true;
+                var obj = device.ToJson();
+                using (var writer = new StreamWriter(System.IO.Path.Combine(Path, $"{device.Name}.device.json"), false, Encoding.UTF8))
+                {
+                    Debug.Write($"Saving {device.Name}");
+                    obj.WriteTo(writer);
+                    return true;
+                }
             }
+            catch { }
         }
         return false;
     }
@@ -365,12 +441,16 @@ public class LocalPortController : PortController
     {
         if (!string.IsNullOrEmpty(screen.Name))
         {
-            var obj = screen.ToJson();
-            using (var writer = new StreamWriter(System.IO.Path.Combine(Path, $"{screen.Name}.screen.json"), false, Encoding.UTF8))
+            try
             {
-                obj.WriteTo(writer);
-                return true;
+                var obj = screen.ToJson();
+                using (var writer = new StreamWriter(System.IO.Path.Combine(Path, $"{screen.Name}.screen.json"), false, Encoding.UTF8))
+                {
+                    obj.WriteTo(writer);
+                    return true;
+                }
             }
+            catch { }
         }
         return false;
     }
@@ -456,7 +536,7 @@ public class LocalPortController : PortController
         _screenFiles.Add(name, screen);
         if (!_hookedScreens.Contains(screen))
         {
-            screen.PropertyChanged += Screen_PropertyChanged;
+            SubscribeToScreen(screen);
             _hookedScreens.Add(screen);
         }
         base.OnScreenAdded(screen);
@@ -485,7 +565,7 @@ public class LocalPortController : PortController
         _screenFiles.Remove(screen.Name);
         if (_hookedScreens.Remove(screen))
         {
-            screen.PropertyChanged -= Screen_PropertyChanged;
+            UnsubscribeFromScreen(screen);
         }
         base.OnScreenRemoved(screen);
     }
@@ -531,7 +611,7 @@ public class LocalPortController : PortController
         _hookedDevices.Clear();
         for (var i = 0; i < _hookedScreens.Count; ++i)
         {
-            _hookedScreens[i].PropertyChanged -= Screen_PropertyChanged;
+            UnsubscribeFromScreen(_hookedScreens[i]);
         }
         _hookedScreens.Clear();
         _deviceFilesBySerial.Clear();

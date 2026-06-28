@@ -16,7 +16,6 @@ namespace HWKit
         public int Line { get; set; }
         public int Column { get; set; }
         public string Source { get; set; }
-
         public HardwareInfoLineInfo(long position, int line, int column, string source)
         {
             Position = position;
@@ -240,6 +239,7 @@ namespace HWKit
             }
         }
         #endregion // Cursors
+        public virtual bool IsEmpty => false;
         public HardwareInfoExpression()
         {
             _ancestors = new Lazy<IList<IHardwareInfoExpressionNonTerminalNode>>(this.GetAncestors<IHardwareInfoExpressionNonTerminalNode>().ToLazyList());
@@ -879,6 +879,7 @@ namespace HWKit
     }
     public sealed partial class HardwareInfoEmptyExpression : HardwareInfoTerminalExpression
     {
+        public override bool IsEmpty => true;
         public override IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo)
         {
             return Array.Empty<HardwareInfoEntry>();

@@ -168,12 +168,13 @@ namespace Espmon
             OnPropertyChanged(nameof(EvaluatedText));
         }
         public Exception? ValidationException => _validationException;
+        private static HardwareInfoEmptyExpression _emptyExpr = new HardwareInfoEmptyExpression();
         public static readonly DependencyProperty ExpressionProperty =
     DependencyProperty.Register(
         nameof(Expression),
         typeof(HardwareInfoExpression),
         typeof(QuerySelector),
-        new PropertyMetadata(null,OnExpressionChanged));
+        new PropertyMetadata(_emptyExpr,OnExpressionChanged));
         // replace: private bool _updatingExpression = false;
         private bool _syncingTextFromExpression = false; // Expression -> Text (external change)
         private bool _settingExpressionFromText = false; // Text -> Expression (user typing)
@@ -401,7 +402,7 @@ namespace Espmon
             {
                 try
                 {
-                    return Session != null ? Expression != null ? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
+                    return Session != null ? Expression!=null && !Expression.IsEmpty? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
                 }
                 catch (Exception e)
                 {
@@ -455,9 +456,9 @@ namespace Espmon
             _settingExpressionFromText = true;   // suppress Expression -> Text while parsing user input
             try
             {
-                if (!_syncingTextFromExpression) Expression = null;
+                if (!_syncingTextFromExpression) Expression = new HardwareInfoEmptyExpression();
 
-                HardwareInfoExpression? expr = null;
+                HardwareInfoExpression? expr = new HardwareInfoEmptyExpression();
                 _validationException = null;
                 try
                 {
@@ -476,7 +477,7 @@ namespace Espmon
                 else
                 {
                     ValidationErrorMessage = args.ErrorMessage;
-                    if (!_syncingTextFromExpression) Expression = null;
+                    if (!_syncingTextFromExpression) Expression = new HardwareInfoEmptyExpression(); ;
                     ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
                     ValidationIcon = "\uE783";
                 }
