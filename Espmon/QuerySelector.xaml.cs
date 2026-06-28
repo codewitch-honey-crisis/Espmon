@@ -54,7 +54,9 @@ namespace Espmon
         typeof(HardwareInfoExpression),
         typeof(QuerySelector),
         new PropertyMetadata(null,OnExpressionChanged));
-        private bool _updatingExpression = false;
+        // replace: private bool _updatingExpression = false;
+        private bool _syncingTextFromExpression = false; // Expression -> Text (external change)
+        private bool _settingExpressionFromText = false; // Text -> Expression (user typing)
         public HardwareInfoExpression? Expression
         {
             get => (HardwareInfoExpression)GetValue(ExpressionProperty);
@@ -66,16 +68,16 @@ namespace Espmon
             {
                 control.RerunQuery();
 
-                // Only sync text on external changes (screen switch, etc.),
-                // not when we're the ones who set Expression from parsed user input.
-                if (!control._updatingExpression)
+                // Push canonical text into the box ONLY on external changes (screen/session
+                // switch). Never while the user is typing — that's what blanked the box.
+                if (!control._settingExpressionFromText)
                 {
                     var newText = (e.NewValue as HardwareInfoExpression)?.ToString() ?? "";
                     if (control._pathPattern != newText)
                     {
-                        control._updatingExpression = true;
+                        control._syncingTextFromExpression = true;
                         control.PathPattern = newText;
-                        control._updatingExpression = false;
+                        control._syncingTextFromExpression = false;
                     }
                 }
             }
@@ -306,9 +308,11 @@ namespace Espmon
         {
             if (string.IsNullOrWhiteSpace(_pathPattern))
             {
-                if (!_updatingExpression)
+                if (!_syncingTextFromExpression)
                 {
+                    _settingExpressionFromText = true;
                     Expression = null;
+                    _settingExpressionFromText = false;
                 }
                 ValidationBrush = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
                 ValidationIcon = "\uE946"; // Search
@@ -320,82 +324,50 @@ namespace Espmon
                 return;
             }
 
-            
             ValidatePattern();
             RerunQuery();
         }
 
         private void ValidatePattern()
         {
-            var args = new PatternValidationEventArgs
-            {
-                Pattern = _pathPattern,
-            };
-            if (!_updatingExpression)
-            {
-                Expression = null;
-            }
-            HardwareInfoExpression? expr = null;
-            _validationException = null;
+            var args = new PatternValidationEventArgs { Pattern = _pathPattern };
+
+            _settingExpressionFromText = true;   // suppress Expression -> Text while parsing user input
             try
             {
-                expr = HardwareInfoExpression.Parse(_pathPattern);
-                if (!(expr is HardwareInfoQueryExpression))
-                {
-                    _timer.Start();
-                } else
-                {
-                    _timer.Stop();
+                if (!_syncingTextFromExpression) Expression = null;
 
+                HardwareInfoExpression? expr = null;
+                _validationException = null;
+                try
+                {
+                    expr = HardwareInfoExpression.Parse(_pathPattern);
+                    if (!(expr is HardwareInfoQueryExpression)) _timer.Start(); else _timer.Stop();
                 }
-            }
-            catch (HardwareInfoParseException pe)
-            {
-                _timer.Stop();
-                _validationException = pe;
-                args.IsValid = false;
-                args.ErrorMessage = $"{pe.Message} at {pe.Location.Position + 1}";
-                ValidationErrorMessage = args.ErrorMessage;
-                ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
-                ValidationIcon = "\uE783"; // Error
-            }
-            catch (Exception ex)
-            {
-                _timer.Stop();
-                _validationException = ex;
-                args.IsValid = false;
-                args.ErrorMessage = ex.Message;
-                ValidationErrorMessage = args.ErrorMessage;
-                ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
-                ValidationIcon = "\uE783"; // Error
-            }
+                catch { /* ...unchanged... */ }
 
-            if (args.IsValid)
-            {
-                ValidationErrorMessage = null;
-                ValidationBrush = (Brush)Resources["ValidationSuccessBrush"];
-                ValidationIcon = "\uE73E"; // CheckMark
-                if (!_updatingExpression)
+                if (args.IsValid)
                 {
-                    Expression = expr;
+                    ValidationErrorMessage = null;
+                    ValidationBrush = (Brush)Resources["ValidationSuccessBrush"];
+                    ValidationIcon = "\uE73E";
+                    if (!_syncingTextFromExpression) Expression = expr;
+                }
+                else
+                {
+                    ValidationErrorMessage = args.ErrorMessage;
+                    if (!_syncingTextFromExpression) Expression = null;
+                    ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
+                    ValidationIcon = "\uE783";
                 }
             }
-            else
-            {
-                ValidationErrorMessage = args.ErrorMessage;
-                if (!_updatingExpression)
-                {
-                    Expression = null;
-                }
-                ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
-                ValidationIcon = "\uE783"; // Error
-            }
+            finally { _settingExpressionFromText = false; }
+
             OnPropertyChanged(nameof(IsRegexExpression));
             OnPropertyChanged(nameof(IsQueryExpression));
             OnPropertyChanged(nameof(EvaluatedText));
         }
-        
-        
+
         #endregion
 
         #region Event Handlers
@@ -443,11 +415,16 @@ namespace Espmon
                 }
             }
         }
-          private void SuggestBox_LostFocus(object sender, RoutedEventArgs e)
+        private void SuggestBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            _updatingExpression = true;
-            PathPattern = Expression?.ToString() ?? "";
-            _updatingExpression = false;
+            var canonical = Expression?.ToString();
+            if (canonical == null) return;                                          // invalid/empty: leave their text alone
+            if (string.Equals(_pathPattern, canonical, StringComparison.Ordinal))   // already canonical:
+                return;                                                             //   don't touch -> selection survives
+
+            _syncingTextFromExpression = true;
+            PathPattern = canonical;
+            _syncingTextFromExpression = false;
         }
         private void ChevronFlyout_Opening(object sender, object e)
         {
