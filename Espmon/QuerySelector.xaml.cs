@@ -26,7 +26,9 @@ namespace Espmon
         private TextBox? _innerTextBox;
         private string _lastNonEmptySelection = "";
         private DispatcherTimer _timer = new DispatcherTimer();
-
+        private string _liveSelection = "";   // current selection text while it's non-empty
+        private string _recentlyCleared = "";   // what was selected the instant before it emptied
+        private long _recentlyClearedAt = 0;    // when that emptying happened (ms)
 
         public QuerySelector()
         {
@@ -53,8 +55,18 @@ namespace Espmon
             _innerTextBox.ContextFlyout = BuildClipboardFlyout();
             _innerTextBox.SelectionChanged += (s, e) =>
             {
-                if (_innerTextBox.SelectionLength > 0)          // don't overwrite when native cut zeroes it
-                    _lastNonEmptySelection = _innerTextBox.SelectedText;
+                if (_innerTextBox.SelectionLength > 0)
+                {
+                    _liveSelection = _innerTextBox.SelectedText;
+                }
+                else if (_liveSelection.Length > 0)
+                {
+                    // selection just emptied — remember it briefly, with a timestamp,
+                    // so a native cut that deleted it can still grab it this keystroke
+                    _recentlyCleared = _liveSelection;
+                    _recentlyClearedAt = Environment.TickCount64;
+                    _liveSelection = "";
+                }
             };
 
             _innerTextBox.KeyDown += InnerTextBox_KeyDown;       // one subscription, normal bubbling
@@ -149,16 +161,28 @@ namespace Espmon
                         Win32Clipboard.SetText(_innerTextBox.SelectedText);
                     break;
 
+                //case Windows.System.VirtualKey.X:
+                //    // native already deleted the selection by now, so use the cache
+                //    var text = _innerTextBox.SelectionLength > 0
+                //        ? _innerTextBox.SelectedText
+                //        : _lastNonEmptySelection;
+                //    Debug.WriteLine($"[kb] cut text='{text}'");
+                //    if (!string.IsNullOrEmpty(text))
+                //        Win32Clipboard.SetText(text);
+                //    break;
                 case Windows.System.VirtualKey.X:
-                    // native already deleted the selection by now, so use the cache
-                    var text = _innerTextBox.SelectionLength > 0
-                        ? _innerTextBox.SelectedText
-                        : _lastNonEmptySelection;
-                    Debug.WriteLine($"[kb] cut text='{text}'");
-                    if (!string.IsNullOrEmpty(text))
-                        Win32Clipboard.SetText(text);
-                    break;
-
+                    {
+                        string text;
+                        if (_innerTextBox.SelectionLength > 0)
+                            text = _innerTextBox.SelectedText;                      // live selection (handler beat native)
+                        else if (Environment.TickCount64 - _recentlyClearedAt < 100)
+                            text = _recentlyCleared;                                // native cut emptied it just now
+                        else
+                            text = "";                                              // nothing was really selected — skip
+                        if (!string.IsNullOrEmpty(text))
+                            Win32Clipboard.SetText(text);
+                        break;
+                    }
                     // V and A intentionally NOT handled — native paste & select-all work fine.
             }
         }

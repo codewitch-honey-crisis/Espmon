@@ -5,7 +5,6 @@
     </Window.SystemBackdrop>
     <NavigationView x:Name="navView" IsBackButtonVisible="Collapsed" PaneDisplayMode="Left" PaneClosing="navView_PaneClosing" PaneOpening="navView_PaneOpening" DisplayModeChanged="navView_DisplayModeChanged" SelectionChanged="navView_SelectionChanged" ItemInvoked="navView_ItemInvoked">
         <NavigationView.MenuItems>
-            <NavigationViewItem Icon="Home" Content="Dashboard" Tag="dashboard"/>
             <NavigationViewItem Icon="SwitchApps"  Content="Screens" Tag="screens"/>
             <NavigationViewItem Icon="Link" Content="Devices" Tag="devices"/>
             <NavigationViewItem Icon="CalendarDay"  Content="Providers" Tag="providers"/>

@@ -73,7 +73,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <TextBlock Grid.Column="0">Minimum</TextBlock>
                         <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
@@ -101,7 +101,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <TextBlock Grid.Column="0">Minimum</TextBlock>
                         <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
@@ -168,7 +168,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <TextBlock Grid.Column="0">Minimum</TextBlock>
                         <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
@@ -198,7 +198,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0">Maximum</TextBlock>
+                        <TextBlock Grid.Column="0">Minimum</TextBlock>
                         <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
                     </Grid>
                     <Grid>
