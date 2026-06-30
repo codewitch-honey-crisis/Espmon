@@ -71,6 +71,23 @@ public class DeviceController : ControllerBase
     internal JsonObject ToJson()
     {
         if (MacAddress == null) throw new System.InvalidOperationException("Trying to serialize when MAC address is null");
+        if (MacAddress.Length != 6)
+        {
+            throw new System.InvalidOperationException("Trying to serialize when MAC is invalid");
+        }
+        var nonZero = false;
+        for (var i = 0;i<MacAddress.Length;++i)
+        {
+            if (MacAddress[i]!=0)
+            {
+                nonZero = true;
+                break;
+            }
+        }
+        if(!nonZero)
+        {
+            throw new System.InvalidOperationException("Trying to serialize when MAC is zeroed");
+        }
         var json = new JsonObject();
         if (SerialNumbers.Length > 0)
         {

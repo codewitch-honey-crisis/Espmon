@@ -24,4 +24,7 @@
       <Deploy />
    </Project>
    <Project Path="HWKit/HWKit.csproj" />
+   <Project Path="Installer/Installer.csproj" Id="9cc33b7e-fd3d-4895-ad8d-5c2f209cc668">
+      <BuildDependency Project="Espmon/Espmon.csproj" />
+   </Project>
 </Solution>

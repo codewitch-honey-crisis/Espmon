@@ -24,7 +24,6 @@ namespace Espmon
         private Exception? _validationException = null;
         private string _validationIcon = "\uE946"; // Search icon
         private TextBox? _innerTextBox;
-        private string _lastNonEmptySelection = "";
         private DispatcherTimer _timer = new DispatcherTimer();
         private string _liveSelection = "";   // current selection text while it's non-empty
         private string _recentlyCleared = "";   // what was selected the instant before it emptied

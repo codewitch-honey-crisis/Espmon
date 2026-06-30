@@ -528,6 +528,8 @@ internal class LocalSessionController : SessionController
                         {
                             device = new DeviceController(this.Parent, _MacToString(_ident.MacAddress, true));
                             device.SerialNumbers = [SerialNumber];
+                            device.MacAddress = _ident.MacAddress;
+                            device.Screens.Add("(default)");
                             Parent.Devices.Add(device);
                         }
                         else

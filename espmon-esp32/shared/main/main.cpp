@@ -253,8 +253,7 @@ extern "C" void app_main() {
 #ifdef TOUCH_BUS
     panel_touch_init();
 #endif
-
-    esp_base_mac_addr_get(mac_address);
+    esp_read_mac(mac_address, ESP_MAC_EFUSE_FACTORY);
     get_pixel_metrics(LCD_WIDTH,LCD_HEIGHT,INCHES_TO_MM(LCD_INCHES),&pixel_size,&dpi);
     if(!serial_init(INTERFACE_MAX_SIZE)) {
         ESP_LOGE(TAG,"Serial could not be initialized");

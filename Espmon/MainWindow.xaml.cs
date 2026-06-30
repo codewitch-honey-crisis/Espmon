@@ -340,11 +340,13 @@ public sealed partial class MainWindow : Window
             ViewModel.DevicePanelIndex = 0;
         }
     }
-
+    private bool _flashInProgress = false;
     private async void flashButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_flashInProgress) return;
         if(ViewModel!=null && ViewModel.SelectedSession!=null)
         {
+            _flashInProgress = true;
             var session = ViewModel.SelectedSession;
             var idx = flashCombo.SelectedIndex;
             if (idx>-1)
@@ -373,6 +375,7 @@ public sealed partial class MainWindow : Window
             {
                 ViewModel.DevicePanelIndex=2;
             }
+            _flashInProgress = false;
 
         }
     }

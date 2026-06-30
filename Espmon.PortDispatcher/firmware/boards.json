@@ -115,6 +115,21 @@
                 "partitions": 32768,
                 "firmware": 65536
             }
+        },
+        {
+            "name": "Lilygo TTGO T1 Display",
+            "id": 5,
+            "slug": "ttgo-t1",
+            "diagonal_inches": 1.14,
+            "target": "esp32",
+            "defines": [
+                "TTGO_T1"
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
         }
     ]
 }

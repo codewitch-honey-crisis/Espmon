@@ -8,6 +8,62 @@ namespace HWKit
 {
     public sealed class DxgiProvider : HardwareInfoProviderBase
     {
+        const uint MONITOR_DEFAULTTONEAREST = 2;
+        const int ENUM_CURRENT_SETTINGS = -1;
+
+        [DllImport("user32.dll")]
+        static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern bool EnumDisplaySettings(string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode);
+
+        /// <summary>Refresh rate (Hz) of the monitor containing the window. 0 on failure.</summary>
+        public static int GetRefreshRate(IntPtr hwnd)
+        {
+            IntPtr hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+            var mi = new MONITORINFOEX { cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>() };
+            if (!GetMonitorInfo(hMon, ref mi)) return 0;
+
+            var dm = new DEVMODE { dmSize = (ushort)Marshal.SizeOf<DEVMODE>() };
+            if (!EnumDisplaySettings(mi.szDevice, ENUM_CURRENT_SETTINGS, ref dm)) return 0;
+
+            return (int)dm.dmDisplayFrequency;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct RECT { public int left, top, right, bottom; }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct MONITORINFOEX
+        {
+            public uint cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string szDevice;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct DEVMODE
+        {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+            public ushort dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+            public uint dmFields;
+            public int dmPositionX, dmPositionY;
+            public uint dmDisplayOrientation, dmDisplayFixedOutput;
+            public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+            public ushort dmLogPixels;
+            public uint dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+            public uint dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2;
+            public uint dmPanningWidth, dmPanningHeight;
+        }
+
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
 
@@ -32,6 +88,7 @@ namespace HWKit
 
         // Foreground PID tracking — polled on a timer instead of per-event
         volatile int _foregroundPid;
+        volatile float _foregroundRefreshRate = float.NaN;
         Timer? _foregroundPollTimer;
 
         // Frame tracking keyed by (processId, swapChainAddress)
@@ -219,8 +276,8 @@ namespace HWKit
             _processing = true;
 
             // Start polling foreground window every 250ms instead of per-event
-            UpdateForegroundPid(null);
-            _foregroundPollTimer = new Timer(UpdateForegroundPid, null, 0, 250);
+            UpdateForegroundPidAndRefresh(null);
+            _foregroundPollTimer = new Timer(UpdateForegroundPidAndRefresh, null, 0, 250);
 
             // Start primary swap chain selection every 2 seconds
             _primarySelectionTimer = new Timer(SelectPrimarySwapChain, null, 2000, 2000);
@@ -237,6 +294,7 @@ namespace HWKit
 
             // Publish metrics — they read from _activeTracker
             Publish("/framerate", "FPS", () => _activeTracker?.AverageFps ?? 0f);
+            Publish("/refreshrate", "Hz", () => _foregroundRefreshRate);
             Publish("/1pctlows", "FPS", () => _activeTracker?.OnePercentLowFps ?? 0f);
             Publish("/maxrender", "MS", () => _activeTracker?.MaxFrameTimeMs ?? 0f);
             Publish("/minrender", "MS", () => _activeTracker?.MinFrameTimeMs ?? 0f);
@@ -329,7 +387,7 @@ namespace HWKit
         /// <summary>
         /// Polls the foreground window and caches the PID. Called by a timer every 250ms.
         /// </summary>
-        private void UpdateForegroundPid(object? state)
+        private void UpdateForegroundPidAndRefresh(object? state)
         {
             try
             {
@@ -339,12 +397,12 @@ namespace HWKit
                     GetWindowThreadProcessId(hwnd, out int pid);
                     int oldPid = _foregroundPid;
                     _foregroundPid = pid;
-
                     // When the foreground process changes, clear the active tracker
                     // so it gets re-selected for the new process
                     if (pid != oldPid)
                     {
                         _activeTracker = null;
+                        _foregroundRefreshRate = (float)GetRefreshRate(hwnd);
                     }
                 }
             }
@@ -406,6 +464,7 @@ namespace HWKit
             if (!_processing) return;
 
             Revoke("/framerate");
+            Revoke("/refreshrate");
             Revoke("/1pctlows");
             Revoke("/maxrender");
             Revoke("/minrender");
