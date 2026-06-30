@@ -431,3 +431,5 @@ FodyWeavers.xsd
 /espmon-esp32/boards/matouch-parallel-4/build
 /espmon-esp32/boards/matouch-parallel-43/managed_components
 /espmon-esp32/boards/matouch-parallel-43/build
+/espmon-esp32/boards/ttgo-t1/managed_components
+/Espmon.zip
