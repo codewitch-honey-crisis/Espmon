@@ -26,6 +26,7 @@
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="espmon.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -81,6 +82,7 @@
     <!--<WindowsPackageType Condition="'$(Configuration)' != 'Debug'">None</WindowsPackageType>-->
     <!--<WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Debug'">True</WindowsAppSDKSelfContained>-->
     <StartupObject>RealProgram</StartupObject>
+    <ApplicationIcon>..\espmon.ico</ApplicationIcon>
   </PropertyGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-lib.ps1&quot;" />

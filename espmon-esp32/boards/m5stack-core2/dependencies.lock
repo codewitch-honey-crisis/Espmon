@@ -1,0 +1,160 @@
+dependencies:
+  codewitch-honey-crisis/htcw_bits:
+    component_hash: 013f44d33a195db1b80b6cf74329f51cadc7a72e9e3f232cc8671da8090cbb4a
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.17
+  codewitch-honey-crisis/htcw_data:
+    component_hash: ef9ff0e13a36ea9e17ca12a13409d9d12710ba41e050afb4cee2e8e55090df82
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.4.5
+  codewitch-honey-crisis/htcw_esp_lcd_panel_ili9342:
+    component_hash: cecedbd79563d145e43065215ad9217d78ee6d3d3187d6bdbf7e4eb82afae2e7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.2.5
+  codewitch-honey-crisis/htcw_esp_lcd_touch_ft6x36:
+    component_hash: e9de5075c7f0babbe90117cf008a74cc437274072a5918e83998ae471798d31b
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.0.4
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.2
+  codewitch-honey-crisis/htcw_esp_panel:
+    component_hash: ea0d48f3d5467d44ac3d9b5d89c5bf6b86995c5dcf40a449b655efe8d04c8958
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.8.4
+  codewitch-honey-crisis/htcw_frame:
+    component_hash: 6a88d7acc1b534272d6d6dacacd79561c3ff99c4a6edbf96e73b955eabf69009
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.5
+  codewitch-honey-crisis/htcw_gfx:
+    component_hash: 94b5372ea11ce1c74fc4a7b69175356d71324e8248b444c090f0c11c8f037d88
+    dependencies:
+    - name: codewitch-honey-crisis/htcw_data
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.4.5
+    - name: codewitch-honey-crisis/htcw_ml
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.2.9
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.2.17
+  codewitch-honey-crisis/htcw_io:
+    component_hash: 53b400588d9ce6549c80fc96348d71a18bdb3325ee52acbb3240219447e9d841
+    dependencies:
+    - name: codewitch-honey-crisis/htcw_bits
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0.17
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.4.1
+  codewitch-honey-crisis/htcw_m5_stack_core2_power:
+    component_hash: 49f53be7546cc6c4ebce82d614b164931a7b5247b5a26fa6d4290ab482611ecb
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.1.4
+  codewitch-honey-crisis/htcw_ml:
+    component_hash: 7c7514f1a38f9c0fd3697bcaa88b4b2819702499ef3e50f9965cba90319e9800
+    dependencies:
+    - name: codewitch-honey-crisis/htcw_io
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.4.1
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.2.9
+  codewitch-honey-crisis/htcw_uix:
+    component_hash: 58d8559463ba011650d0c653603b929988dc12e7faf59a2902387b6027754b24
+    dependencies:
+    - name: codewitch-honey-crisis/htcw_gfx
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^2.2.17
+    - name: idf
+      require: private
+      version: '>=5.0.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.9.3
+  espressif/esp_lcd_touch:
+    component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.2.1
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+direct_dependencies:
+- codewitch-honey-crisis/htcw_esp_lcd_panel_ili9342
+- codewitch-honey-crisis/htcw_esp_lcd_touch_ft6x36
+- codewitch-honey-crisis/htcw_esp_panel
+- codewitch-honey-crisis/htcw_frame
+- codewitch-honey-crisis/htcw_m5_stack_core2_power
+- codewitch-honey-crisis/htcw_uix
+- idf
+manifest_hash: 59e53d0b1afe330ea9b9de589ddc994ddd367f95dc83313f93e6b0c7a952a85d
+target: esp32
+version: 2.0.0

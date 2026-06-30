@@ -16,6 +16,7 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <PackageIcon>espmon4.jpg</PackageIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\espmon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

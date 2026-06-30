@@ -130,6 +130,35 @@
                 "partitions": 32768,
                 "firmware": 65536
             }
-        }
+        },
+        {
+            "name": "M5 Stack Core2",
+            "id": 6,
+            "slug": "m5stack-core2",
+            "diagonal_inches": 2.0,
+            "target": "esp32",
+            "defines": [
+                "M5STACK_CORE2"
+            ],
+            "dependencies": [
+                 {
+                    "id": "codewitch-honey-crisis/htcw_m5_stack_core2_power",
+                    "version": "^0.1.4"
+                 },
+                 {
+                    "id": "codewitch-honey-crisis/htcw_esp_lcd_touch_ft6x36",
+                    "version": "^0.1.2"
+                },
+                {
+                    "id": "codewitch-honey-crisis/htcw_esp_lcd_panel_ili9342",
+                    "version": "^0.2.5"
+                }
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        }       
     ]
 }
