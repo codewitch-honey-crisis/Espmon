@@ -4,7 +4,7 @@ This is the alpha release.
 
 This is a fully programmable hardware monitor application that can display things like frame rates, and CPU temperatures (if CoreTemp is installed) or other hardware metrics on attached/supported ESP32s.
 
-It currently supports Makerfabs/Matouch ESP Parellel Display models in 3.5, 4 and 4.3 inch models, as well as (untested yet) the Cheap Yellow Display 2432S028
+It currently supports Makerfabs/Matouch ESP Parellel Display models in 3.5, 4 and 4.3 inch models, the Lilygo "TTGO" T1 Display v1.1 as well as (untested yet) the Cheap Yellow Display 2432S028
 
 It allows you to use a programmable query system to collect and transform data, even allowing you to create histories of arbitrary values over a particular time period, so you can for example keep tabs on the hottest your CPU has been over the past hour.
 
