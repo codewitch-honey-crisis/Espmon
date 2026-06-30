@@ -16,13 +16,11 @@ The application allows you to flash the devices straight from the application.
 
 The application also allows your dashboard to be persisted as a service so it's available as soon as windows boots and not dependent on a user running the application explicitly to start the monitoring.
 
-To run, use Espmon-Install.exe to extract to a folder. You can execute Espmon.exe from the extract location
+To run, use Install.exe to extract to a folder. You can execute Espmon.exe from the extract location or have it create shortcuts
 
 To build:
 - you need Visual Studio 2026
 - you need a recent copy of python installed and in your path.
 - You need the ESP-IDF 5.x Installed
-- You need 7-zip installed
-
 
 ![Espmon 4 Firmware](espmon4.jpg)
