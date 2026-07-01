@@ -18,7 +18,13 @@ public sealed class ScreenChangedEventArgs : EventArgs
 public delegate void ScreenChangedEventHandler(object sender, ScreenChangedEventArgs args);
 
 public delegate void ScreenClearedEventHandler(object sender, EventArgs args);
-public delegate void SessionChangedEventHandler(object sender, EventArgs args);
+
+public sealed class SessionStatusChangedEventArgs : EventArgs
+{
+    public SessionController Session { get; }
+    public SessionStatusChangedEventArgs(SessionController session) { Session=session; }
+}
+public delegate void SessionStatusChangedEventHandler(object sender, SessionStatusChangedEventArgs args);
 public sealed class ScreenDataEventArgs : EventArgs
 {
     public int ScreenIndex { get; }
@@ -67,6 +73,7 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     private Timer? _timer = null;
     private int _timerIteration = 0;
+    public event SessionStatusChangedEventHandler? SessionStatusChanged;
     protected abstract IEnumerable<HardwareInfoEntry> OnEvaluate(HardwareInfoExpression expression);
     public IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoExpression expression) 
     {
@@ -389,45 +396,76 @@ public abstract class PortController : ControllerBase, IDisposable
         }
         return null;
     }
+    private sealed class SessionComparer : IComparer<SessionController>
+    {
+        public int Compare(SessionController? x, SessionController? y)
+        {
+            if(x==null)
+            {
+                if(y==null)
+                {
+                    return 0;
+                }
+                return 1;
+            } else if(y==null)
+            {
+                return -1;
+            }
+            if(x.Device==null)
+            { 
+                if(y.Device!=null)
+                {
+                    return 1;
+                } 
+                return string.Compare(x.PortName,y.PortName, StringComparison.Ordinal);
+                
+            }
+            if (y.Device == null)
+            {
+                return -1;
+            }
+            return string.Compare(x.PortName, y.PortName, StringComparison.Ordinal);
+        }
+        public static readonly SessionComparer Default = new SessionComparer();
+    }
+
     public void RefreshSessions()
     {
-        if (IsDisposed) return;
-        if (!IsStarted)
-        {
-            return;
-        }
+        if (IsDisposed || !IsStarted) return;
+
         var sessions = CreateSessions();
-        var toAdd = new List<SessionController>();
-        var toReplace = new Dictionary<int, SessionController>();
-        for(var i = 0;i<sessions.Length;++i)
+        var newSerials = new HashSet<string>(sessions.Select(s => s.SerialNumber));
+        var oldSerials = new HashSet<string>(_sessions.Select(s => s.SerialNumber));
+
+        // Remove sessions that are gone
+        for (var i = _sessions.Count - 1; i >= 0; --i)
         {
-           var newSession = sessions[i];
-           var oldSession = FindSessionBySerial(_sessions,newSession.SerialNumber);
-            if(oldSession==null)
+            if (!newSerials.Contains(_sessions[i].SerialNumber))
             {
-                toAdd.Add(newSession);
+                _sessions[i].PropertyChanged -= Session_PropertyChanged;
+                _sessions.RemoveAt(i);
             }
         }
-        var toRemove = new List<SessionController>();
-        foreach(var oldSession in _sessions)
+
+        // Add sessions that are new
+        foreach (var session in sessions)
         {
-            var newSession = FindSessionBySerial(sessions, oldSession.SerialNumber);
-            if(newSession==null)
+            if (!oldSerials.Contains(session.SerialNumber))
             {
-                toRemove.Add(oldSession);
+                session.PropertyChanged += Session_PropertyChanged;
+                _sessions.Add(session);
             }
         }
-        for(var i = 0;i<toRemove.Count;++i)
-        {
-            _sessions.Remove(toRemove[i]);
-        }
-        toRemove.Clear();
-        for (var i = 0; i < toAdd.Count; ++i)
-        {
-            _sessions.Add(toAdd[i]);
-        }
-        toAdd.Clear();
     }
+
+    private void Session_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if(sender is SessionController session && (e.PropertyName==null || 0==string.CompareOrdinal(e.PropertyName,"Status" )))
+        {
+            SessionStatusChanged?.Invoke(this, new SessionStatusChangedEventArgs(session));
+        }
+    }
+
     private SessionController[] GatherForInterval(int interval)
     {
         var result = new List<SessionController>(_sessions.Count+1);
@@ -477,8 +515,6 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     private void TryConnectSessions()
     {
-        //Console.Error.WriteLine();
-        //Console.Error.WriteLine($"TryConnectSessions() called with {_sessions.Count} sessions");
         for (var i = 0; i < _sessions.Count; ++i)
         {
             var session = _sessions[i];
@@ -488,18 +524,12 @@ public abstract class PortController : ControllerBase, IDisposable
                 {
                     try
                     {
-                        //Console.Error.WriteLine($"Trying to connect {session.PortName}");
                         session.Connect();
                     }
                     catch (Exception)
                     {
                         //Console.Error.WriteLine($"Error trying to connect {session.PortName}: {ex.Message}");
                     }
-                }
-                else
-                {
-                    //Console.Error.WriteLine($"Trying session {session.PortName} status is {session.Status}");
-
                 }
             }
         }
@@ -566,6 +596,7 @@ public abstract class PortController : ControllerBase, IDisposable
                 Devices.Add(devices[i]);
             }
             var sessions = CreateSessions();
+            Array.Sort(sessions, SessionComparer.Default);
             for (var i = 0; i < sessions.Length; ++i)
             {
                 _sessions.Add(sessions[i]);

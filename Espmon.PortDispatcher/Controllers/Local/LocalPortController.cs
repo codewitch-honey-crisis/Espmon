@@ -202,7 +202,7 @@ public class LocalPortController : PortController
     private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (_hooksEnabled && sender is DeviceController device) {
-            if (e.PropertyName == null || e.PropertyName.Equals("Name", StringComparison.Ordinal))
+            if (e.PropertyName == null || e.PropertyName.Equals("Name", StringComparison.Ordinal) || e.PropertyName.Equals("SerialNumbers", StringComparison.Ordinal))
             {
                 TrySaveDevice(device);
             }

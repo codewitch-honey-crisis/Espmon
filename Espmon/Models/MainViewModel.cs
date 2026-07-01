@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
@@ -205,8 +206,16 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
         PortController.Start();
+        PortController.SessionStatusChanged += PortController_SessionStatusChanged;
 
     }
+
+    private void PortController_SessionStatusChanged(object sender, SessionStatusChangedEventArgs args)
+    {
+        Debug.WriteLine("PortController signalled SessionStatusChange");
+        RefreshDevices();
+    }
+
     private ProviderEntry[] GetProviderEntries()
     {
         var result = new ProviderEntry[PortController.Providers.Count];
@@ -545,7 +554,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     _elevator.Dispose();
                 }
                 if(PortController!=null)
-                { 
+                {
+                    PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
                     PortController.Stop();
                     PortController.Dispose();
                 }

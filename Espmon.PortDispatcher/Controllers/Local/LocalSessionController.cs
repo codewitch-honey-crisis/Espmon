@@ -461,7 +461,7 @@ internal class LocalSessionController : SessionController
             var dbgba = _transport.GetNextLogData();
             if (dbgba.Length > 0)
             {
-                var dbgstr = Encoding.UTF8.GetString(dbgba);
+                var dbgstr = System.Text.Encoding.UTF8.GetString(dbgba);
                 Debug.WriteLine(dbgstr);
             }
         }
