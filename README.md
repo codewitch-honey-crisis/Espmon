@@ -23,6 +23,10 @@ The application also allows your dashboard to be persisted as a service so it's 
 
 To run, use Install.exe to extract to a folder. You can execute Espmon.exe from the extract location or have it create shortcuts
 
+Note that installing [Core Temp](https://www.alcpu.com/CoreTemp/) is highly recommended so that this software can read your temperature information. It contains the necessary driver for Windows now that winring0 is no longer viable.
+
+
+
 To build:
 - you need Visual Studio 2026 (C# and C++)
 - you need a recent copy of python installed and in your path.
