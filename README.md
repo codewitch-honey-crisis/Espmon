@@ -27,5 +27,5 @@ To build:
 - you need Visual Studio 2026
 - you need a recent copy of python installed and in your path.
 - You need the ESP-IDF 5.x Installed
-
+![Espmon 4 Application](espmon4app.jpg)
 ![Espmon 4 Firmware](espmon4.jpg)
