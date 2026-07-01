@@ -1,9 +1,12 @@
-﻿using Microsoft.UI.Xaml;
+﻿using Microsoft.UI;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Windowing;
 
 using System;
 using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
 
@@ -25,6 +28,11 @@ public sealed partial class MainWindow : Window
     {
 
         InitializeComponent();
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "espmon.ico");
+        var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
+        var appWindow = AppWindow.GetFromWindowId(windowId);
+        appWindow.SetIcon(iconPath);
         ViewModel = new MainViewModel();
         HideAllSecondaryPanels();
         

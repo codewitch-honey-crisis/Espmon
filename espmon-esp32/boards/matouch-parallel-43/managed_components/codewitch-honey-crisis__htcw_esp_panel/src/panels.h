@@ -883,16 +883,18 @@ st7703_vendor_config_t vendor_config = { \
 #endif // PANEL_DEPENDENCIES
 // BEGIN LCD configuration
 #define LCD_INIT esp_lcd_new_panel_ili9341
-#define LCD_HRES 320
-#define LCD_VRES 240
+#define LCD_HRES 240
+#define LCD_VRES 320
 #define LCD_SPI_HOST SPI_2
 #define LCD_CLOCK_HZ ((uint32_t)(40*(1000*1000)))
+#define LCD_COLOR_SPACE LCD_COLOR_BGR
 #define LCD_PIN_NUM_BCKL 21
 #define LCD_PIN_NUM_MOSI 13
 #define LCD_PIN_NUM_CLK 14
 #define LCD_PIN_NUM_CS 15
 #define LCD_PIN_NUM_DC 2
-#define LCD_MIRROR_Y 1
+#define LCD_MIRROR_Y 0
+#define LCD_SWAP_XY 1
 // END LCD configuration
 
 // BEGIN Touch configuration
