@@ -8,7 +8,7 @@ It currently supports
 
 - Makerfabs/Matouch ESP Parellel Display models in 3.5, 4 and 4.3 inch models
 - Lilygo "TTGO" T1 Display v1.1 
-- (untested yet) the Cheap Yellow Display 2432S028
+- Cheap Yellow Display 2432S028
 - M5 Stack Core2
 
 It allows you to use a programmable query system to collect and transform data, even allowing you to create histories of arbitrary values over a particular time period, so you can for example keep tabs on the hottest your CPU has been over the past hour.
