@@ -24,7 +24,7 @@ The application also allows your dashboard to be persisted as a service so it's 
 To run, use Install.exe to extract to a folder. You can execute Espmon.exe from the extract location or have it create shortcuts
 
 To build:
-- you need Visual Studio 2026
+- you need Visual Studio 2026 (C# and C++)
 - you need a recent copy of python installed and in your path.
 - You need the ESP-IDF 5.x Installed
 ![Espmon 4 Application](espmon4app.jpg)
