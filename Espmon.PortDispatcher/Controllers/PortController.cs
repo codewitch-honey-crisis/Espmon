@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
 
+using static System.Collections.Specialized.BitVector32;
+
 namespace Espmon;
 
 public sealed class ScreenChangedEventArgs : EventArgs
@@ -385,17 +387,7 @@ public abstract class PortController : ControllerBase, IDisposable
     {
     }
     protected abstract void OnStart();
-    private SessionController? FindSessionBySerial(IEnumerable<SessionController> sessions, string serialNumber)
-    {
-        foreach(var session in sessions)
-        {
-            if(session.SerialNumber.Equals(serialNumber,StringComparison.Ordinal))
-            {
-                return session;
-            }
-        }
-        return null;
-    }
+ 
     private sealed class SessionComparer : IComparer<SessionController>
     {
         public int Compare(SessionController? x, SessionController? y)
@@ -443,10 +435,10 @@ public abstract class PortController : ControllerBase, IDisposable
             if (!newSerials.Contains(_sessions[i].SerialNumber))
             {
                 _sessions[i].PropertyChanged -= Session_PropertyChanged;
+               // UpdateSession(_sessions[i]);
                 _sessions.RemoveAt(i);
             }
         }
-
         // Add sessions that are new
         foreach (var session in sessions)
         {
@@ -454,6 +446,7 @@ public abstract class PortController : ControllerBase, IDisposable
             {
                 session.PropertyChanged += Session_PropertyChanged;
                 _sessions.Add(session);
+                UpdateSession(session);
             }
         }
     }
@@ -462,7 +455,7 @@ public abstract class PortController : ControllerBase, IDisposable
     {
         if(sender is SessionController session && (e.PropertyName==null || 0==string.CompareOrdinal(e.PropertyName,"Status" )))
         {
-            SessionStatusChanged?.Invoke(this, new SessionStatusChangedEventArgs(session));
+            UpdateSession(session);
         }
     }
 
@@ -567,6 +560,11 @@ public abstract class PortController : ControllerBase, IDisposable
                 
             });
         }
+    }
+    
+    protected void UpdateSession(SessionController session)
+    {
+        SessionStatusChanged?.Invoke(this, new SessionStatusChangedEventArgs(session));
     }
     public void Start()
     {

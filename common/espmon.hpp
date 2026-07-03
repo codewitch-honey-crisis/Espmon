@@ -532,6 +532,7 @@ class espmon {
     typedef struct {
         char text[12];
         vert_label_t label;
+        label_t hlabel;
         value_entry_t value1;
         value_entry_t value2;
     } screen_entry_t;
@@ -583,6 +584,15 @@ class espmon {
         m_top.label.color(uix_color_t::white);
         m_screen.register_control(m_top.label);
         gfx::srect16 b = m_top.label.bounds();
+        int16_t sh = m_screen.dimensions().height/section_height_divisor;
+        m_top.hlabel.bounds(gfx::srect16(0,m_top.label.bounds().y1,b.x2,sh).inflate(-2,-4));
+        m_top.hlabel.text("---");
+        m_top.hlabel.background_color(uix_color_t::black);
+        m_top.hlabel.color(uix_color_t::white);
+        m_top.hlabel.text_justify(uix::uix_justify::center);
+        m_screen.register_control(m_top.hlabel);
+        m_top.hlabel.visible(sh<=m_top.label.dimensions().width?true:false);
+        m_top.label.visible(!m_top.hlabel.visible());
         gfx::srect16 vb(b.x2+2,b.y1,b.x2+1+(m_screen.dimensions().width/5),b.height()/2+b.y1);
         m_top.value1.label.bounds(vb);
         m_hit_boxes[(size_t)espmon_hit::top_value1]=m_top.value1.label.bounds();
@@ -651,6 +661,16 @@ class espmon {
         m_bottom.value1.label.bounds(m_top.value1.label.bounds().offset(0,m_screen.dimensions().height/section_height_divisor));
         m_hit_boxes[(size_t)espmon_hit::bottom_value1]=m_bottom.value1.label.bounds();
         b = m_top.value2.label.bounds();
+        sh = m_screen.dimensions().height/section_height_divisor;
+        m_bottom.hlabel.bounds(gfx::srect16(0,m_bottom.label.bounds().y1,b.x2,sh).inflate(-2,-4));
+        m_bottom.hlabel.text("---");
+        m_bottom.hlabel.background_color(uix_color_t::black);
+        m_bottom.hlabel.color(uix_color_t::white);
+        m_bottom.hlabel.text_justify(uix::uix_justify::center);
+        m_screen.register_control(m_bottom.hlabel);
+        m_bottom.hlabel.visible(sh<=m_bottom.label.dimensions().width?true:false);
+        m_bottom.label.visible(!m_bottom.hlabel.visible());
+        
         vb=b.offset(0,b.height()+1);
         m_bottom.value1.label.font(m_top.value1.label.font());
         m_bottom.value1.label.color(uix_color_t::white);
@@ -793,7 +813,9 @@ class espmon {
     void set_screen_entry(screen_entry_t& entry, const response_screen_entry_t& rentry) {
         strncpy(entry.text,rentry.label,sizeof(entry.text)-1);
         entry.label.text(entry.text);
+        entry.hlabel.text(entry.text);
         entry.label.color(to_color(rentry.color));
+        entry.hlabel.color(entry.label.color());
     }
 public:
     espmon() {
@@ -843,7 +865,7 @@ public:
         m_display_size = dimensions;
         init_screen();
         m_is_screen_populated=false;
-        m_screen.update_strategy(uix::screen_update_strategy::minimize_paints);
+        m_screen.update_strategy(uix::screen_update_strategy::balanced);
         m_screen.validate_all();
         m_screen.invalidate();
 

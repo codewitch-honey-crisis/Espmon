@@ -455,17 +455,22 @@ internal class LocalSessionController : SessionController
     protected override void OnRefresh()
     {
 #if LOG_SERIAL
-#if DEBUG
         if (_logging)
         {
             var dbgba = _transport.GetNextLogData();
             if (dbgba.Length > 0)
             {
                 var dbgstr = System.Text.Encoding.UTF8.GetString(dbgba);
+                var path = ((LocalPortController)Parent).Path;
+                path = Path.Combine(path, $"{PortName}_log.txt");
+                using(var writer = new StreamWriter(path,true,System.Text.Encoding.UTF8))
+                {
+                    writer.Write(dbgstr);
+                    writer.Close();
+                }
                 Debug.WriteLine(dbgstr);
             }
         }
-#endif
 #endif
         switch (Status)
         {
@@ -524,25 +529,7 @@ internal class LocalSessionController : SessionController
                     else if (_gotIdentTicks != 0 && _ident != null)
                     {
                         var device = Parent.GetDeviceByMac(_ident.MacAddress);
-                        if (device == null)
-                        {
-                            device = new DeviceController(this.Parent, _MacToString(_ident.MacAddress, true));
-                            device.SerialNumbers = [SerialNumber];
-                            device.MacAddress = _ident.MacAddress;
-                            device.Screens.Add("(default)");
-                            Parent.Devices.Add(device);
-                        }
-                        else
-                        {
-                            if(!device.SerialNumbers.Contains(SerialNumber))
-                            {
-                                var sns = new string[device.SerialNumbers.Length + 1];
-                                device.SerialNumbers.CopyTo(sns, 0);
-                                sns[device.SerialNumbers.Length]=SerialNumber;
-                                device.SerialNumbers = sns;
-                            }
-                            Device = device;
-                        }
+                        
                         Id = _ident.ID;
                         VersionMajor = _ident.VersionMajor;
                         VersionMinor = _ident.VersionMinor;
@@ -554,7 +541,33 @@ internal class LocalSessionController : SessionController
                         Dpi = _ident.Dpi;
                         PixelSize = _ident.PixelSize;
                         Input = (DeviceInputType)_ident.InputType;
+                        
+                        if (device == null)
+                        {
+                            device = new DeviceController(this.Parent, _MacToString(_ident.MacAddress, true));
+                            device.SerialNumbers = [SerialNumber];
+                            device.MacAddress = _ident.MacAddress;
+                            device.Screens.Add("(default)");
+                            Device = device;
+                            Parent.Devices.Add(device);
+
+                        }
+                        else
+                        {
+                            if (!device.SerialNumbers.Contains(SerialNumber))
+                            {
+                                var sns = new string[device.SerialNumbers.Length + 1];
+                                device.SerialNumbers.CopyTo(sns, 0);
+                                sns[device.SerialNumbers.Length] = SerialNumber;
+                                device.SerialNumbers = sns;
+                            }
+                            Device = device;
+
+                            
+                        }
                         _ident = null;
+                        Status = SessionStatus.Negotiating;
+                        Status = SessionStatus.Busy;
                         if (GetUpgrade() == FirmwareUpgrade.Required)
                         {
                             //Console.Error.WriteLine($"Negotiation on {PortName} unsuccessful. (Requires flash)");
@@ -573,6 +586,7 @@ internal class LocalSessionController : SessionController
                         _needsFlash = true;
                         Status = SessionStatus.RequiresFlash;
                     }
+                    
                 }
                 break;
         }

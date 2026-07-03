@@ -467,6 +467,9 @@ public sealed partial class MainWindow : Window
         if (entry != null && entry.Session!= null && entry.Session.Device!=null)
         {
             ViewModel.PortController.Devices.Remove(entry.Session.Device);
+            entry.Session.Disconnect();
+            ViewModel.PortController.RefreshSessions();
+            ViewModel.RefreshDevices();
         }
     }
 

@@ -186,7 +186,6 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     PipeFrame.WriteFrame(pipe, (byte)ServiceCommand.AppStart, payload);
                     var res = PipeFrame.ReadFrame(pipe);
                     ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
-                    // TODO: set the screens.
                     loaded = true;
                     Thread.Sleep(100);
                     break;
@@ -212,7 +211,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void PortController_SessionStatusChanged(object sender, SessionStatusChangedEventArgs args)
     {
-        Debug.WriteLine("PortController signalled SessionStatusChange");
+        Debug.WriteLine($"PortController signalled SessionStatusChange for {args.Session.Device?.Name??args.Session.PortName}: {args.Session.Status}");
         RefreshDevices();
     }
 

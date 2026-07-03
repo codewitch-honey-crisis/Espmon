@@ -195,7 +195,15 @@ public class LocalPortController : PortController
                     }
                     catch { }
                 }
-
+                for(var i = 0;i<Sessions.Count;++i)
+                {
+                    var session = Sessions[i];
+                    if(session.Device==device)
+                    {
+                        UpdateSession(session);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -205,6 +213,16 @@ public class LocalPortController : PortController
             if (e.PropertyName == null || e.PropertyName.Equals("Name", StringComparison.Ordinal) || e.PropertyName.Equals("SerialNumbers", StringComparison.Ordinal))
             {
                 TrySaveDevice(device);
+                for (var i = 0; i < Sessions.Count; ++i)
+                {
+                    var session = Sessions[i];
+                    if (session.Device == device)
+                    {
+                        UpdateSession(session);
+                        break;
+                    }
+                }
+
             }
             if(e.PropertyName==null||e.PropertyName.Equals("MacAddress",StringComparison.Ordinal))
             {
@@ -225,6 +243,15 @@ public class LocalPortController : PortController
                     _deviceFilesByMac[Convert.ToHexString(device.MacAddress)]= device;
                 }
                 TrySaveDevice(device);
+                for (var i = 0; i < Sessions.Count; ++i)
+                {
+                    var session = Sessions[i];
+                    if (session.Device == device)
+                    {
+                        UpdateSession(session);
+                        break;
+                    }
+                }
             }
             
         }
@@ -271,6 +298,7 @@ public class LocalPortController : PortController
             device.Screens.CollectionChanged += Device_Screens_CollectionChanged;
             _hookedDevices.Add(device);
         }
+        
         base.OnDeviceAdded(device);
     }
     protected override void OnDeviceRemoved(DeviceController device)
@@ -304,6 +332,15 @@ public class LocalPortController : PortController
             device.Screens.CollectionChanged -= Device_Screens_CollectionChanged;
         }
         base.OnDeviceRemoved(device);
+        for (var i = 0; i < Sessions.Count; ++i)
+        {
+            var session = Sessions[i];
+            if (session.Device == device)
+            {
+                UpdateSession(session);
+                break;
+            }
+        }
     }
     protected override ScreenController[] CreateScreens()
     {

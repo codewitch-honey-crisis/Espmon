@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Data;
 using System.Diagnostics;
 
 namespace Espmon;
@@ -224,7 +225,7 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
     }
     protected virtual void OnStatusChanged()
     {
-
+            
     }
 
     private int _id = -1;

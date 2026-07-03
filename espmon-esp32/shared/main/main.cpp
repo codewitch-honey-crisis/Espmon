@@ -164,10 +164,8 @@ static void process_frame(frame_handle_t frame_handle, uint8_t cmd, void* p, siz
     int res;
     switch(cmd) {
         case CMD_NOP:
-            puts("GOT NOP");
             break;
         case CMD_SCREEN:
-            puts("GOT CMD SCREEN");
             if(-1<response_screen_read(&resp.screen,on_read_buffer,&cur)) {
                 screen_index = resp.screen.header.index;
                 app.accept_packet((command_t)cmd,resp,false);
@@ -209,7 +207,7 @@ static void process_frame(frame_handle_t frame_handle, uint8_t cmd, void* p, siz
             }
             break;
         default:
-            puts("GOT UNKNOWN CMD");
+            puts("UNKNOWN CMD");
             break;
         
     }
@@ -312,7 +310,7 @@ extern "C" void app_main() {
             process_frame(frame_handle2,cmd,p,len);
         }
 #endif
-        app.refresh(false);
+        app.refresh(true);
         
         if(xTaskGetTickCount()>send_ts+pdMS_TO_TICKS(100)) {
             send_ts = xTaskGetTickCount();

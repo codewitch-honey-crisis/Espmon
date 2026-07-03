@@ -17,11 +17,23 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
         ArgumentNullException.ThrowIfNull(session, nameof(session));
         this.Session = session;
         session.PropertyChanged += Session_PropertyChanged;
+        if(session.Device!=null)
+        {
+            session.Device.PropertyChanged += Device_PropertyChanged;
+        }
+    }
+
+    private void Device_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName==null ||  e.PropertyName == "Name")
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+        }
     }
 
     private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if(e.PropertyName =="Status")
+        if(e.PropertyName =="Status" || e.PropertyName==null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOpen)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsClosed)));
