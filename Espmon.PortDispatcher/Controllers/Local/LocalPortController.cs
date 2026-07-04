@@ -189,7 +189,7 @@ public class LocalPortController : PortController
                 {
                     try
                     {
-
+                        
                         File.Delete(oldFile);
 
                     }
@@ -337,6 +337,7 @@ public class LocalPortController : PortController
             var session = Sessions[i];
             if (session.Device == device)
             {
+                session.Device = null;
                 UpdateSession(session);
                 break;
             }

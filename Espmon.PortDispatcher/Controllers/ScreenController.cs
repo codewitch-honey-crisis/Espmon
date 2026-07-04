@@ -8,7 +8,7 @@ public enum ScreenInterval
 {
     Default = Second,
     Second = 1000,
-    HalfSecond = 500,
+    FifthSecond = 200,
     TenthSecond = 100
 }
 public sealed class ScreenController : ControllerBase
@@ -84,7 +84,7 @@ public sealed class ScreenController : ControllerBase
         if(json.TryGetValue("interval",out var interval))
         {
             int iint;
-            if (interval is double d && (d==100||d==500||d==1000))
+            if (interval is double d && (d==100||d==200||d==1000))
             {
                 iint = (int)d;
             }

@@ -13,6 +13,10 @@ internal static class JsonWriter
 			writer.Write("\"");
 			writer.Write(JsonUtility.EscapeString((string)value));
 			writer.Write("\"");
+		} else if((value is byte || value is short || value is int || value is long)||
+            (value is sbyte || value is ushort || value is uint || value is ulong))
+        {
+			writer.Write(value);
 		}
 		else if (value is double)
 		{

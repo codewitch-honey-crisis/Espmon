@@ -100,6 +100,7 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
                 if (!found)
                 {
                     throw new InvalidOperationException("The device has a screen named that doesn't exist");
+                    //return;
                 }
                 UpdateProperties(() => { _screenIndex = si; _screen = scr; }, nameof(ScreenIndex), nameof(Screen));
                 //if (!IsWaitingForScreenChange)

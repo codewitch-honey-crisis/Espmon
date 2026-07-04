@@ -416,7 +416,7 @@ public abstract class PortController : ControllerBase, IDisposable
             {
                 return -1;
             }
-            return string.Compare(x.PortName, y.PortName, StringComparison.Ordinal);
+            return string.Compare(x.Device.Name, y.Device.Name, StringComparison.Ordinal);
         }
         public static readonly SessionComparer Default = new SessionComparer();
     }
@@ -536,28 +536,48 @@ public abstract class PortController : ControllerBase, IDisposable
             cntrl.Post(() =>
             {
                 int iter = cntrl._timerIteration++;
-                RefreshSessions(cntrl.GatherForInterval(0));
+                RefreshSessions(cntrl.GatherForInterval(0)); // both are 10Hz
                 RefreshSessions(cntrl.GatherForInterval(100));
+                if (iter % 2 == 0)
+                    RefreshSessions(cntrl.GatherForInterval(200));   // 5 Hz
+
                 switch (iter % 10)
                 {
                     case 0:
-                        RefreshSessions(cntrl.GatherForInterval(500));
-                        RefreshSessions(cntrl.GatherForInterval(1000));
+                        RefreshSessions(cntrl.GatherForInterval(1000)); // 1 Hz
                         break;
-                    case 4:
-                        RefreshSessions(cntrl.GatherForInterval(500));
-                        break;
-                    case 9:
+                    case 9: // every second try to refresh and connect
                         cntrl.OnRefresh();
                         cntrl.TryConnectSessions();
                         break;
                 }
-                if(iter==49)
+                if (iter == 49) // every 5 seconds try to enum new devices
                 {
                     cntrl._timerIteration = 0;
                     cntrl.RefreshSessions();
                 }
-                
+                //RefreshSessions(cntrl.GatherForInterval(0));
+                //RefreshSessions(cntrl.GatherForInterval(100));
+                //switch (iter % 10)
+                //{
+                //    case 0:
+                //        RefreshSessions(cntrl.GatherForInterval(500)); // wrong
+                //        RefreshSessions(cntrl.GatherForInterval(1000));
+                //        break;
+                //    case 4:
+                //        RefreshSessions(cntrl.GatherForInterval(500)); // wrong
+                //        break;
+                //    case 9:
+                //        cntrl.OnRefresh();
+                //        cntrl.TryConnectSessions();
+                //        break;
+                //}
+                //if (iter == 49)
+                //{
+                //    cntrl._timerIteration = 0;
+                //    cntrl.RefreshSessions();
+                //}
+
             });
         }
     }

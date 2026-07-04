@@ -2,14 +2,28 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
 
 using System.Runtime.Versioning;
+using System;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace Espmon;
 
+public record IntervalOption(string Display, int Milliseconds);
+public static class IntervalOptions
+{
+    public record Option(string Display, int Milliseconds);
+
+    public static Option[] All { get; } =
+    {
+        new("10 Hz", 100),
+        new("5 Hz", 200),
+        new("1 Hz", 1000),
+    };
+}
 [SupportedOSPlatform("windows")]
 public sealed partial class ScreenEditor : UserControl
 {
+ 
     void CollapseAll()
     {
         topLabelEditorPanel.Visibility = Visibility.Collapsed;
@@ -88,33 +102,26 @@ public sealed partial class ScreenEditor : UserControl
     DependencyProperty.Register(
         nameof(Screen),
         typeof(ScreenController),
-        typeof(ScreenView),
-        new PropertyMetadata(null, OnScreenChanged));
+        typeof(ScreenEditor),
+        new PropertyMetadata(null, null));
 
     public ScreenController? Screen
     {
         get => (ScreenController?)GetValue(ScreenProperty);
-        set => SetValue(ScreenProperty, value);
-    }
-
-
-    private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is ScreenEditor editor)
-        {
-            // Unsubscribe from old screen tree
-            if (e.OldValue is ScreenController oldScreen)
+        set {
+            try
             {
-
+                SetValue(ScreenProperty, value);
             }
-
-            //// Subscribe to new screen tree
-            //if (e.NewValue is ScreenController newScreen && editor.Session != null)
-            //{
-            //    editor.Session.Screen = newScreen;
-            //}
+            catch(NullReferenceException) { }
         }
     }
+
+
+    //private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    //{
+        
+    //}
    
     private bool _suppressChange = false;
     private void SetHit(ScreenViewHitType hitType)
