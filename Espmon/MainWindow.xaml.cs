@@ -384,6 +384,7 @@ public sealed partial class MainWindow : Window
                 ViewModel.DevicePanelIndex=2;
             }
             _flashInProgress = false;
+            flashCombo.SelectedIndex = -1;
 
         }
     }

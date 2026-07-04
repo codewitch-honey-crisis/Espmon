@@ -1,105 +1,55 @@
 ﻿using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
 
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 
 namespace HWKit
 {
     public sealed class DxgiProvider : HardwareInfoProviderBase
     {
-        const uint MONITOR_DEFAULTTONEAREST = 2;
-        const int ENUM_CURRENT_SETTINGS = -1;
-
-        [DllImport("user32.dll")]
-        static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        static extern bool EnumDisplaySettings(string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode);
-
-        /// <summary>Refresh rate (Hz) of the monitor containing the window. 0 on failure.</summary>
-        public static int GetRefreshRate(IntPtr hwnd)
-        {
-            IntPtr hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-
-            var mi = new MONITORINFOEX { cbSize = (uint)Marshal.SizeOf<MONITORINFOEX>() };
-            if (!GetMonitorInfo(hMon, ref mi)) return 0;
-
-            var dm = new DEVMODE { dmSize = (ushort)Marshal.SizeOf<DEVMODE>() };
-            if (!EnumDisplaySettings(mi.szDevice, ENUM_CURRENT_SETTINGS, ref dm)) return 0;
-
-            return (int)dm.dmDisplayFrequency;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        struct RECT { public int left, top, right, bottom; }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        struct MONITORINFOEX
-        {
-            public uint cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-            public string szDevice;
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        struct DEVMODE
-        {
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
-            public ushort dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
-            public uint dmFields;
-            public int dmPositionX, dmPositionY;
-            public uint dmDisplayOrientation, dmDisplayFixedOutput;
-            public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
-            public ushort dmLogPixels;
-            public uint dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
-            public uint dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2;
-            public uint dmPanningWidth, dmPanningHeight;
-        }
-
-        [DllImport("user32.dll")]
-        static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
-
         // ETW provider GUIDs
         public static readonly Guid DXGI_provider = Guid.Parse("{CA11C036-0102-4A2D-A6AD-F03CFED5D3C9}");
         public static readonly Guid D3D9_provider = Guid.Parse("{783ACA0A-790E-4D7F-8451-AA850511C6B9}");
-        //public static readonly Guid DxgKrnl_provider = Guid.Parse("{802EC45A-1E99-4B83-9920-87C98277BA9D}");
-        // DXGI event IDs (from the ETW manifest)
+        public static readonly Guid DxgKrnl_provider = Guid.Parse("{802EC45A-1E99-4B83-9920-87C98277BA9D}");
+
+        // DXGI / D3D9 present event IDs (from their ETW manifests) — app-level, carry the game's PID
         public const int EventID_DxgiPresentStart = 42;
         public const int EventID_DxgiPresentStop = 43;
-
-        // D3D9 event IDs
         public const int EventID_D3D9PresentStart = 1;
         public const int EventID_D3D9PresentStop = 2;
+
+        // DxgKrnl event IDs (discovered empirically on this box; stable across the Win10/11 builds we tested).
+        // These are the ONLY DxgKrnl events we enable — everything else is filtered out kernel-side.
+        public const int EventID_VSyncDPC = 17;                 // per-source vsync interrupt DPC → refresh cadence
+        public const int EventID_VSyncDPCMultiPlane = 273;      // MPO variant, identical cadence (fallback)
+        public const int EventID_PresentMultiPlaneOverlay = 251; // carries game PID + VidPnSourceId in fullscreen (iflip)
 
         TraceEventSession? _etwSession;
         Thread? _processThread;
         volatile bool _processing;
 
-        // Foreground PID tracking — polled on a timer instead of per-event
-        volatile int _foregroundPid;
-        volatile float _foregroundRefreshRate = float.NaN;
-        Timer? _foregroundPollTimer;
-
-        // Frame tracking keyed by (processId, swapChainAddress)
-        // This lets us distinguish the game's swap chain from overlay swap chains
+        // Frame tracking keyed by (processId, swapChainAddress).
+        // This lets us distinguish the game's swap chain from overlay swap chains.
         readonly ConcurrentDictionary<(int pid, ulong swapChain), SwapChainTracker> _trackers = new();
 
-        // The "active" tracker that we're reporting metrics from
-        // Updated when we detect which swap chain is the primary one for the foreground process
+        // The "active" tracker we report framerate from, plus its owning PID.
+        // Selection is now purely "busiest presenter across all processes" — no GetForegroundWindow,
+        // so this works identically in a user app and in a Session-0 service.
         volatile SwapChainTracker? _activeTracker;
+        volatile int _activePid;
 
-        // How often to re-evaluate which swap chain is the "primary" one
+        // Refresh-rate side (independent of framerate selection so a DxgKrnl attribution miss
+        // only degrades refresh, never FPS):
+        //   game PID -> VidPnSourceId  (from PresentMultiPlaneOverlay)
+        //   VidPnSourceId -> measured refresh (from VSyncDPC inter-arrival intervals)
+        readonly ConcurrentDictionary<int, int> _pidToSource = new();
+        readonly ConcurrentDictionary<int, VSyncSourceTracker> _vsyncTrackers = new();
+        volatile float _lastRefreshHz;   // last good reading; returned when no live mapping (e.g. composited windowed)
+        volatile int _activeSource = -1;                              // busiest-flipped source, for the fallback
+        readonly ConcurrentDictionary<int, int> _flipRecent = new();  // VidPnSourceId -> recent PMO count
+        // How often to re-evaluate which swap chain is the "primary" one.
         Timer? _primarySelectionTimer;
 
         /// <summary>
@@ -261,6 +211,61 @@ namespace HWKit
             }
         }
 
+        /// <summary>
+        /// Derives a display's refresh rate from the inter-arrival interval of its VSyncDPC events.
+        /// This is the panel's scanout cadence, independent of the app's frame rate, so it reads the
+        /// true Hz whether the game is hitting refresh, capped below it, or stuttering.
+        /// Median (not mean) over a rolling window so an occasional missed/coalesced DPC can't skew it.
+        /// </summary>
+        private sealed class VSyncSourceTracker
+        {
+            const int MaxIntervals = 128;
+            const int MinIntervalsForReading = 8;
+
+            readonly object _lock = new();
+            readonly Queue<double> _intervalsMs = new();
+            double _lastTimestampMs = double.NaN;
+
+            /// <summary>Record a vsync event timestamp (ETW session-relative milliseconds).</summary>
+            public void Record(double timestampMs)
+            {
+                lock (_lock)
+                {
+                    if (!double.IsNaN(_lastTimestampMs))
+                    {
+                        double d = timestampMs - _lastTimestampMs;
+                        // Plausible refresh interval: faster than ~5 Hz, and positive.
+                        // (240 Hz ≈ 4.17 ms, 60 Hz ≈ 16.67 ms; a paused source may drop out entirely,
+                        //  which just means no new intervals rather than a bad one.)
+                        if (d > 0 && d < 200.0)
+                        {
+                            _intervalsMs.Enqueue(d);
+                            while (_intervalsMs.Count > MaxIntervals)
+                                _intervalsMs.Dequeue();
+                        }
+                    }
+                    _lastTimestampMs = timestampMs;
+                }
+            }
+
+            /// <summary>Median-derived refresh in Hz, or 0 if we don't yet have enough samples.</summary>
+            public float RefreshHz
+            {
+                get
+                {
+                    double[] arr;
+                    lock (_lock)
+                    {
+                        if (_intervalsMs.Count < MinIntervalsForReading) return 0f;
+                        arr = _intervalsMs.ToArray();
+                    }
+                    Array.Sort(arr);
+                    double median = arr[arr.Length / 2];
+                    return median > 0 ? (float)(1000.0 / median) : 0f;
+                }
+            }
+        }
+
         public DxgiProvider()
         {
         }
@@ -275,31 +280,51 @@ namespace HWKit
             if (_processing) return;
             _processing = true;
 
-            // Start polling foreground window every 250ms instead of per-event
-            UpdateForegroundPidAndRefresh(null);
-            _foregroundPollTimer = new Timer(UpdateForegroundPidAndRefresh, null, 0, 250);
-
-            // Start primary swap chain selection every 2 seconds
+            // Re-evaluate the primary swap chain every 2 seconds.
             _primarySelectionTimer = new Timer(SelectPrimarySwapChain, null, 2000, 2000);
 
-            // Create and configure the ETW session
+            // Create and configure the ETW session.
             _etwSession = new TraceEventSession(GetIdentifier());
 
-            // Enable DXGI and D3D9 providers
-            _etwSession.EnableProvider("Microsoft-Windows-DXGI");
-            _etwSession.EnableProvider("Microsoft-Windows-D3D9");
-            //_etwSession.EnableProvider("Microsoft-Windows-DXGKrnl");
-            // Wire up the event handler
+            // App-level present providers first, unfiltered. These carry the game's PID and decode
+            // fine through the dynamic path (Source.AllEvents). Enabling these BEFORE the event-ID-filtered
+            // DxgKrnl provider is deliberate: perfview issue #864 shows a session whose FIRST EnableProvider
+            // call uses EventIDsToEnable can receive zero events. Keeping DxgKrnl second avoids that.
+            _etwSession.EnableProvider(DXGI_provider);
+            _etwSession.EnableProvider(D3D9_provider);
+
+            // DxgKrnl, narrowed kernel-side to just the three events we need. Without this filter the
+            // provider is a firehose (scheduler/DMA/paging churn ≈ 98% of the stream); the event-ID filter
+            // drops all of that before it reaches our buffers.
+            var dxgKrnlOptions = new TraceEventProviderOptions
+            {
+                EventIDsToEnable = new List<int>
+                {
+                    EventID_VSyncDPC,
+                    EventID_VSyncDPCMultiPlane,
+                    EventID_PresentMultiPlaneOverlay,
+                }
+            };
+            _etwSession.EnableProvider(DxgKrnl_provider, TraceEventLevel.Verbose, ulong.MaxValue, dxgKrnlOptions);
+
+            // DXGI / D3D9 present events: handled via the dynamic AllEvents path (their payloads resolve there).
             _etwSession.Source.AllEvents += OnEtwEvent;
 
-            // Publish metrics — they read from _activeTracker
+            // DxgKrnl events: their payloads DO NOT resolve through AllEvents — they only decode via the
+            // registered (TDH) parser, which reads the OS-registered manifest. So VSyncDPC / PMO get their
+            // own handler off RegisteredTraceEventParser. Each handler ignores the other's providers, so
+            // there's no double-counting.
+            var registered = new RegisteredTraceEventParser(_etwSession.Source);
+            registered.All += OnDxgKrnlEvent;
+
+            // Publish metrics — they read from the active tracker / refresh mapping.
             Publish("/framerate", "FPS", () => _activeTracker?.AverageFps ?? 0f);
-            Publish("/refreshrate", "Hz", () => _foregroundRefreshRate);
+            Publish("/refreshrate", "Hz", GetActiveRefreshRate);
             Publish("/1pctlows", "FPS", () => _activeTracker?.OnePercentLowFps ?? 0f);
             Publish("/maxrender", "MS", () => _activeTracker?.MaxFrameTimeMs ?? 0f);
             Publish("/minrender", "MS", () => _activeTracker?.MinFrameTimeMs ?? 0f);
 
-            // Process ETW events on a background thread
+            // Process ETW events on a background thread.
             _processThread = new Thread(() =>
             {
                 _etwSession?.Source.Process();
@@ -312,12 +337,16 @@ namespace HWKit
             _processThread.Start();
         }
 
+        /// <summary>
+        /// Handles app-level DXGI / D3D9 PresentStart events for frame timing.
+        /// No longer filtered by foreground PID — every process's presents are tracked, and
+        /// SelectPrimarySwapChain picks the busiest. That's what makes this work in a service.
+        /// </summary>
         private void OnEtwEvent(TraceEvent data)
         {
             int eventId = (int)data.ID;
             var provider = data.ProviderGuid;
 
-            // We only care about PresentStart events for frame counting
             bool isDxgiPresent = eventId == EventID_DxgiPresentStart && provider == DXGI_provider;
             bool isD3d9Present = eventId == EventID_D3D9PresentStart && provider == D3D9_provider;
 
@@ -325,138 +354,163 @@ namespace HWKit
                 return;
 
             int pid = data.ProcessID;
-            int fgPid = _foregroundPid; // read the cached value — no P/Invoke here
 
-            if (pid != fgPid)
-                return;
-
-            // Extract swap chain address from the event payload.
-            // For DXGI PresentStart (event 42), the first payload field is "pIDXGISwapChain" (a pointer).
-            // For D3D9, the payload structure differs but we still want to distinguish swap chains.
+            // Extract swap chain address from the event payload so we can separate the game's
+            // swap chain from overlay swap chains (Steam, Discord, etc.).
             ulong swapChainAddr = 0;
             try
             {
                 if (data.PayloadNames.Length > 0)
                 {
-                    if (isDxgiPresent)
-                    {
-                        // The DXGI PresentStart template "PresentStartArgs" has:
-                        //   pIDXGISwapChain (Pointer), Flags (UInt32), SyncInterval (Int32)
-
-                        swapChainAddr = (ulong)data.PayloadValue(0);
-                    }
-                    else if (isD3d9Present)
-                    {
-                        // D3D9 present — use payload field 0 as swap chain identifier
-                        swapChainAddr = (ulong)data.PayloadValue(0);
-                    }
+                    // DXGI PresentStart (42): payload[0] = pIDXGISwapChain (pointer).
+                    // D3D9 present: payload[0] used as a swap-chain identifier.
+                    swapChainAddr = (ulong)data.PayloadValue(0);
                 }
             }
             catch
             {
-                // If payload extraction fails, fall back to 0 (all presents lumped together)
-                swapChainAddr = 0;
+                swapChainAddr = 0; // fall back to lumping this process's presents together
             }
-
-            // Use the ETW event's QPC timestamp — this is when the Present() was actually called,
-            // not when our handler happened to run. This eliminates the Stopwatch jitter problem.
-            long qpcTimestamp = data.TimeStamp.Ticks; // TraceEvent gives us DateTime ticks
-            // Actually, we need raw QPC. TraceEvent converts to DateTime internally.
-            // data.TimeStampRelativeMSec gives us milliseconds relative to session start,
-            // which is derived from the original QPC. We can convert back, or just use
-            // the relative milliseconds directly for interval computation.
-            // Let's use TimeStampRelativeMSec since it's already in a usable form.
 
             var key = (pid, swapChainAddr);
             var tracker = _trackers.GetOrAdd(key, _ =>
-                new SwapChainTracker(10_000_000) // using DateTime ticks (100ns units) as our "frequency"
+                new SwapChainTracker(10_000_000) // DateTime ticks (100ns units) as the interval "frequency"
             );
 
-            // Use TimeStamp.Ticks as our QPC-equivalent — TraceEvent derives this from the
-            // original ETW QPC timestamp, so intervals computed from it are accurate.
+            // TimeStamp.Ticks is derived from the original ETW QPC, so intervals from it are accurate.
             tracker.RecordPresent(data.TimeStamp.Ticks);
 
-            // If we don't have an active tracker yet and this is from the foreground process,
-            // just use this one immediately (will be refined by the selection timer)
+            // Bootstrap: if nothing is active yet, take this one; the selection timer refines within 2s.
             if (_activeTracker == null)
             {
                 _activeTracker = tracker;
+                _activePid = pid;
             }
         }
 
         /// <summary>
-        /// Polls the foreground window and caches the PID. Called by a timer every 250ms.
+        /// Handles the (event-ID-filtered) DxgKrnl events used for refresh-rate attribution.
         /// </summary>
-        private void UpdateForegroundPidAndRefresh(object? state)
+        private void OnDxgKrnlEvent(TraceEvent data)
+        {
+            if (data.ProviderGuid != DxgKrnl_provider) return;
+
+            int id = (int)data.ID;
+
+            if (id == EventID_PresentMultiPlaneOverlay)
+            {
+                int src = TryGetSource(data);
+                if (src < 0) return;
+
+                // Flip activity per source → lets the fallback find the active display.
+                // Composited: DWM emits these for the game's monitor. iflip: the game does.
+                _flipRecent.AddOrUpdate(src, 1, (_, c) => c + 1);
+
+                int pid = data.ProcessID;
+                if (pid > 4) _pidToSource[pid] = src;   // strict attribution (skip Idle/System)
+            }
+            else if (id == EventID_VSyncDPC || id == EventID_VSyncDPCMultiPlane)
+            {
+                int src = TryGetSource(data);
+                if (src < 0) return;
+
+                var vt = _vsyncTrackers.GetOrAdd(src, _ => new VSyncSourceTracker());
+                vt.Record(data.TimeStampRelativeMSec);
+            }
+        }
+
+        private static int TryGetSource(TraceEvent data)
         {
             try
             {
-                IntPtr hwnd = GetForegroundWindow();
-                if (hwnd != IntPtr.Zero)
-                {
-                    GetWindowThreadProcessId(hwnd, out int pid);
-                    int oldPid = _foregroundPid;
-                    _foregroundPid = pid;
-                    // When the foreground process changes, clear the active tracker
-                    // so it gets re-selected for the new process
-                    if (pid != oldPid)
-                    {
-                        _activeTracker = null;
-                        _foregroundRefreshRate = (float)GetRefreshRate(hwnd);
-                    }
-                }
+                object v = data.PayloadByName("VidPnSourceId");
+                return v == null ? -1 : Convert.ToInt32(v);
             }
             catch
             {
-                // Silently handle if window APIs fail
+                return -1;
             }
         }
 
         /// <summary>
-        /// Picks the "primary" swap chain for the current foreground process.
-        /// The primary is the one with the highest present rate — this filters out
-        /// overlays (Steam, Discord, etc.) which present much less frequently than the game.
+        /// Refresh rate for the monitor the active game is on: active PID -> VidPnSourceId -> measured Hz.
+        /// Returns the last good reading when there's no live mapping (e.g. composited-windowed, where the
+        /// game never carries its own source) rather than a misleading value.
+        /// </summary>
+        private float GetActiveRefreshRate()
+        {
+            // 1. Strict: active game's PID -> its source -> Hz.
+            int pid = _activePid;
+            if (pid != 0
+                && _pidToSource.TryGetValue(pid, out int src)
+                && _vsyncTrackers.TryGetValue(src, out var vt))
+            {
+                float hz = vt.RefreshHz;
+                if (hz > 0f) { _lastRefreshHz = hz; return hz; }
+            }
+
+            // 2. Fallback: busiest-flipped display source. Covers composited games (Fallout 4),
+            //    where the game never carries its own source because DWM owns the flip.
+            int activeSrc = _activeSource;
+            if (activeSrc >= 0 && _vsyncTrackers.TryGetValue(activeSrc, out var vt2))
+            {
+                float hz = vt2.RefreshHz;
+                if (hz > 0f) { _lastRefreshHz = hz; return hz; }
+            }
+
+            // 3. Nothing resolvable yet.
+            return _lastRefreshHz;
+        }
+        /// <summary>
+        /// Picks the "primary" swap chain as the busiest presenter across ALL processes — the game
+        /// out-presents overlays by a wide margin, so this reliably lands on it. Also prunes trackers
+        /// for processes that have gone idle so memory doesn't grow unbounded.
         /// </summary>
         private void SelectPrimarySwapChain(object? state)
         {
-            int fgPid = _foregroundPid;
-            if (fgPid == 0) return;
-
             SwapChainTracker? bestTracker = null;
+            int bestPid = 0;
             int bestCount = 0;
 
-            // Also clean up trackers for processes that are no longer foreground
-            var keysToRemove = new List<(int pid, ulong swapChain)>();
+            var idle = new List<(int pid, ulong swapChain)>();
 
             foreach (var kvp in _trackers)
             {
                 int count = kvp.Value.ConsumeRecentPresentCount();
 
-                if (kvp.Key.pid == fgPid)
+                if (count == 0)
                 {
-                    if (count > bestCount)
-                    {
-                        bestCount = count;
-                        bestTracker = kvp.Value;
-                    }
+                    idle.Add(kvp.Key); // no presents this interval — candidate for cleanup
+                    continue;
                 }
-                else
+
+                if (count > bestCount)
                 {
-                    // This tracker is for a non-foreground process — mark for cleanup
-                    keysToRemove.Add(kvp.Key);
+                    bestCount = count;
+                    bestTracker = kvp.Value;
+                    bestPid = kvp.Key.pid;
                 }
             }
 
-            // Clean up stale trackers to avoid unbounded memory growth
-            foreach (var key in keysToRemove)
+            // Remove idle trackers, but keep the currently active one so a brief pause
+            // (loading screen, menu) doesn't blow away its accumulated frame history.
+            foreach (var key in idle)
             {
-                _trackers.TryRemove(key, out _);
+                if (_trackers.TryGetValue(key, out var t) && !ReferenceEquals(t, _activeTracker))
+                    _trackers.TryRemove(key, out _);
             }
 
             if (bestTracker != null)
             {
                 _activeTracker = bestTracker;
+                _activePid = bestPid;
             }
+            // Busiest-flipped source for the refresh fallback, then reset the window.
+            int bestSrc = -1, bestSrcCount = 0;
+            foreach (var kvp in _flipRecent)
+                if (kvp.Value > bestSrcCount) { bestSrcCount = kvp.Value; bestSrc = kvp.Key; }
+            if (bestSrc >= 0) _activeSource = bestSrc;
+            _flipRecent.Clear();
         }
 
         protected override void OnStop()
@@ -469,9 +523,6 @@ namespace HWKit
             Revoke("/maxrender");
             Revoke("/minrender");
 
-            _foregroundPollTimer?.Dispose();
-            _foregroundPollTimer = null;
-
             _primarySelectionTimer?.Dispose();
             _primarySelectionTimer = null;
 
@@ -483,6 +534,13 @@ namespace HWKit
 
             _trackers.Clear();
             _activeTracker = null;
+            _activePid = 0;
+
+            _pidToSource.Clear();
+            _vsyncTrackers.Clear();
+            _lastRefreshHz = 0f;
+            _flipRecent.Clear();
+            _activeSource = -1;
         }
 
         protected override string GetIdentifier()
@@ -494,9 +552,10 @@ namespace HWKit
         {
             return "DirectX Info Provider";
         }
+
         protected override string GetDescription()
         {
-            return "Provides frame rate information for the current foreground app using DXGI";
+            return "Provides frame rate and refresh rate for the active app using DXGI + DxgKrnl (ETW).";
         }
     }
 }
