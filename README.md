@@ -1,7 +1,5 @@
 # Espmon 4
 
-This is the alpha release.
-
 This is a fully programmable hardware monitor application that can display things like frame rates, and CPU temperatures (if CoreTemp is installed) or other hardware metrics on attached/supported ESP32s.
 
 It currently supports 
