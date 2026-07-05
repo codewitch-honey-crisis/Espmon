@@ -447,6 +447,13 @@ public class LocalPortController : PortController
         if (_hooksEnabled && sender is ScreenValueController screenValue && screenValue.Parent != null && screenValue.Parent.Parent!=null)
         {
             TrySaveScreen(screenValue.Parent.Parent);
+            foreach (var session in Sessions)
+            {
+                if (session.Screen == screenValue.Parent.Parent)
+                {
+                    session.ForceScreenIndex(session.ScreenIndex);
+                }
+            }
         }
     }
 
@@ -455,6 +462,13 @@ public class LocalPortController : PortController
         if (_hooksEnabled && sender is ScreenValuesController screenValues && screenValues.Parent!=null)
         {
             TrySaveScreen(screenValues.Parent);
+            foreach (var session in Sessions)
+            {
+                if (session.Screen == screenValues.Parent)
+                {
+                    session.ForceScreenIndex(session.ScreenIndex);
+                }
+            }
         }
     }
     private bool TrySaveDevice(DeviceController device)
@@ -520,11 +534,11 @@ public class LocalPortController : PortController
                                 catch { }
                             }
                         }
-                        foreach(var dev in Devices)
+                        foreach (var dev in Devices)
                         {
-                            for(var i = 0;i<dev.Screens.Count;++i)
+                            for (var i = 0; i < dev.Screens.Count; ++i)
                             {
-                                if(dev.Screens[i].Equals(kvp.Key,StringComparison.OrdinalIgnoreCase)) 
+                                if (dev.Screens[i].Equals(kvp.Key, StringComparison.OrdinalIgnoreCase))
                                 {
                                     dev.Screens[i] = screen.Name;
                                     TrySaveDevice(dev);
@@ -535,14 +549,22 @@ public class LocalPortController : PortController
                         break;
                     }
                 }
-                if (oldName != null) {
+                if (oldName != null)
+                {
                     _screenFiles.Remove(oldName);
                     _screenFiles[screen.Name] = screen;
                 }
             }
             TrySaveScreen(screen);
+
+            foreach (var session in Sessions)
+            {
+                if (session.Screen == screen)
+                {
+                    session.ForceScreenIndex(session.ScreenIndex);
+                }
+            }
         }
-        
     }
     protected override void OnScreenAdded(ScreenController screen)
     {
