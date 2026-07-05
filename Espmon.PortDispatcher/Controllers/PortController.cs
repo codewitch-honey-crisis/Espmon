@@ -461,40 +461,39 @@ public abstract class PortController : ControllerBase, IDisposable
 
     private SessionController[] GatherForInterval(int interval)
     {
-        var result = new List<SessionController>(_sessions.Count+1);
+        var result = new List<SessionController>(_sessions.Count + 1);
         for (var i = 0; i < _sessions.Count; ++i)
         {
             var session = _sessions[i];
-            bool added = false;
-            if (session.Device != null)
+            if (session.Device != null && session.ScreenIndex>-1)
             {
-                if (session.ScreenIndex > -1)
+                var scr = session.Screen;
+                if (scr != null)
                 {
-                    var scr = session.Screen;
-                    if (scr != null)
+                    if (((int)scr.Interval) == interval)
                     {
-                        if(((int)scr.Interval)==interval)
-                        {
-                            result.Add(session);
-                            added = true;
-                        }
-                    } 
-                } 
+                        result.Add(session);
+                    }
+                }
+                
             }
-            if (!added)
+            else if (interval == 0)
             {
                 result.Add(session);
             }
+
         }
-        if(ViewSession.Device!=null && ViewSession.Screen!=null)
+        if (ViewSession.Device != null && ViewSession.Screen != null)
         {
-            if(((int)ViewSession.Screen.Interval)==interval)
+            if (((int)ViewSession.Screen.Interval) == interval)
             {
                 result.Add(ViewSession);
             }
         }
         return result.ToArray();
     }
+
+       
     private static void RefreshSessions(SessionController[] sessions)
     {
         for (var i = 0; i < sessions.Length; ++i)

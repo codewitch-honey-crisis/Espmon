@@ -20,7 +20,9 @@
           ItemsSource="{x:Bind local:IntervalOptions.All}"
           DisplayMemberPath="Display"
           SelectedValuePath="Milliseconds"
-          SelectedValue="{x:Bind Screen.Interval, Mode=TwoWay}" />
+          SelectedValue="{x:Bind Screen.Interval, Mode=TwoWay}" 
+          Loaded="ComboBox_Loaded"
+                              />
                 </Grid>
                 <StackPanel x:Name="screenPartPanel" Spacing="16">
                     <ComboBox x:Name="screenPartComboBox" Header="Screen Part:" 
@@ -64,7 +66,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1QuerySelector" Expression="{x:Bind Screen.Top.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1QuerySelector" Expression="{x:Bind Screen.Top.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -75,7 +77,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2QuerySelector" Expression="{x:Bind Screen.Top.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2QuerySelector" Expression="{x:Bind Screen.Top.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -86,7 +88,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Minimum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -94,7 +96,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -114,7 +116,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Minimum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMinQuerySelector" Expression="{x:Bind Screen.Top.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"  Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -122,7 +124,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="topValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Top.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -159,7 +161,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1QuerySelector" Expression="{x:Bind Screen.Bottom.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1QuerySelector" Expression="{x:Bind Screen.Bottom.Value1.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -170,7 +172,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Value</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2QuerySelector" Expression="{x:Bind Screen.Bottom.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2QuerySelector" Expression="{x:Bind Screen.Bottom.Value2.ValueExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                 </StackPanel>
 
@@ -181,7 +183,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Minimum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -189,7 +191,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue1BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value1.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -211,7 +213,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Minimum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMinQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MinExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -219,7 +221,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0">Maximum</TextBlock>
-                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}"/>
+                        <local:QuerySelector Grid.Column="1" x:Name="bottomValue2BarMaxQuerySelector" Expression="{x:Bind Screen.Bottom.Value2.MaxExpression, Mode=TwoWay}" Session="{x:Bind Session,Mode=OneWay}" Interval="{x:Bind Screen.Interval,Mode=TwoWay}"/>
                     </Grid>
                     <Grid>
                         <Grid.ColumnDefinitions>

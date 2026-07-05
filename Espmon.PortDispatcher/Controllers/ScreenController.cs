@@ -4,13 +4,7 @@ using System.Text;
 
 namespace Espmon;
 
-public enum ScreenInterval
-{
-    Default = Second,
-    Second = 1000,
-    FifthSecond = 200,
-    TenthSecond = 100
-}
+
 public sealed class ScreenController : ControllerBase
 {
     public PortController Parent { get; }
@@ -42,8 +36,8 @@ public sealed class ScreenController : ControllerBase
             }
         }
     }
-    private ScreenInterval _interval = ScreenInterval.Default;
-    public ScreenInterval Interval
+    private int _interval = 1000;
+    public int Interval
     {
         get { return _interval; }
         set
@@ -92,7 +86,7 @@ public sealed class ScreenController : ControllerBase
             {
                 throw new ScreenParseException($"Invalid interval value: {interval}", 0, 0, 0);
             }
-            result.Interval = (ScreenInterval)iint;
+            result.Interval = iint;
         }
         if (json.TryGetValue("top", out var top))
         {
@@ -132,9 +126,9 @@ public sealed class ScreenController : ControllerBase
         if (Top == null) throw new System.InvalidOperationException("Trying to serialize when Top is null");
         if (Bottom == null) throw new System.InvalidOperationException("Trying to serialize when Bottom is null");
         var json = new JsonObject();
-        if(_interval!=ScreenInterval.Default)
+        if(_interval!=1000)
         {
-            json.Add("interval", (int)_interval);
+            json.Add("interval", _interval);
         }
         json.Add("top", Top.ToJson());
         json.Add("bottom", Bottom.ToJson());

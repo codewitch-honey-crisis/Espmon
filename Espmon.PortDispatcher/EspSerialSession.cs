@@ -167,10 +167,14 @@ internal partial class EspSerialSession : IDisposable
     SynchronizationContext? _sync;
     Task? _readTask, _statTask;
     IntPtr _powerNotifyHandle;
+    readonly byte[] _rx = new byte[4096];
+    int _rxHead;   // next unread byte in _rx
+    int _rxTail;   // number of valid bytes in _rx
     DeviceNotifyCallbackRoutine? _powerCallback; // kept rooted: native code holds a pointer to it
     public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
     public event EventHandler<FrameReceivedEventArgs>? FrameError;
+    
     public static PortEntry[] GetPorts()
     {
         var result = new List<PortEntry>();
@@ -414,14 +418,21 @@ internal partial class EspSerialSession : IDisposable
 
     private async Task ReadExactlyAsync(byte[] buffer, int count)
     {
-        int offset = 0;
-        while (offset < count)
+        int got = 0;
+        while (got < count)
         {
-            int n = await ReadAsync(buffer, offset, count - offset);
-            offset += n;
+            if (_rxHead >= _rxTail)                       // buffer drained
+            {
+                _rxTail = await ReadAsync(_rx, 0, _rx.Length); // one real overlapped read
+                _rxHead = 0;
+                if (_rxTail == 0) continue;               // spurious return; pend again
+            }
+            int n = Math.Min(_rxTail - _rxHead, count - got);
+            Buffer.BlockCopy(_rx, _rxHead, buffer, got, n);
+            _rxHead += n;
+            got += n;
         }
     }
-
     /// <summary>
     /// Overlapped WaitCommEvent via IOCP.
     /// WaitCommEvent writes the event mask to an int — we pin it via GCHandle
@@ -523,7 +534,16 @@ internal partial class EspSerialSession : IDisposable
         {
             throw new Win32Exception(Marshal.GetLastWin32Error());
         }
-
+        var timeouts = new COMMTIMEOUTS
+        {
+            ReadIntervalTimeout = 10, // ms gap between bytes after which the read returns its burst
+            ReadTotalTimeoutMultiplier = 0,
+            ReadTotalTimeoutConstant = 0,  // 0 total => pend (0 CPU) until the FIRST byte, no overall timeout
+            WriteTotalTimeoutMultiplier = 0,
+            WriteTotalTimeoutConstant = 0,
+        };
+        if (!SetCommTimeouts(_handle, ref timeouts))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
         RegisterPowerNotification();
 
         _statTask = Task.Factory.StartNew(async () =>
@@ -828,6 +848,19 @@ internal partial class EspSerialSession : IDisposable
         int dwInQueue,  // size of input buffer 
         int dwOutQueue  // size of output buffer
         );
+    [StructLayout(LayoutKind.Sequential)]
+    private struct COMMTIMEOUTS
+    {
+        public uint ReadIntervalTimeout;
+        public uint ReadTotalTimeoutMultiplier;
+        public uint ReadTotalTimeoutConstant;
+        public uint WriteTotalTimeoutMultiplier;
+        public uint WriteTotalTimeoutConstant;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetCommTimeouts(SafeFileHandle hFile, ref COMMTIMEOUTS lpCommTimeouts);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern unsafe bool WaitCommEvent(
         SafeFileHandle hFile,

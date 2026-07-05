@@ -109,11 +109,14 @@ public sealed partial class ScreenEditor : UserControl
     {
         get => (ScreenController?)GetValue(ScreenProperty);
         set {
+            // fails with a null ref even if value is non-null on initial set
             try
             {
                 SetValue(ScreenProperty, value);
             }
-            catch(NullReferenceException) { }
+            catch(NullReferenceException) { 
+                throw;
+            }
         }
     }
 
@@ -175,6 +178,17 @@ public sealed partial class ScreenEditor : UserControl
         if(!_suppressChange && screenPartComboBox.SelectedIndex!=-1)
         {
             SetHit((ScreenViewHitType)(screenPartComboBox.SelectedIndex-1));
+        }
+    }
+
+    private void ComboBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        var cb = (ComboBox)sender;
+        if (cb.SelectedIndex == -1 && cb.SelectedValue != null)
+        {
+            var v = cb.SelectedValue;
+            //cb.SelectedValue = null;   // clear the un-resolved state
+            cb.SelectedValue = v;      // re-apply now that items are realized
         }
     }
 }

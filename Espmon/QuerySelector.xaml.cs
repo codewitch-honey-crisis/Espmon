@@ -12,8 +12,10 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using HWKit;
 using System.Diagnostics;
+using System.Runtime.Versioning;
 namespace Espmon
 {
+    [SupportedOSPlatform("windows")]
     public sealed partial class QuerySelector : UserControl, INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -28,7 +30,9 @@ namespace Espmon
         private string _liveSelection = "";   // current selection text while it's non-empty
         private string _recentlyCleared = "";   // what was selected the instant before it emptied
         private long _recentlyClearedAt = 0;    // when that emptying happened (ms)
-
+                                                // Snapshot from the last genuine evaluation. Every read-only surface below serves
+                                                // from this; only RerunQuery() ever calls Run() to refresh it.
+        private IList<HardwareInfoEntry> _results = Array.Empty<HardwareInfoEntry>();
         public QuerySelector()
         {
             this.InitializeComponent();
@@ -37,7 +41,7 @@ namespace Espmon
             _validationBrush = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
             ;
             // in the constructor, alongside this.Loaded:
-            this.Loaded += (s, e) => { EnsureInnerTextBox(); _timer.Interval = TimeSpan.FromMilliseconds(100); };
+            this.Loaded += (s, e) => { EnsureInnerTextBox(); _timer.Interval = TimeSpan.FromMilliseconds(1000); };
             SuggestBox.GotFocus += (s, e) => EnsureInnerTextBox();   // fallback if Loaded was too early
         }
         private void EnsureInnerTextBox()
@@ -144,7 +148,6 @@ namespace Espmon
             _innerTextBox.SelectionLength = 0;
             _innerTextBox.Focus(FocusState.Programmatic);
         }
-
         private void InnerTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
             bool ctrl = Microsoft.UI.Input.InputKeyboardSource
@@ -210,7 +213,7 @@ namespace Espmon
         {
             if (d is QuerySelector control)
             {
-                control.RerunQuery();
+                //control.RerunQuery();
 
                 // Push canonical text into the box ONLY on external changes (screen/session
                 // switch). Never while the user is typing — that's what blanked the box.
@@ -249,7 +252,7 @@ namespace Espmon
                     oldCtrl.PropertyChanged -= control.Session_PropertyChanged;
                 }
                 ctrl.PropertyChanged += control.Session_PropertyChanged;
-                control.RerunQuery();
+                //control.RerunQuery();
 
             }
         }
@@ -372,12 +375,18 @@ namespace Espmon
                 {
                     // TODO: Display the error
                 }
+            } else if(Expression!=null)
+            {
+                return Session.Parent.Evaluate(Expression);
             }
             return Array.Empty<HardwareInfoEntry>();
         }
-        public IList<HardwareInfoEntry>? Matches => Run().Take(50).ToLazyList().ToObservableList();
-        public IList<string>? MatchingPaths => Run().Take(50).Select(p =>$"{p.Path??"(n/a)"} => {FloatToString(p.Value)}{p.Unit}").ToLazyList().ToObservableList();
+        public IList<HardwareInfoEntry>? Matches => _results.ToObservableList();
 
+        public IList<string>? MatchingPaths => _results
+            .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
+            .ToLazyList()
+            .ToObservableList();
         public Brush ValidationBrush
         {
             get => _validationBrush;
@@ -385,6 +394,28 @@ namespace Espmon
             {
                 _validationBrush = value;
                 OnPropertyChanged(nameof(ValidationBrush));
+            }
+        }
+
+        public static readonly DependencyProperty IntervalProperty =
+    DependencyProperty.Register(
+        nameof(Interval),
+        typeof(int),
+        typeof(QuerySelector),
+        new PropertyMetadata(1000, OnIntervalChanged));
+        public int Interval
+        {
+            get => (int)GetValue(IntervalProperty);
+            set
+            {
+                SetValue(IntervalProperty, value);
+            }
+        }
+        private static void OnIntervalChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is QuerySelector control)
+            {
+                control._timer.Interval = TimeSpan.FromMilliseconds((int)e.NewValue);
             }
         }
         public string? ValidationErrorMessage
@@ -410,10 +441,7 @@ namespace Espmon
             }
         }
 
-        public string MatchCountText
-        {
-            get => Matches==null?"n/a":Matches.Count>=50?"50+":Matches.Count.ToString();
-        }
+        public string MatchCountText => _results.Count >= 50 ? "50+" : _results.Count.ToString();
         private static string FloatToString(float value)
         {
             if (float.IsNaN(value)) return "NaN";
@@ -440,9 +468,15 @@ namespace Espmon
                 return IsQueryExpression ? Visibility.Visible : Visibility.Collapsed;
             }
         }
-       
+
         void RerunQuery()
         {
+            // The one and only place Run() genuinely executes. Evaluate + cap + materialize
+            // once, cache the snapshot, then notify. The getters above never call Run(),
+            // so binding re-reads are free.
+            _results = Run().Take(50).ToList();
+
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Matches)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchingPaths)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchCountText)));
         }
@@ -464,12 +498,12 @@ namespace Espmon
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsQueryExpression)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRegexExpression)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchVisibility)));
-                RerunQuery();
+                //RerunQuery();
                 return;
             }
 
             ValidatePattern();
-            RerunQuery();
+        //    RerunQuery();
         }
 
         private void ValidatePattern()

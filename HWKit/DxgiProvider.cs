@@ -4,6 +4,7 @@ using Microsoft.Diagnostics.Tracing.Session;
 
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace HWKit
 {
@@ -25,6 +26,7 @@ namespace HWKit
         public const int EventID_VSyncDPC = 17;                 // per-source vsync interrupt DPC → refresh cadence
         public const int EventID_VSyncDPCMultiPlane = 273;      // MPO variant, identical cadence (fallback)
         public const int EventID_PresentMultiPlaneOverlay = 251; // carries game PID + VidPnSourceId in fullscreen (iflip)
+        private const ulong DxgKrnlVsyncPresentKeywords = 0x4000000008000001UL;
 
         TraceEventSession? _etwSession;
         Thread? _processThread;
@@ -274,7 +276,7 @@ namespace HWKit
         {
             return _processing ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
         }
-
+        
         protected override void OnStart()
         {
             if (_processing) return;
@@ -305,7 +307,7 @@ namespace HWKit
                     EventID_PresentMultiPlaneOverlay,
                 }
             };
-            _etwSession.EnableProvider(DxgKrnl_provider, TraceEventLevel.Verbose, ulong.MaxValue, dxgKrnlOptions);
+            _etwSession.EnableProvider(DxgKrnl_provider, TraceEventLevel.Verbose,long.MaxValue, dxgKrnlOptions);
 
             // DXGI / D3D9 present events: handled via the dynamic AllEvents path (their payloads resolve there).
             _etwSession.Source.AllEvents += OnEtwEvent;
@@ -394,9 +396,12 @@ namespace HWKit
         private void OnDxgKrnlEvent(TraceEvent data)
         {
             if (data.ProviderGuid != DxgKrnl_provider) return;
-
+            
             int id = (int)data.ID;
-
+            //if (id == EventID_PresentMultiPlaneOverlay)
+            //{
+            //    Debug.WriteLine($"Observed id = {id}, kewords are {((ulong)data.Keywords).ToString("X")}");
+            //}
             if (id == EventID_PresentMultiPlaneOverlay)
             {
                 int src = TryGetSource(data);
@@ -417,6 +422,7 @@ namespace HWKit
                 var vt = _vsyncTrackers.GetOrAdd(src, _ => new VSyncSourceTracker());
                 vt.Record(data.TimeStampRelativeMSec);
             }
+
         }
 
         private static int TryGetSource(TraceEvent data)
