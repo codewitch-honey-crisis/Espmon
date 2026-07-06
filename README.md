@@ -256,11 +256,6 @@ round(avg('^/.+/gpu/[0-9]+/load$'))
 
 ## 8. Quirks worth knowing
 
-These are things I noticed reading the parser/evaluator — a couple look like genuine bugs, so
-verify against your build rather than trusting them:
-
-- **`|` is a set-union, not a plain concatenation.** It's implemented with a set-union
-  operation, which I believe can drop duplicate entries rather than keeping every element. 
 - **`*` and `/` always erase units** — even when both sides share one. If you need a unit on a
   scaled value, re-tag it with a unit suffix on the outside, e.g. `(x / 100)%`.
 - **No variables, no unary negation of expressions.** Names are only function names; `-` only

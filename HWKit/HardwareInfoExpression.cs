@@ -1454,7 +1454,7 @@ namespace HWKit
         public override IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo)
         {
             // we want it to throw if either is null
-            return Left.Evaluate(hardwareInfo).Union(Right.Evaluate(hardwareInfo));
+            return Left.Evaluate(hardwareInfo).Concat(Right.Evaluate(hardwareInfo));
         }
         public override bool Equals(HardwareInfoExpression? other)
         {
