@@ -1196,7 +1196,7 @@ namespace HWKit
                 }
                 else
                 {
-                    yield return new HardwareInfoEntry(null, () => value.Value + right.Value, "", object.ReferenceEquals(value.Provider, right.Provider) ? value.Provider : null);
+                    yield return new HardwareInfoEntry(null, () => value.Value - right.Value, "", object.ReferenceEquals(value.Provider, right.Provider) ? value.Provider : null);
                 }
             }
         }

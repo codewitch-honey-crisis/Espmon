@@ -30,7 +30,7 @@ dependencies:
       type: service
     version: 0.8.5
   codewitch-honey-crisis/htcw_frame:
-    component_hash: 6a88d7acc1b534272d6d6dacacd79561c3ff99c4a6edbf96e73b955eabf69009
+    component_hash: 682a3ff513ffa14a9725fd786519307ffdad7152e99ee9c143a87e7dc2f48f85
     dependencies:
     - name: idf
       require: private
@@ -38,7 +38,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 0.1.5
+    version: 0.2.0
   codewitch-honey-crisis/htcw_gfx:
     component_hash: 94b5372ea11ce1c74fc4a7b69175356d71324e8248b444c090f0c11c8f037d88
     dependencies:
@@ -108,6 +108,6 @@ direct_dependencies:
 - codewitch-honey-crisis/htcw_frame
 - codewitch-honey-crisis/htcw_uix
 - idf
-manifest_hash: 326200c881be88f3140b3a13924737454d2ba322a953d38f2b62b557821f14f3
+manifest_hash: eba960f8399bfdbd968eb721ef50b143dae18e3cbc33c357839d1f14aea1154d
 target: esp32
 version: 2.0.0

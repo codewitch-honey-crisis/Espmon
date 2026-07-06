@@ -10,7 +10,7 @@
         },
         {
             "id": "codewitch-honey-crisis/htcw_frame",
-            "version": "^0.1.5"
+            "version": "^0.2.0"
         }
     ],
     "boards": [
@@ -98,7 +98,8 @@
             "diagonal_inches": 2.8,
             "target": "esp32",
             "defines": [
-                "CYD_2432S028"
+                "CYD_2432S028",
+                "LCD_DIVISOR=20"
             ],
             "dependencies": [
                 {

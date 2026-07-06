@@ -55,6 +55,8 @@ If you no longer need the frame handle you can free its resources using `frame_d
 ```cpp
 frame_destroy(frame_handle);
 ```
+Note that there is a zero-allocation creation function called `frame_create_za()` if you'd rather not use the heap.
+
 ```
 ; PlatformIO INI entry
 [env:node32s]

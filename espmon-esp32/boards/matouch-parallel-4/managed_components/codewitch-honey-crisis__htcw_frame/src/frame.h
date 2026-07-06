@@ -6,6 +6,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define FRAME_HEADER_LENGTH (8 + 4 + 4)
+
+/// @brief frame error codes
 enum {
     /// @brief An invalid argument was passed
     FRAME_ERROR_ARG = -5,
@@ -20,10 +24,24 @@ enum {
     /// @brief The operation completed successfully
     FRAME_SUCCESS   =  0
 };
+
 /// @brief The callback used to read a byte from the transport
 typedef int(*frame_read_callback_t)(void* state);
 /// @brief The callback used to write a byte to the transport
 typedef int(*frame_write_callback_t)(uint8_t value, void* state);
+
+// private state
+typedef struct {
+    size_t payload_max_size;
+    frame_read_callback_t read_cb;
+    void* read_state;
+    frame_write_callback_t write_cb;
+    void* write_state;
+    uint8_t* read_buffer;
+    uint8_t start;
+    size_t byte_count;
+} frame_t;
+
 /// @brief A handle to a frame controller
 typedef void* frame_handle_t;
 /// @brief Creates a frame controller
@@ -34,6 +52,22 @@ typedef void* frame_handle_t;
 /// @param on_write_callback_state User defined state to pass to the write callback
 /// @return A frame handle, or NULL on error (out of memory or invalid arg)
 frame_handle_t frame_create(size_t max_payload_size,
+    frame_read_callback_t on_read_callback, void* on_read_callback_state,
+    frame_write_callback_t on_write_callback, void* on_write_callback_state
+);
+/// @brief Creates a frame controller without allocating. The caller supplies the buffer.
+/// @param max_payload_size The maximum size of a payload for a frame. This should be at least the size of the largest message to be received
+/// @param frame_state A caller supplied frame_t structure that is used for bookkeeping by the frame controller. This structure is effectively opaque.
+/// @param frame_read_buffer A caller supplied buffer that exists for the life of the controller. It must be FRAME_HEADER_LENGTH + max_payload_size in length.
+/// @param on_read_callback The read callback used to read a byte from the transport
+/// @param on_read_callback_state User defined state to pass to the read callback
+/// @param on_write_callback The write callback used to write a byte to the transport
+/// @param on_write_callback_state User defined state to pass to the write callback
+/// @return A frame handle, or NULL on error (invalid arg)
+/// @remarks Do not call frame_destroy() on this handle
+frame_handle_t frame_create_za(size_t max_payload_size, 
+    frame_t* in_out_frame_state,
+    void* frame_read_buffer,
     frame_read_callback_t on_read_callback, void* on_read_callback_state,
     frame_write_callback_t on_write_callback, void* on_write_callback_state
 );

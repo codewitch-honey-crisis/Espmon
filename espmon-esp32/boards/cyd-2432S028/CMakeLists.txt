@@ -7,6 +7,7 @@ add_compile_definitions(BUILD_TIMESTAMP_UTC=${BUILD_TIMESTAMP_UTC})
 
 # Board-specific defines
 add_compile_definitions(CYD_2432S028)
+add_compile_definitions(LCD_DIVISOR=20)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

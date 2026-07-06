@@ -3,18 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define FRAME_HEADER_LENGTH (8 + 4 + 4)
-typedef struct {
-    size_t payload_max_size;
-    frame_read_callback_t read_cb;
-    void* read_state;
-    frame_write_callback_t write_cb;
-    void* write_state;
-    uint8_t* read_buffer;
-    uint8_t start;
-    size_t byte_count;
-} frame_t;
-
 static uint32_t crc32(const uint8_t* data, size_t length, uint32_t seed) {
     uint32_t result = seed;
     while (length--) {
@@ -247,6 +235,27 @@ error:
     if (result != NULL) {
         free(result);
     }
+    return NULL;
+}
+frame_handle_t frame_create_za(size_t max_payload_size,
+                            frame_t* in_out_frame_state,
+                            void* frame_read_buffer,
+                            frame_read_callback_t on_read_callback, void* on_read_callback_state,
+                            frame_write_callback_t on_write_callback, void* on_write_callback_state) {
+    if (on_read_callback == NULL || on_write_callback == NULL || in_out_frame_state==NULL || frame_read_buffer==NULL) {
+        goto error;
+    }
+    
+    memset(frame_read_buffer,0,FRAME_HEADER_LENGTH);
+    memset(in_out_frame_state, 0, sizeof(frame_t));
+    in_out_frame_state->read_buffer = frame_read_buffer;
+    in_out_frame_state->payload_max_size = max_payload_size;
+    in_out_frame_state->read_cb = on_read_callback;
+    in_out_frame_state->read_state = on_read_callback_state;
+    in_out_frame_state->write_cb = on_write_callback;
+    in_out_frame_state->write_state = on_write_callback_state;
+    return in_out_frame_state;
+error:
     return NULL;
 }
 void frame_destroy(frame_handle_t handle) {

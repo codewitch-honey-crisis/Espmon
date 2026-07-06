@@ -116,7 +116,8 @@ namespace HWKit
                             @"root\cimv2",
                             "WQL",
                             "SELECT Name, ActualFrequency, PercentProcessorTime FROM Win32_PerfFormattedData_Counters_ProcessorInformation", queryOptions);
-
+                        // using var searcher = new ManagementObjectSearcher(
+                        //"SELECT Name, MaxClockSpeed FROM Win32_Processor");
                         foreach (CimInstance procObj in instances)
                         {
                             var name = (string)procObj.CimInstanceProperties["Name"].Value;

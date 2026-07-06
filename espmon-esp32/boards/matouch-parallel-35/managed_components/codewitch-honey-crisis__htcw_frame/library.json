@@ -1,6 +1,6 @@
 {
     "name": "htcw_frame",
-    "version": "0.1.5",
+    "version": "0.2.0",
     "description": "Provides data transport framing and error checking",
     "keywords": ["transport","io","data","frame"],
     "authors": {

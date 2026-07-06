@@ -31,3 +31,239 @@ To build:
 - You need the ESP-IDF 5.x Installed
 ![Espmon 4 Application](espmon4app.jpg)
 ![Espmon 4 Firmware](espmon4.jpg)
+
+# Hardware Monitor Query Language — Reference
+
+A query is a small expression that selects some hardware sensors and (optionally) crunches
+the numbers. This guide is for people *writing* queries, like the ones in a `.screen.json`
+file.
+
+---
+
+## 1. The one thing to know first
+
+**Every query produces a *list* of values, and every value carries a number plus a unit.**
+
+A regex like `'^/.+/gpu/[0-9]+/temperature$'` might select four GPU temperature sensors, so
+it evaluates to a list of four numbers. Functions like `avg(...)` or `max(...)` boil a list
+down to a single number. Arithmetic (`+`, `-`, `*`, `/`) transforms each number in the list.
+
+So most real queries follow the shape:
+
+```
+reduce( select )        e.g.  avg('^/.+/gpu/[0-9]+/load$')
+```
+
+---
+
+## 2. Selecting sensors
+
+There are two ways to point at sensors.
+
+### Paths — pick one exact sensor
+
+Start with `/` and write the full path. A path runs until the first space or `)`.
+
+```
+/coretemp/cpu/0/core/0/load
+```
+
+### Regex matches — pick a whole set
+
+Wrap a regular expression in single quotes. It's matched against sensor paths, and every
+sensor whose path matches comes back in the list. This is the workhorse for grabbing "all
+cores" or "all GPUs."
+
+```
+'^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'
+```
+
+Notes on the regex flavor:
+
+- **Case-sensitive**, and `^` / `$` anchor the start and end of the whole path.
+- To include a literal single quote inside the pattern, escape it as `\'`.
+- Character classes work as usual: `[a-z]`, `[0-9]`, etc. (A `'` inside `[...]` is treated
+  as a literal, not the end of the pattern.)
+- Capturing groups aren't needed here — you're matching, not extracting — so don't worry
+  about `(...)` behavior.
+
+---
+
+## 3. Numbers
+
+Plain numeric literals, with optional sign, decimals, and exponent:
+
+```
+100      3.14      -5      1e3      2.5e-2
+```
+
+A number is just a one-element list.
+
+> **Heads-up:** a leading `-` only makes a *number* negative. There is no "negate this whole
+> expression" operator — a `-` sitting between two things is always subtraction. So you can
+> write `-5`, but not `-avg(...)`.
+
+---
+
+## 4. Units
+
+Attach a unit by writing letters (or symbols like `%`) right after a value:
+
+```
+90C        100%        avg('^/.+/gpu/[0-9]+/power$')W
+```
+
+A unit is a run of characters that stops at the first digit, space, operator, comma,
+parenthesis, or quote.
+
+**Units are just labels — attaching one does not convert the value.** They do, however,
+affect a few things:
+
+- On `+` / `-`, if both sides share a unit the result keeps it; if they differ, the result's
+  unit is cleared.
+- `avg`, `sum`, `min`, `max` keep the unit only if *all* the inputs agree on one.
+- `past` reads its first argument's unit as a *time unit* (see below).
+
+---
+
+## 5. Functions
+
+All functions are called with parentheses and operate on a list.
+
+| Function | What it does | Result |
+|---|---|---|
+| `count(x)` | how many values are in `x` | single number |
+| `first(x)` | the first value | single value |
+| `last(x)` | the last value | single value |
+| `avg(x)` | average of the values | single number |
+| `sum(x)` | total of the values | single number |
+| `min(x)` | smallest value | single number |
+| `max(x)` | largest value | single number |
+| `round(x)` | round **each** value to a whole number | list (same size) |
+| `round1(x)` | round **each** value to 1 decimal place | list (same size) |
+| `past(period, x)` | look back in time — track `x` over the last `period` | historical list |
+
+A few details:
+
+- `avg / sum / min / max` collapse a list to one number. `round / round1` keep the list the
+  same length, rounding element by element.
+- `round` / `round1` on an *empty* list return `NaN`.
+- Argument counts are checked: too few or too many arguments is an error, and so is a
+  trailing comma like `avg(x,)`.
+- The only names the parser recognizes are the functions above. A bare word that isn't one
+  of them (and isn't followed by `(`) is an error — there are no variables.
+
+### `past` and time units
+
+`past(period, x)` returns the values `x` had over a recent time window. The **first
+argument's unit sets the time scale**:
+
+| Unit you write | Meaning |
+|---|---|
+| `day`, `d` | days |
+| `hr`, `hour`, `h` | hours |
+| `min`, `m`, or **no unit** | minutes (this is the default) |
+| `sec`, `s` | seconds |
+| `milli`, `ms` | milliseconds |
+
+```
+past(5min, avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))
+past(1hr,  max('^/.+/gpu/[0-9]+/temperature$'))
+```
+
+---
+
+## 6. Operators and precedence
+
+Four binary operators, listed from **loosest** to **tightest** binding:
+
+1. `+`  `-`   — add / subtract
+2. `*`  `/`   — multiply / divide
+3. `|`        — union (tightest, and right-associative)
+
+Because `|` binds tightest, `a + b | c` means `a + (b | c)`, and `a + b * c` means
+`a + (b * c)`. Use parentheses whenever you want to be sure.
+
+> The union operator binding *more* tightly than multiply/add is unusual — if a query isn't
+> doing what you expect, this precedence is a good first suspect. Parenthesize freely.
+
+### How arithmetic works (important)
+
+For `+`, `-`, `*`, `/`, the **right-hand side must evaluate to exactly one value.** The
+operation is then applied to *each* value on the left. So the natural pattern is:
+
+```
+<a whole set>   <op>   <a single value>
+```
+
+where the single value is a literal or an aggregate like `max(...)`. If the right side
+produces zero or several values, the query errors out at evaluation time.
+
+```
+'^/coretemp/cpu/[0-9]+/core/[0-9]+/load$' / 100      # scale every core's load
+max('^/.+/gpu/[0-9]+/temperature$') - 20C            # max GPU temp minus 20
+avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$') * 2
+```
+
+Unit behavior:
+
+- `+` / `-`: keep the unit if both sides match, otherwise clear it.
+- `*` / `/`: the unit is always cleared.
+
+### Union `|`
+
+`a | b` combines the two selections into one list — handy for grabbing, say, CPU and GPU
+temps together before reducing them:
+
+```
+max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$' | '^/.+/gpu/[0-9]+/temperature$')
+```
+
+The result keeps a unit only if both sides share one.
+
+---
+
+## 7. Worked examples (from a real screen config)
+
+**Average CPU load across all cores, rounded to a whole number:**
+
+```
+round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))
+```
+
+Reading it inside-out: the regex selects every core's load → `avg` averages them into one
+number → `round` drops the decimals.
+
+**Hottest core temperature, rounded:**
+
+```
+round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))
+```
+
+**The lowest Tjmax across cores** (useful as a max-scale for a gauge):
+
+```
+min('^/coretemp/cpu/[0-9]+/tjmax$')
+```
+
+**Average GPU load:**
+
+```
+round(avg('^/.+/gpu/[0-9]+/load$'))
+```
+
+---
+
+## 8. Quirks worth knowing
+
+These are things I noticed reading the parser/evaluator — a couple look like genuine bugs, so
+verify against your build rather than trusting them:
+
+- **`|` is a set-union, not a plain concatenation.** It's implemented with a set-union
+  operation, which I believe can drop duplicate entries rather than keeping every element. 
+- **`*` and `/` always erase units** — even when both sides share one. If you need a unit on a
+  scaled value, re-tag it with a unit suffix on the outside, e.g. `(x / 100)%`.
+- **No variables, no unary negation of expressions.** Names are only function names; `-` only
+  makes number literals negative.
+
+---

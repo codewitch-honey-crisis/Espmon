@@ -162,7 +162,8 @@ internal partial class EspSerialSession : IDisposable
     SafeFileHandle? _handle;
     ThreadPoolBoundHandle? _boundHandle;
     readonly List<byte> _log;
-    readonly object _lock;
+    readonly object _logLock;
+    readonly object _ioLock;
     bool _logging;
     SynchronizationContext? _sync;
     Task? _readTask, _statTask;
@@ -262,7 +263,6 @@ internal partial class EspSerialSession : IDisposable
             Dispose(true);
         }
     }
-
     private unsafe void WriteAll(ReadOnlySpan<byte> data)
     {
         fixed (byte* ptr = data)
@@ -271,21 +271,25 @@ internal partial class EspSerialSession : IDisposable
             while (offset < data.Length)
             {
                 var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-                if (_boundHandle != null && _handle != null)
-                {
-                    var ov = _boundHandle.AllocateNativeOverlapped(
-                    (errorCode, numBytes, pOv) =>
-                    {
-                        _boundHandle.FreeNativeOverlapped(pOv);
-                        if (errorCode == 0)
-                            tcs.TrySetResult((int)numBytes);
-                        else
-                            tcs.TrySetException(new Win32Exception((int)errorCode));
-                    },
-                    null, null);
+                NativeOverlapped* ov;
 
-                    int written = 0;
-                    if (!WriteFile(_handle, ptr + offset, data.Length - offset, ref written, ov))
+                lock (_ioLock)
+                {
+                    if (_closing || _boundHandle == null || _handle == null)
+                        return; // port is closing/closed — silently drop the write
+
+                    ov = _boundHandle.AllocateNativeOverlapped(
+                        (errorCode, numBytes, pOv) =>
+                        {
+                            try { _boundHandle?.FreeNativeOverlapped(pOv); }
+                            catch (ObjectDisposedException) { } // lost race with dispose; overlapped is cleaned up by handle disposal
+                            if (errorCode == 0) tcs.TrySetResult((int)numBytes);
+                            else tcs.TrySetException(new Win32Exception((int)errorCode));
+                        },
+                        null, null);
+
+                    int written0 = 0;
+                    if (!WriteFile(_handle, ptr + offset, data.Length - offset, ref written0, ov))
                     {
                         int err = Marshal.GetLastWin32Error();
                         if (err != ERROR_IO_PENDING)
@@ -293,23 +297,15 @@ internal partial class EspSerialSession : IDisposable
                             _boundHandle.FreeNativeOverlapped(ov);
                             throw new Win32Exception(err);
                         }
-                        // IO_PENDING — IOCP callback will fire
                     }
-                    else
-                    {
-                        // Completed synchronously, but IOCP callback will still fire
-                        // for handles bound to IOCP.  Wait for it.
-                    }
-
-                    // Block for write completion (Send is synchronous from caller's perspective)
-                    written = tcs.Task.GetAwaiter().GetResult();
-                    offset += written;
                 }
-                else throw new InvalidOperationException("The port is not open");
+
+                int written = tcs.Task.GetAwaiter().GetResult(); // block outside the lock
+                offset += written;
             }
         }
     }
-
+    
     private void OnConnectionError(EventArgs args)
     {
         if (_disposed) return;
@@ -330,7 +326,7 @@ internal partial class EspSerialSession : IDisposable
 
     public byte[] GetNextLogData()
     {
-        lock (_lock)
+        lock (_logLock)
         {
             var res = _log.ToArray();
             _log.Clear();
@@ -578,7 +574,7 @@ internal partial class EspSerialSession : IDisposable
                 while (!_closing)
                 {
                     await ReadExactlyAsync(tmp, 1);
-                    mach.Step(_log, _logging ? _lock : null, tmp[0]);
+                    mach.Step(_log, _logging ? _logLock : null, tmp[0]);
                     if (mach.IsDone)
                     {
                         if (_closing) break;
@@ -752,7 +748,8 @@ internal partial class EspSerialSession : IDisposable
     }
     public EspSerialSession(string port, bool logging = false, SynchronizationContext? syncContext = null)
     {
-        _lock = new object();
+        _logLock = new object();
+        _ioLock = new object();
         _sync = syncContext;
         _log = new List<byte>();
         _portName = port;
