@@ -1,6 +1,6 @@
 ﻿using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
-
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 namespace HWKit
 {
@@ -15,6 +15,16 @@ namespace HWKit
         {
             return "cim_cpu";
         }
+
+        private struct CpuEntry
+        {
+            public float MaxFrequency;
+            public CpuEntry(float maxFrequency)
+            {
+                MaxFrequency = maxFrequency;
+            }
+        }
+
         private struct CpuCoreEntry
         {
             public int CpuIndex;
@@ -31,11 +41,11 @@ namespace HWKit
         }
         // Reads the owning provider's current entry array live (under its lock), so it
         // always reflects the latest refresh and records accessor activity via Touch().
-        sealed class EntryAccessor
+        sealed class CoreEntryAccessor
         {
             readonly CimCpuProvider _owner;
             readonly int _index;
-            public EntryAccessor(CimCpuProvider owner, int index)
+            public CoreEntryAccessor(CimCpuProvider owner, int index)
             {
                 ArgumentNullException.ThrowIfNull(owner, nameof(owner));
                 _owner = owner;
@@ -47,7 +57,7 @@ namespace HWKit
                 _owner._dataMutex.WaitOne();
                 try
                 {
-                    var entries = _owner._entries;
+                    var entries = _owner._coreEntries;
                     if (entries == null || _index < 0 || _index >= entries.Length)
                     {
                         return float.NaN;
@@ -63,6 +73,38 @@ namespace HWKit
             public float Load => Read(e => e.Load);
         }
 
+        sealed class CpuEntryAccessor
+        {
+            readonly CimCpuProvider _owner;
+            readonly int _index;
+            public CpuEntryAccessor(CimCpuProvider owner, int index)
+            {
+                ArgumentNullException.ThrowIfNull(owner, nameof(owner));
+                _owner = owner;
+                _index = index;
+            }
+            float Read(Func<CpuEntry, float> selector)
+            {
+                _owner.Touch();
+                _owner._dataMutex.WaitOne();
+                try
+                {
+                    var entries = _owner._cpuEntries;
+                    if (entries == null || _index < 0 || _index >= entries.Length)
+                    {
+                        return float.NaN;
+                    }
+                    return selector(entries[_index]);
+                }
+                finally
+                {
+                    _owner._dataMutex.ReleaseMutex();
+                }
+            }
+            public float MaxFrequency => Read(e => e.MaxFrequency);
+        }
+
+
         // How fresh the cache must be before an accessor triggers a refresh.
         const long FreshnessMs = 1000;
         // How long with no accessor activity before the refresh loop parks itself.
@@ -77,9 +119,10 @@ namespace HWKit
 
         long _lastQuery = 0;
         long _lastAccess = 0;
-
-        CpuCoreEntry[]? _entries = null;
-
+        CpuEntry[]? _cpuEntries = null;
+        CpuCoreEntry[]? _coreEntries = null;
+        
+        uint[] _perSocketMax = Array.Empty<uint>();
         protected override HardwareInfoProviderStatus GetState()
         {
             return _started ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
@@ -97,11 +140,21 @@ namespace HWKit
                 _wake.Set();
             }
         }
-
+        static int PackageIndexFor(string perfName, List<CpuTopology.Package> pkgs)
+        {
+            // perfName like "0,3" => group 0, processor 3
+            var parts = perfName.Split(',');
+            ushort group = ushort.Parse(parts[0]);
+            int proc = int.Parse(parts[1]);
+            foreach (var p in pkgs)
+                if (p.Contains(group, proc)) return p.Index;
+            return -1; // "_Total"/"g,_Total" rows won't match — skip them
+        }
         void RunQuery()
         {
-            var list = new List<CpuCoreEntry>();
 
+            var list = new List<CpuCoreEntry>();
+            CpuEntry[]? cpuEntries = null;
             using (var sessionOptions = new CimSessionOptions())
             {
                 sessionOptions.Culture = System.Globalization.CultureInfo.InvariantCulture;
@@ -110,6 +163,31 @@ namespace HWKit
                 {
                     using (var queryOptions = new CimOperationOptions())
                     {
+                        if (!_started)
+                        {
+                            var pkgs = CpuTopology.GetPackages();
+                            cpuEntries = new CpuEntry[pkgs.Count];
+
+                            var cpuInstances = session.QueryInstances(
+                                @"root\cimv2", "WQL",
+                                "SELECT MaxClockSpeed FROM Win32_Processor", queryOptions);
+
+                            int socketIndex = 0;
+                            foreach (var inst in cpuInstances)
+                            {
+                                using (inst)
+                                {
+                                    var max = Convert.ToUInt32(inst.CimInstanceProperties["MaxClockSpeed"].Value ?? 0u);
+                                    if (socketIndex < cpuEntries.Length)
+                                        cpuEntries[socketIndex] = new CpuEntry(max);
+                                    socketIndex++;
+                                }
+                            }
+
+                            // sanity: these should agree — one Win32_Processor instance per package
+                            System.Diagnostics.Debug.Assert(socketIndex == pkgs.Count,
+                                $"socket count mismatch: {socketIndex} Win32_Processor vs {pkgs.Count} packages");
+                        }
                         queryOptions.SetCustomOption("__ProviderArchitecture", 64, false);
 
                         var instances = session.QueryInstances(
@@ -146,20 +224,26 @@ namespace HWKit
             _dataMutex.WaitOne();
             try
             {
-                if (_entries == null || _entries.Length != list.Count)
+                if(_cpuEntries==null)
                 {
-                    _entries = new CpuCoreEntry[list.Count];
+                    _cpuEntries = cpuEntries;
+                }
+                if (_coreEntries == null || _coreEntries.Length != list.Count)
+                {
+                    _coreEntries = new CpuCoreEntry[list.Count];
                 }
                 for (var i = 0; i < list.Count; ++i)
                 {
-                    _entries[i] = list[i];
+                    _coreEntries[i] = list[i];
                 }
+                _started = true;
             }
             finally
             {
                 _dataMutex.ReleaseMutex();
             }
             Volatile.Write(ref _lastQuery, Environment.TickCount64);
+
         }
 
         void Worker()
@@ -198,20 +282,29 @@ namespace HWKit
             }
 
             _stop.Reset();
-            _started = true;
-
+           
             // Populate once up front, both to publish valid values immediately and so we
             // know how many threads to enumerate.
             RunQuery();
             Volatile.Write(ref _lastAccess, 0);
-
-            CpuCoreEntry[]? snapshot = _entries;
-            if (snapshot != null)
+            CpuEntry[]? cpuSnapshot = _cpuEntries;
+            if (cpuSnapshot != null)
             {
-                for (var i = 0; i < snapshot.Length; i++)
+                for (var i = 0; i < cpuSnapshot.Length; i++)
                 {
-                    CpuCoreEntry entry = snapshot[i];
-                    var acc = new EntryAccessor(this, i);
+                    CpuEntry entry = cpuSnapshot[i];
+                    var acc = new CpuEntryAccessor(this, i);
+                    Publish($"/cpu/{i}/maxclock", "MHz", new Func<float>(() => acc.MaxFrequency));
+                }
+            }
+
+            CpuCoreEntry[]? coreSnapshot = _coreEntries;
+            if (coreSnapshot != null)
+            {
+                for (var i = 0; i < coreSnapshot.Length; i++)
+                {
+                    CpuCoreEntry entry = coreSnapshot[i];
+                    var acc = new CoreEntryAccessor(this, i);
                     Publish($"/cpu/{entry.CpuIndex}/thread/{entry.ThreadIndex}/clock", "MHz", new Func<float>(() => acc.Frequency));
                     Publish($"/cpu/{entry.CpuIndex}/thread/{entry.ThreadIndex}/load", "%", new Func<float>(() => acc.Load));
                 }
@@ -236,7 +329,8 @@ namespace HWKit
             _dataMutex.WaitOne();
             try
             {
-                _entries = null;
+                _cpuEntries = null;
+                _coreEntries = null;
             }
             finally
             {
@@ -248,5 +342,71 @@ namespace HWKit
             return "Provides CPU load and frequency information via the Windows CIM subsystem";
         }
     }
+    
+    static class CpuTopology
+    {
+        private const int RelationProcessorPackage = 3;
+        private const int ERROR_INSUFFICIENT_BUFFER = 122;
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetLogicalProcessorInformationEx(
+            int RelationshipType, IntPtr Buffer, ref int ReturnedLength);
+
+        public readonly struct Package
+        {
+            public readonly int Index;                              // 0,1,2… = enumeration order
+            public readonly (ushort Group, ulong Mask)[] Affinities;
+            public Package(int index, (ushort, ulong)[] aff) { Index = index; Affinities = aff; }
+
+            public bool Contains(ushort group, int processor)
+            {
+                foreach (var a in Affinities)
+                    if (a.Group == group && (a.Mask & (1UL << processor)) != 0) return true;
+                return false;
+            }
+        }
+
+        public static List<Package> GetPackages()
+        {
+            int len = 0;
+            if (GetLogicalProcessorInformationEx(RelationProcessorPackage, IntPtr.Zero, ref len))
+                throw new InvalidOperationException("Unexpected success probing length.");
+            if (Marshal.GetLastWin32Error() != ERROR_INSUFFICIENT_BUFFER)
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+
+            IntPtr buffer = Marshal.AllocHGlobal(len);
+            try
+            {
+                if (!GetLogicalProcessorInformationEx(RelationProcessorPackage, buffer, ref len))
+                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+
+                var packages = new List<Package>();
+                int offset = 0, index = 0;
+
+                while (offset < len)
+                {
+                    IntPtr rec = IntPtr.Add(buffer, offset);
+                    // SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX: +0 Relationship, +4 Size, +8 union
+                    int size = Marshal.ReadInt32(rec, 4);
+                    // PROCESSOR_RELATIONSHIP (at +8): +8 Flags, +9 EfficiencyClass,
+                    //   +10 Reserved[20], +30 GroupCount(WORD), +32 GroupMask[]
+                    ushort groupCount = (ushort)Marshal.ReadInt16(rec, 30);
+
+                    var aff = new (ushort, ulong)[groupCount];
+                    for (int g = 0; g < groupCount; g++)
+                    {
+                        // GROUP_AFFINITY (16 bytes): +0 KAFFINITY Mask (ptr-sized), +8 Group(WORD)
+                        int b = 32 + g * 16;
+                        ulong mask = (ulong)(long)Marshal.ReadIntPtr(rec, b);
+                        ushort grp = (ushort)Marshal.ReadInt16(rec, b + 8);
+                        aff[g] = (grp, mask);
+                    }
+                    packages.Add(new Package(index++, aff));
+                    offset += size;                    // stride by Size, not sizeof
+                }
+                return packages;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+    }
 }

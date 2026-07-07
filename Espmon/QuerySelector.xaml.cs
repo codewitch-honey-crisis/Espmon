@@ -190,7 +190,11 @@ namespace Espmon
         }
         private void _timer_Tick(object? sender, object e)
         {
-            RerunQuery();
+            try
+            {
+                RerunQuery();
+            }
+            catch { }
             OnPropertyChanged(nameof(EvaluatedText));
         }
         public Exception? ValidationException => _validationException;
@@ -383,10 +387,23 @@ namespace Espmon
         }
         public IList<HardwareInfoEntry>? Matches => _results.ToObservableList();
 
-        public IList<string>? MatchingPaths => _results
-            .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
-            .ToLazyList()
-            .ToObservableList();
+        public IList<string>? MatchingPaths
+        {
+            get
+            {
+                try
+                {
+                    return _results
+                .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
+                .ToLazyList()
+                .ToObservableList();
+                }
+                catch
+                {
+                    return Array.Empty<string>().ToObservableList();
+                }
+            }
+        }
         public Brush ValidationBrush
         {
             get => _validationBrush;
@@ -474,11 +491,29 @@ namespace Espmon
             // The one and only place Run() genuinely executes. Evaluate + cap + materialize
             // once, cache the snapshot, then notify. The getters above never call Run(),
             // so binding re-reads are free.
-            _results = Run().Take(50).ToList();
-
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Matches)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchingPaths)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchCountText)));
+            try
+            {
+                _results = Run().Take(50).ToList();
+            }
+            catch
+            {
+                return;
+            }
+            try
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Matches)));
+            }
+            catch { }
+            try
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchingPaths)));
+            }
+            catch { }
+            try
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchCountText)));
+            }
+            catch { }
         }
         #region Validation and Matching
 

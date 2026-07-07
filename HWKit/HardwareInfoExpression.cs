@@ -106,13 +106,82 @@ namespace HWKit
             return HashCode.Combine(GetType(), Name);
             
         }
-        public static readonly HardwareInfoFunction Count = new("count",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [new HardwareInfoEntry(() => input.Single().Count(), "",null)]);
-        public static readonly HardwareInfoFunction First = new("first",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [input.Single().First()]);
-        public static readonly HardwareInfoFunction Last = new("last",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [input.Single().Last()]);
-        public static readonly HardwareInfoFunction Avg = new("avg",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [new HardwareInfoEntry(() => input.Single().Select(p => p.Value).Average(), input.Single().Select(p => p.Unit).Distinct().Count() == 1 ? input.Single().First().Unit : "",null)]);
-        public static readonly HardwareInfoFunction Sum = new("sum",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [new HardwareInfoEntry(() => input.Single().Select(p => p.Value).Sum(), input.Single().Select(p => p.Unit).Distinct().Count() == 1 ? input.Single().First().Unit : "", null)]);
-        public static readonly HardwareInfoFunction Min = new("min",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [new HardwareInfoEntry(() => input.Single().Select(p => p.Value).Min(), input.Single().Select(p => p.Unit).Distinct().Count() == 1 ? input.Single().First().Unit : "",null)]);
-        public static readonly HardwareInfoFunction Max = new("max",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => [new HardwareInfoEntry(() => input.Single().Select(p => p.Value).Max(), input.Single().Select(p => p.Unit).Distinct().Count() == 1 ? input.Single().First().Unit : "",null)]);
+        // Resolves the single operand without ever throwing.
+        //   count == 0  -> no operand sequence present
+        //   count == 1  -> op holds that sequence (may be empty); null entries stripped
+        //   count >= 2  -> ambiguous (previously a Single() throw); op empty, count == 2
+        private static (List<HardwareInfoEntry> op, int count) Resolve(
+            IEnumerable<IEnumerable<HardwareInfoEntry>> input)
+        {
+            if (input is null) return ([], 0);
+            List<HardwareInfoEntry> op = [];
+            int count = 0;
+            foreach (var seq in input)
+            {
+                if (++count == 1)
+                    op = seq?.ToList() ?? [];
+                else
+                    return ([], 2);
+            }
+            return (op, count);
+        }
+
+        private static string CommonUnit(List<HardwareInfoEntry> op)
+            => op.Count > 0 && op.Select(p => p.Unit).Distinct().Count() == 1 ? op[0].Unit : "";
+
+        public static readonly HardwareInfoFunction Count = new("count", 1,
+    (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+    {
+        var (op, n) = Resolve(input);
+        if (n >= 2) return [];
+        return [new HardwareInfoEntry(() => op.Count, "", null)];
+    });
+
+        public static readonly HardwareInfoFunction First = new("first", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                return n >= 2 || op.Count == 0 ? [] : [op[0]];
+            });
+
+        public static readonly HardwareInfoFunction Last = new("last", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                return n >= 2 || op.Count == 0 ? [] : [op[^1]];
+            });
+
+        public static readonly HardwareInfoFunction Avg = new("avg", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                if (n != 1 || op.Count == 0) return [];
+                return [new HardwareInfoEntry(() => op.Average(p => p.Value), CommonUnit(op), null)];
+            });
+
+        public static readonly HardwareInfoFunction Sum = new("sum", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                if (n != 1) return [];
+                return [new HardwareInfoEntry(() => op.Sum(p => p.Value), CommonUnit(op), null)];
+            });
+
+        public static readonly HardwareInfoFunction Min = new("min", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                if (n != 1 || op.Count == 0) return [];
+                return [new HardwareInfoEntry(() => op.Min(p => p.Value), CommonUnit(op), null)];
+            });
+
+        public static readonly HardwareInfoFunction Max = new("max", 1,
+            (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
+            {
+                var (op, n) = Resolve(input);
+                if (n != 1 || op.Count == 0) return [];
+                return [new HardwareInfoEntry(() => op.Max(p => p.Value), CommonUnit(op), null)];
+            });
         public static readonly HardwareInfoFunction Round = new("round",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
         public static readonly HardwareInfoFunction Round1 = new("round1",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
         public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input));

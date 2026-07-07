@@ -19,6 +19,8 @@ public struct HardwareInfoEntry : IEquatable<HardwareInfoEntry>, IComparable<Har
     public string Unit { get; }
     public string? Path { get; }
     public float Value => Getter();
+    static readonly HardwareInfoEntry _nan = new HardwareInfoEntry(() => float.NaN, "", null);
+    public static HardwareInfoEntry NaN => _nan;
     public readonly int CompareTo(HardwareInfoEntry other)
     {
         int cmp;
