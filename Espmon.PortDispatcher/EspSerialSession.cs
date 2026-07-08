@@ -437,7 +437,7 @@ internal partial class EspSerialSession : IDisposable
     private unsafe Task<int> ReadAsync(byte[] buffer, int offset, int count)
     {
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (_boundHandle != null && _handle != null)
+        if (_boundHandle != null &&  !_boundHandle.Handle.IsClosed && !_boundHandle.Handle.IsInvalid && _handle != null)
         {
             var ov = _boundHandle.AllocateNativeOverlapped(
                 (errorCode, numBytes, pOv) =>
@@ -503,7 +503,7 @@ internal partial class EspSerialSession : IDisposable
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var maskArr = new int[1];
         var maskPin = GCHandle.Alloc(maskArr, GCHandleType.Pinned);
-        if (_boundHandle != null && _handle != null)
+        if (_boundHandle != null && !_boundHandle.Handle.IsClosed && !_boundHandle.Handle.IsInvalid && _handle != null)
         {
             var ov = _boundHandle.AllocateNativeOverlapped(
                 (errorCode, numBytes, pOv) =>
