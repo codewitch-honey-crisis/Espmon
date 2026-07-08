@@ -339,7 +339,7 @@ internal partial class EspSerialSession : IDisposable
 
                 lock (_ioLock)
                 {
-                    if (_closing || _boundHandle == null || _handle == null)
+                    if (_closing || _boundHandle == null || _boundHandle.Handle.IsClosed || _boundHandle.Handle.IsInvalid || _handle == null)
                         return; // port is closing/closed — silently drop the write
 
                     ov = _boundHandle.AllocateNativeOverlapped(
