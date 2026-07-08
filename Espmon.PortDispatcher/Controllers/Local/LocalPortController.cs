@@ -480,7 +480,7 @@ public class LocalPortController : PortController
                 var obj = device.ToJson();
                 using (var writer = new StreamWriter(System.IO.Path.Combine(Path, $"{device.Name}.device.json"), false, Encoding.UTF8))
                 {
-                    Debug.Write($"Saving {device.Name}");
+                    //Debug.Write($"Saving {device.Name}");
                     obj.WriteTo(writer);
                     return true;
                 }

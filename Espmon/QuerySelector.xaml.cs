@@ -110,11 +110,11 @@ namespace Espmon
         {
             if (_innerTextBox == null || _innerTextBox.SelectionLength == 0)
             {
-                Debug.WriteLine($"[copy] skipped: tb={_innerTextBox != null}, sel={_innerTextBox?.SelectionLength}");
+                //Debug.WriteLine($"[copy] skipped: tb={_innerTextBox != null}, sel={_innerTextBox?.SelectionLength}");
                 return;
             }
             bool ok = Win32Clipboard.SetText(_innerTextBox.SelectedText);
-            Debug.WriteLine($"[copy] SetText('{_innerTextBox.SelectedText}') -> {ok}");
+            //Debug.WriteLine($"[copy] SetText('{_innerTextBox.SelectedText}') -> {ok}");
         }
         private void CutToClipboard()
         {
@@ -134,7 +134,7 @@ namespace Espmon
         private void ReplaceSelection(string replacement)
         {
             if (_innerTextBox == null) return;
-            Debug.WriteLine($"[replace] '{replacement}' caret={_innerTextBox.SelectionStart}");
+            //Debug.WriteLine($"[replace] '{replacement}' caret={_innerTextBox.SelectionStart}");
             var current = _innerTextBox.Text ?? string.Empty;
             int start = _innerTextBox.SelectionStart;
             int len = _innerTextBox.SelectionLength;
@@ -158,7 +158,7 @@ namespace Espmon
             switch (e.Key)
             {
                 case Windows.System.VirtualKey.C:
-                    Debug.WriteLine($"[kb] copy sel='{_innerTextBox.SelectedText}'");
+                    //Debug.WriteLine($"[kb] copy sel='{_innerTextBox.SelectedText}'");
                     if (_innerTextBox.SelectionLength > 0)
                         Win32Clipboard.SetText(_innerTextBox.SelectedText);
                     break;

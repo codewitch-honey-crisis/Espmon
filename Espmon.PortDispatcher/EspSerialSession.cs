@@ -1,7 +1,8 @@
 ﻿#pragma warning disable CS0649
-using Microsoft.Management.Infrastructure;
 using Microsoft.Win32.SafeHandles;
-
+#if !ESS_NO_PORT_ENUM
+using Microsoft.Management.Infrastructure;
+#endif
 using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -10,7 +11,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Espmon;
-
+#if !ESS_NO_PORT_ENUM
 public sealed class PortEntry
 {
     public PortEntry(string portName, string serialNumber)
@@ -22,6 +23,7 @@ public sealed class PortEntry
     public string SerialNumber { get; }
 
 }
+#endif
 public sealed class FrameReceivedEventArgs : EventArgs
 {
     public byte Command;
@@ -34,6 +36,22 @@ public sealed class FrameReceivedEventArgs : EventArgs
         Data = data;
     }
 }
+public sealed class FrameErrorEventArgs : EventArgs
+{
+    public byte Command { get; }
+    public byte Seq { get; }
+    public int Attempts { get; }   // initial send + resends made before giving up
+    public FrameErrorEventArgs(byte command, byte seq, int attempts)
+    { Command = command; Seq = seq; Attempts = attempts; }
+}
+
+public sealed class ResendRequestedEventArgs : EventArgs
+{
+    public byte Command { get; }
+    public byte Seq { get; }
+    public ResendRequestedEventArgs(byte command, byte seq)
+    { Command = command; Seq = seq; }
+}
 [SupportedOSPlatform("windows")]
 internal partial class EspSerialSession : IDisposable
 {
@@ -41,99 +59,54 @@ internal partial class EspSerialSession : IDisposable
     {
         int state;
         byte rawCmd;
-        int rawLen;
+        byte rawSeq;     // seq/type byte
+        uint rawLen;
         uint rawCrc;
+
         public byte RawCommandByte => rawCmd;
-        public byte Command => (byte)(rawCmd - 128);
-        public int Length => Swap(rawLen);
-        public uint Crc => Swap(rawCrc);
-        public bool IsDone => state == 16;
-        private int Swap(int value)
-        {
-            var x = unchecked((uint)value);
-            return unchecked((int)Swap(x));
-        }
-        private uint Swap(uint x)
-        {
-            return (((x & 0x000000ff) << 24) +
-                   ((x & 0x0000ff00) << 8) +
-                   ((x & 0x00ff0000) >> 8) +
-                   ((x & 0xff000000) >> 24));
-        }
+        public byte RawSeqByte => rawSeq;
+        public byte Command => (byte)(rawCmd - 128);   // 0 for control frames
+        public int FrameType => (rawSeq >> 6) & 0x03;   // 0=DATA 1=ACK 2=NACK
+        public byte Seq => (byte)(rawSeq & 0x3F);
+        public bool IsControl => rawCmd == 128 || FrameType != 0;
+        public int Length => (int)rawLen;
+        public uint Crc => rawCrc;
+        public bool IsDone => state == 17;
+
         public void Reset() => state = 0;
+
         public bool Step(List<byte>? log, object? logLock, byte data)
         {
+            if (state == 17) state = 0;         // previous frame consumed; start fresh
+
             if (state == 0)
             {
-                if (data < 128)
+                if (data < 128)                 // sub-128 byte = transport-level log text
                 {
-                    if (logLock != null)
-                    {
-                        lock (logLock)
-                        {
-                            log?.Add(data);
-                        }
-                    }
+                    if (logLock != null) lock (logLock) { log?.Add(data); }
                     return false;
                 }
                 state = 1;
                 rawCmd = data;
-                rawLen = 0;
+                rawSeq = 0; rawLen = 0; rawCrc = 0;
             }
-            else if (state < 8)
+            else if (state < 8)                 // remaining 7 marker bytes must match
             {
                 if (rawCmd != data)
                 {
-                    if (logLock != null)
+                    if (logLock != null) lock (logLock)
                     {
-
-                        lock (logLock)
-                        {
-                            for (var i = 0; i < state; ++i)
-                            {
-                                log?.Add(rawCmd);
-                            }
-                            log?.Add(data);
-                        }
+                        for (var i = 0; i < state; ++i) log?.Add(rawCmd);
+                        log?.Add(data);
                     }
                     state = 0;
                     return false;
                 }
                 ++state;
             }
-            else if (state == 8)
-            {
-                rawLen = data;
-                ++state;
-            }
-            else if (state < 12)
-            {
-                rawLen <<= 8;
-                rawLen |= data;
-                ++state;
-            }
-            else if (state == 12)
-            {
-                rawCrc = data;
-                ++state;
-            }
-            else if (state < 16)
-            {
-                rawCrc <<= 8;
-                rawCrc |= data;
-                ++state;
-            }
-            else if (state == 16)
-            {
-                state = 0;
-                return Step(log, logLock, data);
-            }
-            else
-            {
-                state = 0;
-                return false;
-
-            }
+            else if (state == 8) { rawSeq = data; ++state; }                       // seq/type
+            else if (state < 13) { rawLen |= (uint)data << (8 * (state - 9)); ++state; } // len LE
+            else /* state<17 */   { rawCrc |= (uint)data << (8 * (state - 13)); ++state; } // crc LE
             return true;
         }
     }
@@ -171,11 +144,33 @@ internal partial class EspSerialSession : IDisposable
     readonly byte[] _rx = new byte[4096];
     int _rxHead;   // next unread byte in _rx
     int _rxTail;   // number of valid bytes in _rx
+    bool _deliveryNotified;   // add alongside the other ARQ fields
+
+    const int FrameHeaderLength = 17;          // 8 marker + 1 seq/type + 4 len + 4 crc
+    const int MaxFrameLength = 32768;        // read bound; over this we NACK+resync
+    const int TypeData = 0, TypeAck = 1, TypeNack = 2;
+
+    readonly object _arq = new object();   // guards the ARQ state below
+    readonly object _sendLock = new object();   // keeps one frame contiguous on the wire
+
+    byte _txSeq = 0x3F;                  // last DATA seq sent; first send -> 0
+    byte _expectedRxSeq = 0;                     // next DATA seq we expect to receive
+    bool _awaiting;                             // a sent DATA frame is unacked
+    byte[]? _retain;                            // last DATA frame bytes, for resend
+                                                // chunk 2 also adds: _ackTimeoutMs, _maxRetries, _retries, _sendQueue, _ackTimer
     DeviceNotifyCallbackRoutine? _powerCallback; // kept rooted: native code holds a pointer to it
+    static readonly uint[] _crcTable = BuildCrcTable();
+    int _ackTimeoutMs;                 // -1 = explicit mode: NACK -> event, no timer, no auto-give-up
+    int _maxRetries = 5;
+    int _retries;                      // timeout-driven resends so far (NACKs never counted)
+    readonly Queue<(byte cmd, byte[] data)> _sendQueue = new();
+    System.Threading.Timer? _ackTimer;
+
+    public event EventHandler<ResendRequestedEventArgs>? ResendRequested;  // explicit mode only
     public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
-    public event EventHandler<FrameReceivedEventArgs>? FrameError;
-    
+    public event EventHandler<FrameErrorEventArgs>? FrameError;
+#if !ESS_NO_PORT_ENUM
     public static PortEntry[] GetPorts()
     {
         var result = new List<PortEntry>();
@@ -216,6 +211,7 @@ internal partial class EspSerialSession : IDisposable
         return result.ToArray();
 
     }
+#endif
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
@@ -223,6 +219,9 @@ internal partial class EspSerialSession : IDisposable
             if (disposing)
             {
                 Close();
+                _ackTimer?.Dispose();
+                _ackTimer = null;
+                lock (_arq) { _awaiting = false; _retries = 0; _sendQueue.Clear(); }
             }
             // Also runs on the finalizer path (disposing == false), where
             // Close() is not called. Only touches the IntPtr handle, so it is
@@ -243,25 +242,90 @@ internal partial class EspSerialSession : IDisposable
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+    byte[] BuildDataFrame(byte cmd, byte seq, ReadOnlySpan<byte> payload)
+    {
+        byte marker = (byte)(cmd + 128);
+        byte seqByte = (byte)(seq & 0x3F);        // TypeData (0) in the high bits
+        var frame = new byte[FrameHeaderLength + payload.Length];
+        for (int i = 0; i < 8; ++i) frame[i] = marker;
+        frame[8] = seqByte;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(9, 4), payload.Length);
+        payload.CopyTo(frame.AsSpan(FrameHeaderLength));
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(13, 4),
+            Crc32(seqByte, payload.Length, payload));
+        return frame;
+    }
+
+    byte[] BuildControlFrame(int type, byte seq)
+    {
+        byte seqByte = (byte)((type << 6) | (seq & 0x3F));
+        var frame = new byte[FrameHeaderLength];
+        for (int i = 0; i < 8; ++i) frame[i] = 128;   // control marker = cmd 0
+        frame[8] = seqByte;
+        BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(9, 4), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(13, 4),
+            Crc32(seqByte, 0, ReadOnlySpan<byte>.Empty));
+        return frame;
+    }
+
+    void SendControl(int type, byte seq) => WriteFrame(BuildControlFrame(type, seq));
+    // Stamp next seq, build+retain, put on the wire, mark outstanding.
+    void TransmitData(byte cmd, ReadOnlySpan<byte> payload)
+    {
+        byte[] frame;
+        lock (_arq)
+        {
+            _txSeq = (byte)((_txSeq + 1) & 0x3F);
+            frame = BuildDataFrame(cmd, _txSeq, payload);
+            _retain = frame;
+            _awaiting = true;
+        }
+        WriteFrame(frame);
+        // chunk 2: arm the ack timer here when _ackTimeoutMs > 0
+    }
+
+    public bool Resend()
+    {
+        byte[]? frame;
+        lock (_arq) { if (!_awaiting || _retain == null) return false; frame = _retain; }
+        WriteFrame(frame);
+        return true;
+    }
+    void WriteFrame(ReadOnlySpan<byte> frame)
+    {
+        lock (_sendLock)                              // one whole frame at a time on the wire
+        {
+            try { WriteAll(frame); }
+            catch (Win32Exception) { OnConnectionError(EventArgs.Empty); Dispose(true); }
+        }
+    }
+    // Called holding _arq. Stamps seq, builds+retains, arms timer, returns bytes to write.
+    byte[] PrepareTransmit(byte cmd, byte[] payload)
+    {
+        _txSeq = (byte)((_txSeq + 1) & 0x3F);
+        var frame = BuildDataFrame(cmd, _txSeq, payload);
+        _retain = frame;
+        _awaiting = true;
+        _retries = 0;
+        _deliveryNotified = false;
+        ArmAckTimer();
+        return frame;
+    }
 
     public void Send(byte cmd, ReadOnlySpan<byte> data)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(cmd, 127, nameof(cmd));
-        cmd += 128;
-        Span<byte> len = [0, 0, 0, 0];
-        BinaryPrimitives.WriteInt32LittleEndian(len, data.Length);
-        Span<byte> crc = [0, 0, 0, 0];
-        BinaryPrimitives.WriteUInt32LittleEndian(crc, Crc32(data));
-        Span<byte> toWrite = [cmd, cmd, cmd, cmd, cmd, cmd, cmd, cmd, .. len, .. crc, .. data];
-        try
+        if (cmd < 1) throw new ArgumentOutOfRangeException(nameof(cmd), "cmd must be 1..127");
+        if (data.Length > MaxFrameLength) throw new ArgumentOutOfRangeException(nameof(data));
+
+        byte[] copy = data.ToArray();      // stop-and-wait: caller's span need not outlive the call
+        byte[]? toWrite = null;
+        lock (_arq)
         {
-            WriteAll(toWrite);
+            if (_awaiting) _sendQueue.Enqueue((cmd, copy));   // one in flight; queue the rest
+            else toWrite = PrepareTransmit(cmd, copy);
         }
-        catch (Win32Exception)
-        {
-            OnConnectionError(EventArgs.Empty);
-            Dispose(true);
-        }
+        if (toWrite != null) WriteFrame(toWrite);
     }
     private unsafe void WriteAll(ReadOnlySpan<byte> data)
     {
@@ -305,7 +369,7 @@ internal partial class EspSerialSession : IDisposable
             }
         }
     }
-    
+
     private void OnConnectionError(EventArgs args)
     {
         if (_disposed) return;
@@ -350,7 +414,7 @@ internal partial class EspSerialSession : IDisposable
         }
     }
 
-    private void OnFrameError(FrameReceivedEventArgs args)
+    private void OnFrameError(FrameErrorEventArgs args)
     {
         if (_disposed) return;
         if (FrameError != null)
@@ -482,11 +546,114 @@ internal partial class EspSerialSession : IDisposable
             return _handle != null && !_handle.IsInvalid && !_handle.IsClosed;
         }
     }
+    private void OnResendRequested(ResendRequestedEventArgs args)
+    {
+        if (_disposed) return;
+        if (ResendRequested != null)
+        {
+            if (_sync == null)
+                ResendRequested?.Invoke(this, args);
+            else
+                _sync.Post((state) => ResendRequested?.Invoke(this, args), null);
+        }
+    }
+    void HandleAck(byte seq)
+    {
+        byte[]? next = null;
+        lock (_arq)
+        {
+            if (!_awaiting || seq != _txSeq) return;   // stale/duplicate ack
+            _awaiting = false;
+            DisarmAckTimer();
+            if (_sendQueue.Count > 0)
+            {
+                var (cmd, data) = _sendQueue.Dequeue();
+                next = PrepareTransmit(cmd, data);
+            }
+        }
+        if (next != null) WriteFrame(next);
+    }
+
+    void HandleNack(byte seq)
+    {
+        bool explicitMode; byte cmd, s;
+        lock (_arq)
+        {
+            if (!_awaiting) return;
+            explicitMode = _ackTimeoutMs < 0;
+            cmd = (byte)(_retain![0] - 128);
+            s = _txSeq;
+            // deliberately: no _retries change, no ArmAckTimer() — the running timeout guards termination
+        }
+        if (explicitMode) OnResendRequested(new ResendRequestedEventArgs(cmd, s));
+        else Resend();
+    }
+
+    void OnAckTimeout(object? _)
+    {
+        byte[]? resend = null;
+        FrameErrorEventArgs? failure = null;
+        lock (_arq)
+        {
+            if (!_awaiting || _ackTimeoutMs <= 0) return;
+            resend = _retain;                       // always keep retransmitting the same frame
+            _retries++;
+            if (_retries >= _maxRetries && !_deliveryNotified)
+            {
+                _deliveryNotified = true;           // one-shot "not getting through" notice
+                failure = new FrameErrorEventArgs((byte)(_retain![0] - 128), _txSeq, _retries);
+            }
+            ArmAckTimer();                          // never stops on its own; only an ACK or Close() ends it
+        }
+        if (resend != null) WriteFrame(resend);
+        if (failure != null) OnFrameError(failure);
+    }
+    byte VolatileExpectedRxSeq() { lock (_arq) return _expectedRxSeq; }
+
+    void DispatchValidFrame(byte rawCmd, byte rawSeq, byte[] payload)
+    {
+        int type = (rawSeq >> 6) & 0x03;
+        byte seq = (byte)(rawSeq & 0x3F);
+
+        if (rawCmd == 128 || type != TypeData)        // control frame
+        {
+            if (type == TypeAck) HandleAck(seq);
+            else if (type == TypeNack) HandleNack(seq);
+            return;                                    // reserved types ignored
+        }
+
+        byte cmd = (byte)(rawCmd - 128);               // DATA frame
+        byte expected; lock (_arq) expected = _expectedRxSeq;
+
+        if (seq == expected)
+        {
+            SendControl(TypeAck, seq);                 // ack = "received intact"
+            lock (_arq) _expectedRxSeq = (byte)((seq + 1) & 0x3F);
+            OnFrameReceived(new FrameReceivedEventArgs(cmd, payload));
+        }
+        else if (seq == (byte)((expected - 1) & 0x3F))
+        {
+            SendControl(TypeAck, seq);                 // duplicate (our ack was lost): re-ack only
+        }
+        else
+        {
+            SendControl(TypeNack, expected);           // gap: ask for what we expect
+        }
+    }
     public void Open()
     {
         if (IsOpen) return;
         _closing = false;
         _connErrorFired = false;
+        lock (_arq)
+        {
+            _txSeq = 0x3F;          // first Send -> seq 0
+            _expectedRxSeq = 0;
+            _awaiting = false;
+            _retries = 0;
+            _sendQueue.Clear();
+        }
+        _ackTimer ??= new System.Threading.Timer(OnAckTimeout, null, Timeout.Infinite, Timeout.Infinite);
         var rawHandle = CreateFile(
                     $@"\\.\{_portName}",
                     GENERIC_READ | GENERIC_WRITE,
@@ -578,36 +745,27 @@ internal partial class EspSerialSession : IDisposable
                     if (mach.IsDone)
                     {
                         if (_closing) break;
-                        if (mach.Length > 0)
-                        {
-                            if (mach.Length > 32768)
-                            {
-                                throw new IOException("Serial corruption detected in frame");
-                            }
-                            var frame = new byte[mach.Length];
-                            await ReadExactlyAsync(frame, mach.Length);
+                        int len = mach.Length;
 
-                            if (Crc32(frame) == mach.Crc)
-                            {
-                                OnFrameReceived(new FrameReceivedEventArgs(mach.Command, frame));
-                            }
-                            else
-                            {
-                                OnFrameError(new FrameReceivedEventArgs(mach.Command, frame));
-                            }
-                        }
-                        else
+                        if (len < 0 || len > MaxFrameLength)          // CRC-protected, but bound the read
                         {
-                            if (mach.Crc == UInt32.MaxValue / 3)
-                            {
-                                OnFrameReceived(new FrameReceivedEventArgs(mach.Command, Array.Empty<byte>()));
-                            }
-                            else
-                            {
-                                OnFrameError(new FrameReceivedEventArgs(mach.Command, Array.Empty<byte>()));
-                            }
-
+                            SendControl(TypeNack, VolatileExpectedRxSeq());
+                            mach.Reset();
+                            continue;
                         }
+
+                        byte[] payload = len > 0 ? new byte[len] : Array.Empty<byte>();
+                        if (len > 0) await ReadExactlyAsync(payload, len);
+
+                        if (Crc32(mach.RawSeqByte, len, payload) != mach.Crc)
+                        {
+                            SendControl(TypeNack, VolatileExpectedRxSeq());   // corrupt: seq untrustworthy
+                            mach.Reset();
+                            continue;
+                        }
+
+                        DispatchValidFrame(mach.RawCommandByte, mach.RawSeqByte, payload);
+                        mach.Reset();
                     }
                 }
             }
@@ -659,7 +817,7 @@ internal partial class EspSerialSession : IDisposable
                     }
                     if (taskCount > 0)
                     {
-                        Task.WaitAll(tasks.AsSpan(0, taskCount));
+                        Task.WaitAll(tasks[0..taskCount]);
                     }
                 }
             }
@@ -746,7 +904,8 @@ internal partial class EspSerialSession : IDisposable
         // in addition to the loop paths above is harmless.
         ThreadPool.QueueUserWorkItem(_ => OnConnectionError(EventArgs.Empty));
     }
-    public EspSerialSession(string port, bool logging = false, SynchronizationContext? syncContext = null)
+    public EspSerialSession(string port, bool logging = false,
+                        SynchronizationContext? syncContext = null, int ackTimeoutMs = 1000)
     {
         _logLock = new object();
         _ioLock = new object();
@@ -754,23 +913,43 @@ internal partial class EspSerialSession : IDisposable
         _log = new List<byte>();
         _portName = port;
         _logging = logging;
-
+        _ackTimeoutMs = ackTimeoutMs;
+        _ackTimer = new System.Threading.Timer(OnAckTimeout, null, Timeout.Infinite, Timeout.Infinite);
     }
+
+    public int AckTimeout { get { lock (_arq) return _ackTimeoutMs; } set { lock (_arq) _ackTimeoutMs = value; } }
+    public int MaxRetries { get { lock (_arq) return _maxRetries; } set { lock (_arq) _maxRetries = value < 0 ? 0 : value; } }
+
+    void ArmAckTimer() { if (_ackTimeoutMs > 0) _ackTimer?.Change(_ackTimeoutMs, Timeout.Infinite); }
+    void DisarmAckTimer() { _ackTimer?.Change(Timeout.Infinite, Timeout.Infinite); }
     public bool IsLogging
     {
         get { return _logging; }
         set { _logging = value; }
     }
-    static uint Crc32(ReadOnlySpan<byte> data, uint seed = uint.MaxValue / 3)
+    static uint[] BuildCrcTable()
     {
-        uint result = seed;
-        int length = data.Length;
-        int i = 0;
-        while (length-- > 0)
+        var t = new uint[256];
+        for (uint n = 0; n < 256; ++n)
         {
-            result ^= data[i++];
+            uint c = n;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1) != 0 ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            t[n] = c;
         }
-        return result;
+        return t;
+    }
+    static uint Crc32Byte(uint crc, byte b) => (crc >> 8) ^ _crcTable[(crc ^ b) & 0xFF];
+
+    static uint Crc32(byte seqByte, int length, ReadOnlySpan<byte> payload)
+    {
+        uint c = 0xFFFFFFFFu;
+        c = Crc32Byte(c, seqByte);
+        Span<byte> len = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(len, length);
+        for (int i = 0; i < 4; ++i) c = Crc32Byte(c, len[i]);
+        for (int i = 0; i < payload.Length; ++i) c = Crc32Byte(c, payload[i]);
+        return c ^ 0xFFFFFFFFu;
     }
 
     #region Unmanaged

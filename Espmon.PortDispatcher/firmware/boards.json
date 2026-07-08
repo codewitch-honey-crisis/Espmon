@@ -9,8 +9,8 @@
             "version": "^0.8.5"
         },
         {
-            "id": "codewitch-honey-crisis/htcw_frame",
-            "version": "^0.2.0"
+            "id": "codewitch-honey-crisis/htcw_frame_arq",
+            "version": "^0.1.1"
         }
     ],
     "boards": [
@@ -99,7 +99,7 @@
             "target": "esp32",
             "defines": [
                 "CYD_2432S028",
-                "LCD_DIVISOR=20"
+                "LCD_DIVISOR=12"
             ],
             "dependencies": [
                 {

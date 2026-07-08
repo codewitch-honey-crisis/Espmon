@@ -5,6 +5,6 @@ dependencies:
     version: '>=5.4.3'
   codewitch-honey-crisis/htcw_uix: "1.9.3"
   codewitch-honey-crisis/htcw_esp_panel: "^0.8.5"
-  codewitch-honey-crisis/htcw_frame: "^0.2.0"
+  codewitch-honey-crisis/htcw_frame_arq: "^0.1.1"
   codewitch-honey-crisis/esp_lcd_touch_xpt2046: "^0.2.0"
   espressif/esp_lcd_ili9341: "^2.0.2"

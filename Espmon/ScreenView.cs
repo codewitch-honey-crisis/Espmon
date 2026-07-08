@@ -453,7 +453,7 @@ public partial class ScreenView : Canvas
     public event EventHandler<ScreenViewHitEventArgs>? Hit;
     private void Control_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        System.Diagnostics.Debug.WriteLine("Hit check started");
+        //System.Diagnostics.Debug.WriteLine("Hit check started");
         if (_handle == IntPtr.Zero) return;
 
         var position = e.GetCurrentPoint(this).Position;
@@ -476,7 +476,7 @@ public partial class ScreenView : Canvas
 
         sbyte index = -1;
         Abi.HitTest(_handle, pixelX, pixelY, out index);
-        System.Diagnostics.Debug.WriteLine($"Hit reported to be {((ScreenViewHitType)index).ToString()}");
+        //System.Diagnostics.Debug.WriteLine($"Hit reported to be {((ScreenViewHitType)index).ToString()}");
         // Keep x, y in DIPs for the event args
         Hit?.Invoke(this, new ScreenViewHitEventArgs((ScreenViewHitType)index, x, y));
     }

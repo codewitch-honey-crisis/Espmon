@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "SerialFrameDemo": {
-      "commandName": "Project",
-      "commandLineArgs": "COM23"
-    }
-  }
-}

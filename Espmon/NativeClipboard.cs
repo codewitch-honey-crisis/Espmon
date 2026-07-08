@@ -60,11 +60,11 @@ namespace Espmon
 
                 if (SetClipboardData(CF_UNICODETEXT, hGlobal) == IntPtr.Zero)
                 {
-                    Debug.WriteLine($"[win32] SetClipboardData failed, err={Marshal.GetLastWin32Error()}");
+                    //Debug.WriteLine($"[win32] SetClipboardData failed, err={Marshal.GetLastWin32Error()}");
                     GlobalFree(hGlobal);
                     return false;
                 }
-                Debug.WriteLine("[win32] SetClipboardData OK");
+                //Debug.WriteLine("[win32] SetClipboardData OK");
                 return true;                                             // on success the system owns hGlobal
             }
             finally { CloseClipboard(); }

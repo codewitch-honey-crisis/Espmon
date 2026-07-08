@@ -21,6 +21,7 @@ internal class LocalSessionController : SessionController
     EspSerialSession _transport;
     long _startIdentTicks;
     long _gotIdentTicks;
+    int _identRetries=0;
     int _needScreen;
     bool _dataReady = false;
     bool _needsFlash = false;
@@ -42,12 +43,17 @@ internal class LocalSessionController : SessionController
             {
                 case Command.CmdScreen:
                     {
-                       if (RequestScreen.TryRead(e.Data, out var req, out _))
+                        if (_gotIdentTicks > 0)
                         {
-                            _needScreen = req.ScreenIndex;
-                            _dataReady = false;
-                            //Console.Error.WriteLine($"Screen request for {PortName}");
-                        }
+
+
+                            if (RequestScreen.TryRead(e.Data, out var req, out _))
+                            {
+                                _needScreen = req.ScreenIndex;
+                                _dataReady = false;
+                                //Console.Error.WriteLine($"Screen request for {PortName}");
+                            }
+                        } 
                     }
                     break;
                 case Command.CmdData:
@@ -74,9 +80,9 @@ internal class LocalSessionController : SessionController
         }
     }
 
-    private void _transport_FrameError(object? sender, FrameReceivedEventArgs e)
+    private void _transport_FrameError(object? sender, FrameErrorEventArgs e)
     {
-        
+        Disconnect();
     }
 
     private void _transport_ConnectionError(object? sender, EventArgs e)
@@ -480,8 +486,9 @@ internal class LocalSessionController : SessionController
                     _startIdentTicks = Stopwatch.GetTimestamp();
                     try
                     {
+                        _identRetries = 3;
                         _transport.Send((byte)Command.CmdIdent, Array.Empty<byte>());
-                        //Console.Error.WriteLine($"Negotiation on {PortName} started.");
+                        //Debug.WriteLine($"Negotiation on {PortName} started.");
                         Status = SessionStatus.Negotiating;
                     }
                     catch (Win32Exception)
@@ -529,7 +536,7 @@ internal class LocalSessionController : SessionController
                     else if (_gotIdentTicks != 0 && _ident != null)
                     {
                         var device = Parent.GetDeviceByMac(_ident.MacAddress);
-                        
+
                         Id = _ident.ID;
                         VersionMajor = _ident.VersionMajor;
                         VersionMinor = _ident.VersionMinor;
@@ -541,7 +548,7 @@ internal class LocalSessionController : SessionController
                         Dpi = _ident.Dpi;
                         PixelSize = _ident.PixelSize;
                         Input = (DeviceInputType)_ident.InputType;
-                        
+
                         if (device == null)
                         {
                             device = new DeviceController(this.Parent, _MacToString(_ident.MacAddress, true));
@@ -563,7 +570,7 @@ internal class LocalSessionController : SessionController
                             }
                             Device = device;
 
-                            
+
                         }
                         _ident = null;
                         Status = SessionStatus.Negotiating;
@@ -583,10 +590,22 @@ internal class LocalSessionController : SessionController
                     }
                     else if (TimeSpan.FromTicks(Stopwatch.GetTimestamp() - _startIdentTicks).TotalSeconds > 3)
                     {
-                        _needsFlash = true;
-                        Status = SessionStatus.RequiresFlash;
+                        if (_identRetries > 0)
+                        {
+                            _identRetries--;
+                            _transport.Send((byte)Command.CmdIdent, Array.Empty<byte>());
+                        }
+                        else
+                        {
+                            _needsFlash = true;
+                            Status = SessionStatus.RequiresFlash;
+                        }
+                        //Debug.WriteLine($"Requires flash");
                     }
                     
+                        
+                    
+
                 }
                 break;
         }
