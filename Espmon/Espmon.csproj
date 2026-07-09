@@ -81,11 +81,20 @@
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">False</PublishReadyToRun>
     <PublishTrimmed>False</PublishTrimmed>
     <PublishSingleFile>False</PublishSingleFile>
-    <!--<WindowsPackageType Condition="'$(Configuration)' != 'Debug'">None</WindowsPackageType>-->
-    <!--<WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Debug'">True</WindowsAppSDKSelfContained>-->
+    <WindowsPackageType Condition="'$(Configuration)' != 'Debug'">None</WindowsPackageType>
+    <WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Debug'">True</WindowsAppSDKSelfContained>
     <StartupObject>RealProgram</StartupObject>
     <ApplicationIcon>..\espmon.ico</ApplicationIcon>
   </PropertyGroup>
+  <Target Name="IncludePriInPublish" BeforeTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(OutDir)$(AssemblyName).pri"
+                             Condition="Exists('$(OutDir)$(AssemblyName).pri')">
+        <RelativePath>$(AssemblyName).pri</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-lib.ps1&quot;" />
   </Target>
@@ -95,7 +104,10 @@
   <Target Name="BuildAndCopyService" AfterTargets="Build">
     <MSBuild Projects="..\Espmon.Service\Espmon.Service.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
-  <Target Name="PackageEspmon" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(SolutionDir)package.ps1&quot; -SourceDir &quot;$(TargetDir.TrimEnd('\'))&quot; -ZipPath &quot;$(SolutionDir)Espmon.zip&quot;" />
+  <Target Name="PackageEspmon" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <_PublishFull>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(PublishDir)'))))</_PublishFull>
+    </PropertyGroup>
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(SolutionDir)package.ps1&quot; -SourceDir &quot;$(_PublishFull.TrimEnd('\'))&quot; -ZipPath &quot;$(SolutionDir)Espmon.zip&quot;" />
   </Target>
 </Project>
