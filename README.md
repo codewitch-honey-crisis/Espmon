@@ -39,6 +39,12 @@ You can skip the installer entirely, unzip the files to the desired directory, a
 ![Espmon 4 Application](espmon4app.jpg)
 ![Espmon 4 Firmware](espmon4.jpg)
 
+### Premade Screens
+
+Included in the root of this repository is a file called `espmon.screens.json`
+This includes 3 screens for monitoring common items. 
+It can be imported via the Open button in the Screens section.
+
 # Hardware Monitor Query Language — Reference
 
 A query is a small expression that selects some hardware sensors and (optionally) crunches

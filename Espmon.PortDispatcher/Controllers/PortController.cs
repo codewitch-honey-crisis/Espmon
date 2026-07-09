@@ -192,6 +192,114 @@ public abstract class PortController : ControllerBase, IDisposable
         }
         return OnGetDeviceByMac(macAddress);
     }
+    private ScreenController? ImportScreenImpl(ISet<string> names, string name, JsonObject definition)
+    {
+        var nameBase = name;
+        var i = 1;
+        while(names.Contains(name))
+        {
+            name = $"{nameBase} {++i}";
+        }
+        try
+        {
+            return ScreenController.FromJson(this, name, definition);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    public void ImportScreens(TextReader reader, string? filename = null)
+    {
+        JsonObject? json;
+        try
+        {
+            json = JsonObject.ReadFrom(reader) as JsonObject;
+        } catch {
+            return;
+        }
+        if(json==null)
+        {
+            return;
+        }
+        var names = new HashSet<string>();
+        foreach(var screen in Screens)
+        {
+            names.Add(screen.Name);
+        }
+        if(json is JsonArray array)
+        {
+            for(var i = 0;i<array.Count;++i)
+            {
+                try
+                {
+                    var entry = (JsonObject?)array[i];
+
+                    var name = entry?["name"] as string;
+                    var def = entry?["definition"] as JsonObject;
+                    if (name == null || def == null)
+                    {
+                        continue;
+                    }
+                    var scr = ImportScreenImpl(names, name, def);
+                    if (scr != null)
+                    {
+                        Screens.Add(scr);
+                    }
+                }
+                catch
+                {
+
+                }
+            }
+        } else if(json is JsonObject obj)
+        {
+            if(filename==null && reader is StreamReader sr && sr.BaseStream is FileStream fs && !string.IsNullOrEmpty(fs.Name))
+            {
+                filename = fs.Name;
+            }
+            if (filename == null) return;
+            filename = Path.GetFileName(filename);
+            if (filename.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                filename = filename.Substring(0, filename.Length - 4);
+            }
+            var scr = ImportScreenImpl(names, filename, obj);
+            if (scr != null)
+            {
+                Screens.Add(scr);
+            }
+        }
+    }
+    public void ExportScreens(TextWriter writer)
+    {
+        var root = new JsonArray();
+        foreach (var screen in Screens)
+        {
+            var entry = new JsonObject();
+            entry.Add("name", screen.Name);
+            entry.Add("definition", screen.ToJson());
+            root.Add(entry);
+        }
+        root.WriteTo(writer);
+        writer.Flush();
+    }
+    public void ExportScreen(TextWriter writer, string name)
+    {
+        if (name == null) return;
+        ScreenController? scr = null;
+        foreach(var screen in Screens)
+        {
+            if(screen.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                scr = screen; break;
+            }
+        }
+        if (scr == null) return;
+        
+        scr.ToJson().WriteTo(writer);
+        writer.Flush();
+    }
     public ScreenController CreateScreen(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

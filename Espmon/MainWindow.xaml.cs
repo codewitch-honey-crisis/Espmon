@@ -1,15 +1,19 @@
 ﻿using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Windowing;
+using Microsoft.Windows.Storage.Pickers;
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
+using System.Text;
 
+using Windows.Storage;
 using Windows.System;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -491,5 +495,61 @@ public sealed partial class MainWindow : Window
     private void screenNewButton_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.NewScreen();
+    }
+
+    private async void screenOpenButton_Click(object sender, RoutedEventArgs e)
+    {
+        var openPicker = new FileOpenPicker(this.AppWindow.Id)
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+        };
+        openPicker.FileTypeFilter.Add(".json");
+        openPicker.FileTypeFilter.Add("*");
+
+        PickFileResult result = await openPicker.PickSingleFileAsync();
+        if (result != null)
+        {
+            string path = result.Path;
+            using var reader = new StreamReader(path);
+            ViewModel.PortController.ImportScreens(reader, path);
+            reader.Close();
+        }
+    }
+
+    private async void screenSaveButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedScreen == null) return;
+        var savePicker = new FileSavePicker(this.AppWindow.Id)
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = ViewModel.SelectedScreen.Name
+        };
+        savePicker.FileTypeChoices.Add("JSON file", new List<string>() { ".json" });
+
+        PickFileResult result = await savePicker.PickSaveFileAsync();
+        if (result != null)
+        {
+            using var writer = new StreamWriter(result.Path, false, Encoding.UTF8);
+            ViewModel.PortController.ExportScreen(writer,ViewModel.SelectedScreen.Name);
+            writer.Close();
+        }
+    }
+
+    private async void screenExportButton_Click(object sender, RoutedEventArgs e)
+    {
+        var savePicker = new FileSavePicker(this.AppWindow.Id)
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = "New Export",
+        };
+        savePicker.FileTypeChoices.Add("JSON file", new List<string>() { ".json" });
+
+        PickFileResult result = await savePicker.PickSaveFileAsync();
+        if (result != null && ViewModel.PortController!=null)
+        {
+            using var writer = new StreamWriter(result.Path, false, Encoding.UTF8);
+            ViewModel.PortController.ExportScreens(writer);
+            writer.Close();
+        }
     }
 }
