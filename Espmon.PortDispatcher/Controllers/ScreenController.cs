@@ -26,7 +26,7 @@ public sealed class ScreenController : ControllerBase
         set
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(value);
-            if (_name.Equals(value, StringComparison.OrdinalIgnoreCase))
+            if (!_name.Equals(value, StringComparison.OrdinalIgnoreCase))
             {
                 if (Parent.Screens.Any(p => p.Name.Equals(value, StringComparison.OrdinalIgnoreCase)))
                 {

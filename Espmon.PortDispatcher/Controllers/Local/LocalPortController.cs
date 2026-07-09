@@ -518,10 +518,11 @@ public class LocalPortController : PortController
                     if (object.ReferenceEquals(kvp.Value, sender))
                     {
                         oldName = kvp.Key;
-                        var oldFile = System.IO.Path.Combine(Path, $"{kvp.Key}.screen.json");
+                        var oldFile = System.IO.Path.Combine(Path, $"{oldName}.screen.json");
                         var newFile = System.IO.Path.Combine(Path, $"{screen.Name}.screen.json");
                         if (File.Exists(oldFile))
                         {
+                            Debug.WriteLine($"{oldName} renamed to {screen.Name}");
                             File.Move(oldFile, newFile);
                             if (File.Exists(oldFile))
                             {

@@ -2,7 +2,7 @@
 
 This is a fully programmable hardware monitor application that can display things like frame rates, and CPU temperatures (if CoreTemp is installed) or other hardware metrics on attached/supported ESP32s.
 
-It currently supports 
+It currently supports windows 10/11 on the PC side. In terms of ESP32 kits, the following are supported:
 
 - Makerfabs/Matouch ESP Parellel Display models in 3.5, 4 and 4.3 inch models
 - Lilygo "TTGO" T1 Display v1.1 

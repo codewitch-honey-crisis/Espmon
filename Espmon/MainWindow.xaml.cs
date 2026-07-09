@@ -258,7 +258,7 @@ public sealed partial class MainWindow : Window
         {
             throw new InvalidOperationException("The screen has not been established");
         }
-        entry.Screen.Name= newName;
+        entry.Name= newName;
     }
 
     private void CancelScreenRename(TextBox textBox)
@@ -319,12 +319,6 @@ public sealed partial class MainWindow : Window
         var grid = (Grid)sender;
         var entry = (ScreenListEntry)grid.DataContext;
         if (entry == null) return;
-        if (entry.IsDefault)
-        {
-            ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Collapsed;
-            ((TextBlock)grid.FindName("screenNameDisplayDefault")).Visibility = Visibility.Visible;
-            ((Button)grid.FindName("screenDeleteButton")).Visibility = Visibility.Collapsed;
-        }
     }
 
     private void devicePortsList_SelectionChanged(object sender, SelectionChangedEventArgs e)

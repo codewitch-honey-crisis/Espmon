@@ -17,7 +17,13 @@
     <PublishSelfContained>True</PublishSelfContained>
     <SelfContained>True</SelfContained>
   </PropertyGroup>
-
+  <PropertyGroup>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <AppxDefaultResourceQualifiers>Language=en-US</AppxDefaultResourceQualifiers>
+  </PropertyGroup>
+  <PropertyGroup>
+    <EnableDefaultXamlRuntimeConfiguration>false</EnableDefaultXamlRuntimeConfiguration>
+  </PropertyGroup>
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
@@ -64,6 +70,12 @@
     <None Update="libespmon.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="vcruntime140.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="vcruntime140_1.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
  
   <!--
@@ -88,8 +100,7 @@
   </PropertyGroup>
   <Target Name="IncludePriInPublish" BeforeTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>
-      <ResolvedFileToPublish Include="$(OutDir)$(AssemblyName).pri"
-                             Condition="Exists('$(OutDir)$(AssemblyName).pri')">
+      <ResolvedFileToPublish Include="$(OutDir)$(AssemblyName).pri" Condition="Exists('$(OutDir)$(AssemblyName).pri')">
         <RelativePath>$(AssemblyName).pri</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       </ResolvedFileToPublish>

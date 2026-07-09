@@ -70,7 +70,7 @@ public static class RealProgram
         try
         {
             File.AppendAllText(
-                Path.Combine(AppContext.BaseDirectory, "startup-crash.log"),
+                Path.Combine(AppContext.BaseDirectory, "espmon-startup-crash.log"),
                 $"{DateTime.Now:o} [{source}]\n{text}\n\n");
         }
         catch { }

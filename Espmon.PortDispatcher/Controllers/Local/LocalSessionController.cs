@@ -554,7 +554,7 @@ internal class LocalSessionController : SessionController
                             device = new DeviceController(this.Parent, _MacToString(_ident.MacAddress, true));
                             device.SerialNumbers = [SerialNumber];
                             device.MacAddress = _ident.MacAddress;
-                            device.Screens.Add("(default)");
+                            //device.Screens.Add("(default)");
                             Device = device;
                             Parent.Devices.Add(device);
 

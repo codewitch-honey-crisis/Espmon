@@ -100,11 +100,11 @@ public abstract class PortController : ControllerBase, IDisposable
                     {
                         if (item is ScreenController scr)
                         {
-                            if (!scr.Name.Equals("(default)", StringComparison.Ordinal))
-                            {
+                            //if (!scr.Name.Equals("(default)", StringComparison.Ordinal))
+                            //{
                                 ViewSession.Device?.Screens.Add(scr.Name);
                                 OnScreenAdded(scr);
-                            }
+                            //}
                         }
                     }
                 }
@@ -129,10 +129,10 @@ public abstract class PortController : ControllerBase, IDisposable
                     {
                         if (item is ScreenController scr)
                         {
-                            if (scr.Name.Equals("(default)", StringComparison.Ordinal))
-                            {
-                                throw new InvalidOperationException("The default screen cannot be replaced");
-                            }
+                            //if (scr.Name.Equals("(default)", StringComparison.Ordinal))
+                            //{
+                            //    throw new InvalidOperationException("The default screen cannot be replaced");
+                            //}
                             ViewSession.Device?.Screens.Remove(scr.Name);
                             OnScreenRemoved(scr);
                         }
@@ -141,10 +141,10 @@ public abstract class PortController : ControllerBase, IDisposable
                     {
                         if (item is ScreenController scr)
                         {
-                            if (scr.Name.Equals("(default)", StringComparison.Ordinal))
-                            {
-                                throw new InvalidOperationException("The default screen cannot be added");
-                            }
+                            //if (scr.Name.Equals("(default)", StringComparison.Ordinal))
+                            //{
+                            //    throw new InvalidOperationException("The default screen cannot be added");
+                            //}
                             ViewSession.Device?.Screens.Add(scr.Name);
                             OnScreenAdded(scr);
                         }
