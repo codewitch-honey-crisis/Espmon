@@ -1,5 +1,0 @@
-dependencies:
-  idf:
-    version: '>=5.0.0'
-description: Provides panel interfacing code
-version: 0.8.5
