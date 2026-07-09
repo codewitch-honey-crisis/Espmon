@@ -54,7 +54,7 @@ namespace HWKit
         public string Name { get; }
         public int ParameterCount { get; }
         public Func<IEnumerable<IEnumerable<HardwareInfoEntry>>, IEnumerable<HardwareInfoEntry>> Evaluator { get; }
-        
+
         public HardwareInfoFunction(string name, int parameterCount, Func<IEnumerable<IEnumerable<HardwareInfoEntry>>, IEnumerable<HardwareInfoEntry>> evaluator)
         {
             Name = name;
@@ -68,11 +68,11 @@ namespace HWKit
             foreach (var value in arg)
             {
                 yielded = true;
-                yield return new HardwareInfoEntry(() => (float)Math.Round(value.Value), value.Unit,value.Provider);
+                yield return new HardwareInfoEntry(() => (float)Math.Round(value.Value), value.Unit, value.Provider);
             }
             if (!yielded)
             {
-                yield return new HardwareInfoEntry(() => float.NaN, "",null);
+                yield return new HardwareInfoEntry(() => float.NaN, "", null);
             }
         }
         private static IEnumerable<HardwareInfoEntry> FnRound1(IEnumerable<IEnumerable<HardwareInfoEntry>> input)
@@ -82,11 +82,11 @@ namespace HWKit
             foreach (var value in arg)
             {
                 yielded = true;
-                yield return new HardwareInfoEntry(() => (float)Math.Round(value.Value,1), value.Unit,value.Provider);
+                yield return new HardwareInfoEntry(() => (float)Math.Round(value.Value, 1), value.Unit, value.Provider);
             }
             if (!yielded)
             {
-                yield return new HardwareInfoEntry(() => float.NaN, "",null);
+                yield return new HardwareInfoEntry(() => float.NaN, "", null);
             }
         }
         private static IEnumerable<HardwareInfoEntry> FnPast(IEnumerable<IEnumerable<HardwareInfoEntry>> input)
@@ -104,7 +104,7 @@ namespace HWKit
         public override int GetHashCode()
         {
             return HashCode.Combine(GetType(), Name);
-            
+
         }
         // Resolves the single operand without ever throwing.
         //   count == 0  -> no operand sequence present
@@ -182,18 +182,19 @@ namespace HWKit
                 if (n != 1 || op.Count == 0) return [];
                 return [new HardwareInfoEntry(() => op.Max(p => p.Value), CommonUnit(op), null)];
             });
-        public static readonly HardwareInfoFunction Round = new("round",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
-        public static readonly HardwareInfoFunction Round1 = new("round1",1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
+        public static readonly HardwareInfoFunction Round = new("round", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
+        public static readonly HardwareInfoFunction Round1 = new("round1", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
         public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input));
-        
+
     }
-    
-    public abstract partial class HardwareInfoExpression: ICloneable, IEquatable<HardwareInfoExpression> 
+
+    public abstract partial class HardwareInfoExpression : ICloneable, IEquatable<HardwareInfoExpression>
     {
         #region Cursors
         private abstract partial class Cursor
         {
-            public Cursor(string source = "<stream>", long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
+            public Cursor(string source = "<stream>", long position = 0, int line = 1, int column = 1, int tabWidth = 4)
+            {
                 Codepoint = -2;
                 Source = source;
                 Position = position;
@@ -259,15 +260,18 @@ namespace HWKit
                     if (ch2 == -1)
                     {
                         throw new System.IO.IOException($"Unterminated Unicode surrogate sequence at line {Line}, column {Column}, position {Position}");
-                    } else if (!char.IsHighSurrogate((char)ch2))
+                    }
+                    else if (!char.IsHighSurrogate((char)ch2))
                     {
                         throw new System.IO.IOException($"Invalid Unicode surrogate sequence at line {Line}, column {Column}, position {Position}");
-                    } else
+                    }
+                    else
                     {
                         Codepoint = char.ConvertToUtf32((char)ch1, (char)ch2);
                         Text = char.ConvertFromUtf32(Codepoint);
                     }
-                } else
+                }
+                else
                 {
                     Codepoint = (char)ch1;
                     Text = char.ConvertFromUtf32(Codepoint);
@@ -315,7 +319,7 @@ namespace HWKit
             _predecessors = new Lazy<IList<IHardwareInfoExpressionNode>>(this.GetPredecessors<IHardwareInfoExpressionNode>().ToLazyList());
             _successors = new Lazy<IList<IHardwareInfoExpressionNode>>(this.GetSuccessors<IHardwareInfoExpressionNode>().ToLazyList());
         }
-        
+
         public HardwareInfoLineInfo Location { get; set; }
         public abstract IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo);
         public abstract bool IsTerminal { get; }
@@ -517,13 +521,14 @@ namespace HWKit
         {
             switch (op)
             {
+                // Union binds loosest, like alternation in a regex.
+                case '|':
+                    return 0;
                 case '+':
                 case '-':
-                    return 0;
+                    return 1;
                 case '*':
                 case '/':
-                    return 1;
-                case '|':
                     return 2;
                 default:
                     return -1;
@@ -531,13 +536,8 @@ namespace HWKit
         }
         private static bool IsRightAssociative(int op)
         {
-            switch (op)
-            {
-                case '|':
-                    return true;
-                default:
-                    return false;
-            }
+            // All current operators, including union ('|'), are left-associative.
+            return false;
         }
         private static bool IsOperator(int op)
         {
@@ -673,11 +673,13 @@ namespace HWKit
                         }
                         break;
                     case 1:
-                        if (cursor.Codepoint < 128 && "0123456789".Contains((char)cursor.Codepoint)) {
+                        if (cursor.Codepoint < 128 && "0123456789".Contains((char)cursor.Codepoint))
+                        {
                             num *= 10;
                             num += cursor.Codepoint - '0';
                             cursor.Advance();
-                        } else
+                        }
+                        else
                         {
                             state = 2;
                         }
@@ -688,11 +690,13 @@ namespace HWKit
                         {
                             state = 3;
                             cursor.Advance();
-                        } else if (cursor.Codepoint == 'E' || cursor.Codepoint == 'e')
+                        }
+                        else if (cursor.Codepoint == 'E' || cursor.Codepoint == 'e')
                         {
                             state = 4;
                             cursor.Advance();
-                        } else
+                        }
+                        else
                         {
                             if (cursor.Codepoint < 0 || cursor.Codepoint >= 128 || !"Ee.".Contains((char)cursor.Codepoint))
                             {
@@ -714,7 +718,8 @@ namespace HWKit
                             {
                                 state = 4;
                                 cursor.Advance();
-                            } else
+                            }
+                            else
                             {
                                 state = -1;
                                 continue; // exit
@@ -765,7 +770,8 @@ namespace HWKit
             if (!expNeg)
             {
                 result = (float)(result * Math.Pow(10, exp));
-            } else
+            }
+            else
             {
                 result = (float)(result / Math.Pow(10, exp));
             }
@@ -778,7 +784,7 @@ namespace HWKit
             var mark = Mark(cursor);
             if (cursor.Codepoint == -1) return expr;
             string unit = "";
-            while (cursor.Codepoint >= 0 && !IsOperator(cursor.Codepoint) && !char.IsWhiteSpace((char)cursor.Codepoint) && cursor.Codepoint != '|' && cursor.Codepoint!=',' && cursor.Codepoint != '(' && cursor.Codepoint != ')' && cursor.Codepoint != '\'' && cursor.Codepoint != '-' && !char.IsDigit((char)cursor.Codepoint))
+            while (cursor.Codepoint >= 0 && !IsOperator(cursor.Codepoint) && !char.IsWhiteSpace((char)cursor.Codepoint) && cursor.Codepoint != '|' && cursor.Codepoint != ',' && cursor.Codepoint != '(' && cursor.Codepoint != ')' && cursor.Codepoint != '\'' && cursor.Codepoint != '-' && !char.IsDigit((char)cursor.Codepoint))
             {
                 unit += cursor.Text;
                 cursor.Advance();
@@ -869,25 +875,27 @@ namespace HWKit
                             funcExpr.Children.Add(expr);
                             cursor.SkipWhitespace();
                             mark = Mark(cursor);
-                            Expecting(cursor, mark,',',')');
-                            if(cursor.Codepoint==',')
+                            Expecting(cursor, mark, ',', ')');
+                            if (cursor.Codepoint == ',')
                             {
                                 cursor.Advance();
                                 cursor.SkipWhitespace();
                                 wasComma = true;
                             }
                         }
-                        if(wasComma)
+                        if (wasComma)
                         {
                             throw new HardwareInfoParseException("Unexpected , in function argunment list", mark);
                         }
                         mark = Mark(cursor);
                         Expecting(cursor, mark, ')');
                         cursor.Advance();
-                        if(funcExpr.Children.Count<func.Value.ParameterCount)
+                        if (funcExpr.Children.Count < func.Value.ParameterCount)
                         {
                             throw new HardwareInfoParseException("Too few arguments to function", mark);
-                        } else if(funcExpr.Children.Count > func.Value.ParameterCount) {
+                        }
+                        else if (funcExpr.Children.Count > func.Value.ParameterCount)
+                        {
                             throw new HardwareInfoParseException("Too many arguments to function", mark);
                         }
                         expr = funcExpr;
@@ -896,10 +904,12 @@ namespace HWKit
                     {
                         throw new HardwareInfoParseException($"Unknown function {ident}", mark);
                     }
-                } else if (expr != null)
+                }
+                else if (expr != null)
                 {
                     expr = new HardwareInfoUnitExpression(expr, ident);
-                } else
+                }
+                else
                 {
                     throw new HardwareInfoParseException($"Unknown function {ident}", mark);
                 }
@@ -907,11 +917,13 @@ namespace HWKit
             else if (cursor.Codepoint == '/')
             {
                 expr = ParsePath(cursor);
-            } else if (cursor.Codepoint == '\'')
+            }
+            else if (cursor.Codepoint == '\'')
             {
                 expr = ParseMatch(cursor);
 
-            } else if (cursor.Codepoint == '-' || cursor.Codepoint == '+' || (cursor.Codepoint >= '0' && cursor.Codepoint <= '9'))
+            }
+            else if (cursor.Codepoint == '-' || cursor.Codepoint == '+' || (cursor.Codepoint >= '0' && cursor.Codepoint <= '9'))
             {
                 expr = ParseLiteral(cursor);
             }
@@ -923,7 +935,7 @@ namespace HWKit
                 System.Diagnostics.Debug.Assert(false, "The expecting did not catch all invalid cases above");
 #endif
             }
-            
+
             return ParseModifier(cursor, expr!);
         }
         public abstract string GetUnit(HardwareInfoCollection hardwareInfo);
@@ -937,7 +949,7 @@ namespace HWKit
 
         public override bool Equals(object? obj)
         {
-            if(obj is  HardwareInfoExpression expr) { return Equals(expr); }
+            if (obj is HardwareInfoExpression expr) { return Equals(expr); }
             return false;
         }
         public abstract override int GetHashCode();
@@ -990,7 +1002,8 @@ namespace HWKit
     }
     public abstract partial class HardwareInfoUnaryExpression : HardwareInfoNonTerminalExpression
     {
-        public HardwareInfoUnaryExpression(HardwareInfoExpression expression) { 
+        public HardwareInfoUnaryExpression(HardwareInfoExpression expression)
+        {
             Expression = expression;
         }
         public HardwareInfoUnaryExpression() : this(new HardwareInfoEmptyExpression()) { }
@@ -1023,7 +1036,7 @@ namespace HWKit
         }
         public override IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo)
         {
-            yield return new HardwareInfoEntry(() => Value, "",null);
+            yield return new HardwareInfoEntry(() => Value, "", null);
         }
         public override HardwareInfoExpression Clone()
         {
@@ -1050,7 +1063,8 @@ namespace HWKit
     public partial class HardwareInfoUnitExpression : HardwareInfoUnaryExpression
     {
         public HardwareInfoUnitExpression() { }
-        public HardwareInfoUnitExpression(HardwareInfoExpression expression, string unit) : base(expression) {
+        public HardwareInfoUnitExpression(HardwareInfoExpression expression, string unit) : base(expression)
+        {
             Unit = unit;
         }
         public override HardwareInfoExpression Clone()
@@ -1068,7 +1082,8 @@ namespace HWKit
             if (Expression == null || Expression.IsTerminal)
             {
                 return $"{expr}{Unit}";
-            } else
+            }
+            else
             {
                 return $"({expr}){Unit}";
             }
@@ -1082,7 +1097,7 @@ namespace HWKit
         }
         public override bool Equals(HardwareInfoExpression? other)
         {
-            if(other is HardwareInfoUnitExpression unit)
+            if (other is HardwareInfoUnitExpression unit)
             {
                 return unit.Unit.Equals(Unit, StringComparison.Ordinal) && Expression.Equals(unit.Expression);
             }
@@ -1098,9 +1113,11 @@ namespace HWKit
         public HardwareInfoQueryExpression() { }
 
     }
-    public partial class HardwareInfoPathExpression : HardwareInfoQueryExpression {
-        public HardwareInfoPathExpression() :this("") { }
-        public HardwareInfoPathExpression(string path) {
+    public partial class HardwareInfoPathExpression : HardwareInfoQueryExpression
+    {
+        public HardwareInfoPathExpression() : this("") { }
+        public HardwareInfoPathExpression(string path)
+        {
             Path = path;
         }
         public string Path { get; set; }
@@ -1118,7 +1135,7 @@ namespace HWKit
         }
         public override bool Equals(HardwareInfoExpression? other)
         {
-            if(other is HardwareInfoPathExpression rhs)
+            if (other is HardwareInfoPathExpression rhs)
             {
                 return Path.Equals(rhs.Path, StringComparison.Ordinal);
             }
@@ -1136,7 +1153,7 @@ namespace HWKit
     }
     public partial class HardwareInfoMatchExpression : HardwareInfoQueryExpression
     {
-        private static Regex _all = new Regex(".+",RegexOptions.CultureInvariant | RegexOptions.Singleline);
+        private static Regex _all = new Regex(".+", RegexOptions.CultureInvariant | RegexOptions.Singleline);
         public HardwareInfoMatchExpression() : this(_all) { }
         public HardwareInfoMatchExpression(Regex match)
         {
@@ -1165,9 +1182,9 @@ namespace HWKit
         }
         public override bool Equals(HardwareInfoExpression? other)
         {
-            if(other is HardwareInfoMatchExpression rhs)
+            if (other is HardwareInfoMatchExpression rhs)
             {
-                return Match.ToString().Equals(rhs.Match.ToString(),StringComparison.Ordinal);
+                return Match.ToString().Equals(rhs.Match.ToString(), StringComparison.Ordinal);
             }
             return false;
         }
@@ -1183,6 +1200,11 @@ namespace HWKit
         private string? GetSubWithPrecedence(HardwareInfoExpression expression)
         {
             var str = expression!.ToString();
+            // Union binds looser than +, so a union child must be parenthesized.
+            if (expression is HardwareInfoUnionExpression)
+            {
+                return "(" + str + ")";
+            }
             return str;
         }
         public override string ToString()
@@ -1197,8 +1219,9 @@ namespace HWKit
             {
                 if (value.Unit.Equals(right.Unit, StringComparison.Ordinal))
                 {
-                    yield return new HardwareInfoEntry(null, () => value.Value + right.Value, value.Unit, object.ReferenceEquals(value.Provider,right.Provider)?value.Provider:null);
-                } else
+                    yield return new HardwareInfoEntry(null, () => value.Value + right.Value, value.Unit, object.ReferenceEquals(value.Provider, right.Provider) ? value.Provider : null);
+                }
+                else
                 {
                     yield return new HardwareInfoEntry(null, () => value.Value + right.Value, "", object.ReferenceEquals(value.Provider, right.Provider) ? value.Provider : null);
                 }
@@ -1212,13 +1235,13 @@ namespace HWKit
         {
             if (other is HardwareInfoAddExpression rhs)
             {
-                return rhs.Left.Equals(Left) && rhs.Right.Equals(Right); 
+                return rhs.Left.Equals(Left) && rhs.Right.Equals(Right);
             }
             return false;
         }
         public override int GetHashCode()
         {
-            return HashCode.Combine(GetType() ,Left, Right);
+            return HashCode.Combine(GetType(), Left, Right);
         }
         public override string GetUnit(HardwareInfoCollection hardwareInfo)
         {
@@ -1247,6 +1270,11 @@ namespace HWKit
         private string? GetSubWithPrecedence(HardwareInfoExpression expression)
         {
             var str = expression!.ToString();
+            // Union binds looser than -, so a union child must be parenthesized.
+            if (expression is HardwareInfoUnionExpression)
+            {
+                return "(" + str + ")";
+            }
             return str;
         }
         public override string ToString()
@@ -1312,7 +1340,7 @@ namespace HWKit
         private string? GetSubWithPrecedence(HardwareInfoExpression expression)
         {
             var str = expression!.ToString();
-            if (expression is HardwareInfoAddExpression || expression is HardwareInfoSubtractExpression)
+            if (expression is HardwareInfoAddExpression || expression is HardwareInfoSubtractExpression || expression is HardwareInfoUnionExpression)
             {
                 return "(" + str + ")";
             }
@@ -1359,7 +1387,7 @@ namespace HWKit
         private string? GetSubWithPrecedence(HardwareInfoExpression expression)
         {
             var str = expression!.ToString();
-            if (expression is HardwareInfoAddExpression || expression is HardwareInfoSubtractExpression)
+            if (expression is HardwareInfoAddExpression || expression is HardwareInfoSubtractExpression || expression is HardwareInfoUnionExpression)
             {
                 return "(" + str + ")";
             }
@@ -1436,10 +1464,10 @@ namespace HWKit
             if (Function.Name == "past")
             {
                 var period = Children[0].Evaluate(hardwareInfo).Single();
-                var ms = TimeUnitToMs(period.Value,period.Unit);
-                foreach(var value in hardwareInfo.Track(Children[1],ms))
+                var ms = TimeUnitToMs(period.Value, period.Unit);
+                foreach (var value in hardwareInfo.Track(Children[1], ms))
                 {
-                    yield return new HardwareInfoEntry(()=>value.Value,value.Unit,null);
+                    yield return new HardwareInfoEntry(() => value.Value, value.Unit, null);
                 }
             }
             else
@@ -1451,18 +1479,18 @@ namespace HWKit
                 }
             }
         }
-        
+
         public override string ToString()
         {
             // throw if null
-            return Function.Name + "(" + string.Join(", ",Children.Select(p=>p.ToString())) + ")";
+            return Function.Name + "(" + string.Join(", ", Children.Select(p => p.ToString())) + ")";
         }
         public override HardwareInfoExpression Clone()
         {
             var children = new HardwareInfoExpression[Children.Count];
-            for (int i = 0;i<children.Length;++i)
+            for (int i = 0; i < children.Length; ++i)
             {
-                children[i]=Children[i].Clone();
+                children[i] = Children[i].Clone();
             }
             return new HardwareInfoInvokeExpression(Function, children);
         }
@@ -1472,7 +1500,7 @@ namespace HWKit
             {
                 if (!rhs.Function.Equals(Function)) { return false; }
                 if (rhs.Children.Count != Children.Count) { return false; }
-                for(var i = 0;i<Children.Count;++i)
+                for (var i = 0; i < Children.Count; ++i)
                 {
                     if (!Children[i].Equals(rhs.Children[i])) { return false; }
                 }
@@ -1484,13 +1512,13 @@ namespace HWKit
         {
             return string.Empty;
         }
-       
+
         public override int GetHashCode()
         {
             var result = HashCode.Combine(GetType(), Function);
-            for(var i = 0;i< Children.Count;++i)
+            for (var i = 0; i < Children.Count; ++i)
             {
-                result = HashCode.Combine(result,Children[i]);
+                result = HashCode.Combine(result, Children[i]);
             }
             return result;
         }
@@ -1499,14 +1527,15 @@ namespace HWKit
     {
         public HardwareInfoUnionExpression() { }
         public HardwareInfoUnionExpression(HardwareInfoExpression left, HardwareInfoExpression right) : base(left, right) { }
-        private string? GetSubWithPrecedence(HardwareInfoExpression expression)
+        private string? GetSubWithPrecedence(HardwareInfoExpression expression, bool isRight)
         {
             var str = expression!.ToString();
-            if (expression is HardwareInfoUnionExpression)
-            {
-                return str;
-            }
-            if (expression is HardwareInfoBinaryExpression)
+            // Union is now the lowest-precedence, left-associative operator (like
+            // alternation in a regex). Everything else binds tighter, so arithmetic
+            // children never need parentheses. A nested union only needs parentheses
+            // when it appears as the right operand, i.e. the non-canonical grouping
+            // "a | (b | c)"; the left operand of "a | b | c" is left as-is.
+            if (isRight && expression is HardwareInfoUnionExpression)
             {
                 return "(" + str + ")";
             }
@@ -1518,7 +1547,7 @@ namespace HWKit
         }
         public override string ToString()
         {
-            return GetSubWithPrecedence(Left) + " | " + GetSubWithPrecedence(Right);
+            return GetSubWithPrecedence(Left, false) + " | " + GetSubWithPrecedence(Right, true);
         }
         public override IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo)
         {
@@ -1545,13 +1574,13 @@ namespace HWKit
                 if (Right == null) return Left.GetUnit(hardwareInfo);
             }
             var cmp = Left.GetUnit(hardwareInfo);
-            if(cmp.Equals(Right.GetUnit(hardwareInfo), StringComparison.Ordinal))
+            if (cmp.Equals(Right.GetUnit(hardwareInfo), StringComparison.Ordinal))
             {
                 return cmp;
             }
             return string.Empty;
         }
-        
+
         public override int GetHashCode()
         {
             // can't use combine for this because it salts with ordinal

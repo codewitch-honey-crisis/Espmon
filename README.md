@@ -177,15 +177,13 @@ past(1hr,  max('^/.+/gpu/[0-9]+/temperature$'))
 
 Four binary operators, listed from **loosest** to **tightest** binding:
 
-1. `+`  `-`   — add / subtract
-2. `*`  `/`   — multiply / divide
-3. `|`        — union (tightest, and right-associative)
+1. `|`        — union (loosest, and left-associative)
+2. `+`  `-`   — add / subtract
+3. `*`  `/`   — multiply / divide
 
-Because `|` binds tightest, `a + b | c` means `a + (b | c)`, and `a + b * c` means
-`a + (b * c)`. Use parentheses whenever you want to be sure.
-
-> The union operator binding *more* tightly than multiply/add is unusual — if a query isn't
-> doing what you expect, this precedence is a good first suspect. Parenthesize freely.
+Union binds loosest, just like alternation in a regex, so `a + b | c` means
+`(a + b) | c`, and `a + b * c` still means `a + (b * c)`. Being left-associative,
+`a | b | c` groups as `(a | b) | c`. Use parentheses whenever you want to be sure.
 
 ### How arithmetic works (important)
 
