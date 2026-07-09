@@ -211,10 +211,10 @@ public abstract class PortController : ControllerBase, IDisposable
     }
     public void ImportScreens(TextReader reader, string? filename = null)
     {
-        JsonObject? json;
+        object? json;
         try
         {
-            json = JsonObject.ReadFrom(reader) as JsonObject;
+            json = JsonObject.ReadFrom(reader);
         } catch {
             return;
         }
