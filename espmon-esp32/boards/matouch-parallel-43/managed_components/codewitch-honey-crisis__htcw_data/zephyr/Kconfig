@@ -1,5 +1,0 @@
-menu "htcw_data configuration"
-  config HTCW_DATA
-    bool "Enable HTCW_DATA"
-    default n
-endmenu

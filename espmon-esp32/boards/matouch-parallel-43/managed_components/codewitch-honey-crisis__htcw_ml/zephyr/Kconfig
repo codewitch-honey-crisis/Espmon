@@ -1,5 +1,0 @@
-menu "htcw_io configuration"
-  config HTCW_ML
-    bool "Enable HTCW_ML"
-    default n
-endmenu
