@@ -262,7 +262,7 @@ public abstract class PortController : ControllerBase, IDisposable
             filename = Path.GetFileName(filename);
             if (filename.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                filename = filename.Substring(0, filename.Length - 4);
+                filename = filename.Substring(0, filename.Length - 5);
             }
             var scr = ImportScreenImpl(names, filename, obj);
             if (scr != null)
