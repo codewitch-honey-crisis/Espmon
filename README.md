@@ -23,9 +23,16 @@ To run, use Install.exe to extract to a folder. You can execute Espmon.exe from 
 
 Note that installing [Core Temp](https://www.alcpu.com/CoreTemp/) is highly recommended so that this software can read your temperature information. It contains the necessary driver for Windows now that winring0 is no longer viable.
 
+### ⚠️ Windows SmartScreen warning
 
+When you run the installer, Windows may show "Windows protected your PC." This happens because the installer isn't code-signed yet, so it has no established reputation with Microsoft — not because it contains anything harmful. This is a fully open-source project; you can inspect or build the source yourself.
+To proceed: click More info, then Run anyway.
 
-To build:
+(Optional) You can verify the download matches the official release by checking its SHA-256 hash against the value published on the [Releases page].
+
+You can skip the installer entirely, unzip the files to the desired directory, and run Espmon.exe from there.
+
+### To build:
 - you need Visual Studio 2026 (C# and C++)
 - you need a recent copy of python installed and in your path.
 - You need the ESP-IDF 5.x Installed
