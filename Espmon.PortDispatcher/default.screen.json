@@ -1,25 +1,24 @@
 ﻿{
-  "interval": 1000,
   "top": {
     "label": "CPU",
-    "color": "Light-blue",
+    "color": "light-blue",
     "value1": {
-      "value": "round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))",
+      "value": "alt(round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$')),round(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/load$')))",
       "max": 100,
       "min": 0,
-      "color": "Green"
+      "color": "green"
     },
     "value2": {
-      "value": "round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))",
-      "max": "min('^/coretemp/cpu/[0-9]+/tjmax$')",
+      "value": "alt(round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$')),round1(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/clock$')/1000)GHz)",
+      "max": "alt(min('^/coretemp/cpu/[0-9]+/tjmax$'),5GHz)",
       "min": 0,
-      "color": "Orange",
+      "color": "orange",
       "has_gradient": true
     }
   },
   "bottom": {
     "label": "GPU",
-    "color": "Light-salmon",
+    "color": "light-salmon",
     "value1": {
       "value": "round(avg('^/.+/gpu/[0-9]+/load$'))",
       "max": 100,
@@ -29,7 +28,7 @@
       "value": "round(max('^/.+/gpu/[0-9]+/temperature$'))",
       "max": 90,
       "min": 0,
-      "color": "Purple",
+      "color": "purple",
       "has_gradient": true
     }
   }
