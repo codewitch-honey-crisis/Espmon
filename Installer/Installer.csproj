@@ -17,6 +17,8 @@
     <PackageIcon>espmon4.jpg</PackageIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\espmon.ico</ApplicationIcon>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="$(SolutionDir)Espmon.zip">

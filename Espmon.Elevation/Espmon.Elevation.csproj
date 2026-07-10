@@ -21,6 +21,10 @@
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
+  </PropertyGroup>
   <!--<Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <ElevationOutput Include="$(OutputPath)**\*.*" />

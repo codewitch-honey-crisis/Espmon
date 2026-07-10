@@ -16,6 +16,8 @@
     <RollForward>LatestMinor</RollForward>
     <PlatformTarget>x64</PlatformTarget>
     <!--<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>-->
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>

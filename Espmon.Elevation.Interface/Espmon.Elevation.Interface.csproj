@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
+  </PropertyGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon.Elevation --public --out . &quot;$(ProjectDir)interface.h&quot;" />
   </Target>

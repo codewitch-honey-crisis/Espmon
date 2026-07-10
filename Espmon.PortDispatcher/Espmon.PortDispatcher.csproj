@@ -35,6 +35,10 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
+  </PropertyGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --lengths --namespace Espmon --out . &quot;$(SolutionDir)common\interface.h&quot;" />
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-esp32.ps1&quot;" />

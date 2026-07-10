@@ -6,5 +6,7 @@
     <Platform>AnyCPU</Platform>
     <RootNamespace>Espmon</RootNamespace>
     <Platforms>AnyCPU</Platforms>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
 </Project>

@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <SelfContained>True</SelfContained>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
   </PropertyGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon.Service --public --lengths --out . &quot;$(ProjectDir)interface.h&quot;" />

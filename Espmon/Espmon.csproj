@@ -97,6 +97,8 @@
     <WindowsAppSDKSelfContained Condition="'$(Configuration)' != 'Debug'">True</WindowsAppSDKSelfContained>
     <StartupObject>RealProgram</StartupObject>
     <ApplicationIcon>..\espmon.ico</ApplicationIcon>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <Target Name="IncludePriInPublish" BeforeTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>

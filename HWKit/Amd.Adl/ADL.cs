@@ -1,4 +1,4 @@
-
+#nullable disable
 /*******************************************************************************
  Copyright(c) 2008 - 2022 Advanced Micro Devices, Inc. All Rights Reserved.
  Copyright (c) 2002 - 2006  ATI Technologies Inc. All Rights Reserved.
@@ -16,9 +16,9 @@
               
  ********************************************************************************/
 
-using Ati.Adl;
 
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 using FARPROC = System.IntPtr;
 using HMODULE = System.IntPtr;
@@ -108,7 +108,7 @@ namespace Ati.Adl
     /// <summary> ADL Memory allocation function allows ADL to callback for memory allocation</summary>
     /// <param name="size">input size</param>
     /// <returns> retrun ADL Error Code</returns>
-    public delegate IntPtr ADL_Main_Memory_Alloc (int size);
+    public delegate IntPtr ADL_Main_Memory_Alloc(int size);
 
     // ///// <summary> ADL Create Function to create ADL Data</summary>
     /// <param name="callback">Call back functin pointer which is ised to allocate memeory </param>
@@ -118,18 +118,18 @@ namespace Ati.Adl
 
     /// <summary> ADL Destroy Function to free up ADL Data</summary>
     /// <returns> retrun ADL Error Code</returns>
-    public delegate int ADL_Main_Control_Destroy ();
+    public delegate int ADL_Main_Control_Destroy();
 
     /// <summary> ADL Function to get the number of adapters</summary>
     /// <param name="numAdapters">return number of adapters</param>
     /// <returns> retrun ADL Error Code</returns>
-    public delegate int ADL_Adapter_NumberOfAdapters_Get (ref int numAdapters);
+    public delegate int ADL_Adapter_NumberOfAdapters_Get(ref int numAdapters);
 
     /// <summary> ADL Function to get the GPU adapter information</summary>
     /// <param name="info">return GPU adapter information</param>
     /// <param name="inputSize">the size of the GPU adapter struct</param>
     /// <returns> retrun ADL Error Code</returns>
-    public delegate int ADL_Adapter_AdapterInfo_Get (IntPtr info, int inputSize);
+    public delegate int ADL_Adapter_AdapterInfo_Get(IntPtr info, int inputSize);
 
     /// <summary> Function to determine if the adapter is active or not.</summary>
     /// <remarks>The function is used to check if the adapter associated with iAdapterIndex is active</remarks>  
@@ -147,7 +147,7 @@ namespace Ati.Adl
     public delegate int ADL_Display_DisplayInfo_Get(int adapterIndex, ref int numDisplays, out IntPtr displayInfoArray, int forceDetect);
 
     public delegate int ADL_Flush_Driver_Data(int flush);
-    
+
     public delegate int ADL2_Adapter_Active_Get(IntPtr handle, int something, out int adapterid);
     public delegate int ADL2_Adapter_PMLog_Support_Get(IntPtr context, int iAdapterIndex, out ADLPMLogSupportInfo pPMLogSupportInfo);
     public delegate int ADL2_Adapter_PMLog_Support_Start(IntPtr context, int iAdapterIndex, ref ADLPMLogStartInput pPMLogStartInput, out ADLPMLogStartOutput pPMLogStartOutput, uint pDevice);
@@ -155,35 +155,70 @@ namespace Ati.Adl
     public delegate int ADL2_Device_PMLog_Device_Create(IntPtr context, int iAdapterIndex, out uint pDevice);
     public delegate int ADL2_Device_PMLog_Device_Destroy(IntPtr context, uint hDevice);
 
+    // ---------------------------------------------------------------------
+    // Inline fixed-size buffers (C# 12 [InlineArray], .NET 8+).
+    //
+    // These replace the old [MarshalAs(ByValArray/ByValTStr)] managed-array and
+    // string fields. An [InlineArray] struct stores its elements inline and is
+    // fully *blittable*, so any struct built from these needs NO runtime
+    // marshalling. That's the whole point: NativeAOT cannot generate runtime
+    // marshalling for non-blittable types, but blittable types "just work"
+    // across P/Invoke, Marshal.SizeOf<T>, Marshal.PtrToStructure<T> and raw
+    // pointer reads. No 'unsafe' required -- index them like arrays: buf[i].
+    // ---------------------------------------------------------------------
+    [InlineArray(256)]
+    public struct Sensor256 { private ushort _element0; }
+
+    [InlineArray(512)]
+    public struct UIntBuf512 { private uint _element0; }
+
+    [InlineArray(256)]
+    public struct UIntBuf256 { private uint _element0; }
+
+    [InlineArray(16)]
+    public struct IntBuf16 { private int _element0; }
+
+    [InlineArray(15)]
+    public struct UIntBuf15 { private uint _element0; }
+
+    [InlineArray(14)]
+    public struct UIntBuf14 { private uint _element0; }
+
+    // A ByValTStr field with the struct's default (Ansi) charset is just a fixed
+    // block of ADL_MAX_PATH bytes. We never decode these strings (the provider
+    // only reads AdapterIndex), so they're kept opaque -- we only need the size
+    // to be correct so that array striding lands on the right fields.
+    [InlineArray(ADL.ADL_MAX_PATH)]
+    public struct AnsiPath { private byte _element0; }
+
+    [InlineArray(ADL.ADL_MAX_ADAPTERS)]
+    public struct AdapterInfoArr { private ADLAdapterInfo _element0; }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct ADLPMLogStartInput
     {
         /// list of sensors defined by ADL_PMLOG_SENSORS
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-        public ushort[] usSensors;
+        public Sensor256 usSensors;
         /// Sample rate in milliseconds
         public uint ulSampleRate;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst =15)]
         /// Reserved
-        public uint[] ulReserved;
+        public UIntBuf15 ulReserved;
     }
     [StructLayout(LayoutKind.Sequential)]
     public struct ADLPMLogStartOutput
     {
         public IntPtr pLoggingAddress;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 14)]
-        public uint[] ulReserved;
+        public UIntBuf14 ulReserved;
     };
     [StructLayout(LayoutKind.Sequential)]
     public struct ADLPMLogSupportInfo
     {
         /// list of sensors defined by ADL_PMLOG_SENSORS
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst =256)]
-        public ushort[] usSensors;
+        public Sensor256 usSensors;
         /// Reserved
-        [MarshalAs( UnmanagedType.ByValArray, SizeConst = 16)]
-        public int[] ulReserved;
+        public IntBuf16 ulReserved;
     }
+    [StructLayout(LayoutKind.Sequential)]
     public struct ADLPMLogData
     {
         /// Structure version
@@ -192,14 +227,12 @@ namespace Ati.Adl
         public uint ulActiveSampleRate;
         /// Timestamp of last update
         public ulong ulLastUpdated;
-        /// 2D array of senesor and values
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst=512)]
-        public uint[] ulValues;
+        /// Sensor values, indexed by ADL_PMLOG_SENSORS
+        public UIntBuf512 ulValues;
         /// Reserved
-        [MarshalAs( UnmanagedType.ByValArray, SizeConst=256)]
-        public uint[] ulReserved;
+        public UIntBuf256 ulReserved;
     }
-    
+
     /// <summary> ADLAdapterInfo Structure</summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct ADLAdapterInfo
@@ -209,8 +242,7 @@ namespace Ati.Adl
         /// <summary> Adapter Index</summary>
         public int AdapterIndex;
         /// <summary> Adapter UDID</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string UDID;
+        public AnsiPath UDID;
         /// <summary> Adapter Bus Number</summary>
         public int BusNumber;
         /// <summary> Adapter Driver Number</summary>
@@ -220,24 +252,19 @@ namespace Ati.Adl
         /// <summary> Adapter Vendor ID</summary>
         public int VendorID;
         /// <summary> Adapter Adapter name</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string AdapterName;
+        public AnsiPath AdapterName;
         /// <summary> Adapter Display name</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string DisplayName;
+        public AnsiPath DisplayName;
         /// <summary> Adapter Present status</summary>
         public int Present;
         /// <summary> Adapter Exist status</summary>
         public int Exist;
         /// <summary> Adapter Driver Path</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string DriverPath;
+        public AnsiPath DriverPath;
         /// <summary> Adapter Driver Ext Path</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string DriverPathExt;
+        public AnsiPath DriverPathExt;
         /// <summary> Adapter PNP String</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string PNPString;
+        public AnsiPath PNPString;
         /// <summary> OS Display Index</summary>
         public int OSDisplayIndex;
     }
@@ -248,8 +275,7 @@ namespace Ati.Adl
     public struct ADLAdapterInfoArray
     {
         /// <summary> ADLAdapterInfo Array </summary>
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = (int)ADL.ADL_MAX_ADAPTERS)]
-        public ADLAdapterInfo[] ADLAdapterInfo;
+        public AdapterInfoArr ADLAdapterInfo;
     }
 
     /// <summary> ADLDisplayID Structure</summary>
@@ -275,8 +301,7 @@ namespace Ati.Adl
         /// <summary> Display Controller Index </summary>
         public int DisplayControllerIndex;
         /// <summary> Display Name </summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
-        public string DisplayName;
+        public AnsiPath DisplayName;
         /// <summary> Display Manufacturer Name </summary>
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = (int)ADL.ADL_MAX_PATH)]
         public string DisplayManufacturerName;
@@ -313,7 +338,7 @@ namespace Ati.Adl
         /// <summary> Maximum number of GL-Sync ports on the GL-Sync module </summary>
         public const int ADL_MAX_GLSYNC_PORT_LEDS = 8;
         /// <summary> Maximum number of ADLMOdes for the adapter </summary>
-        public const int ADL_MAX_NUM_DISPLAYMODES = 1024; 
+        public const int ADL_MAX_NUM_DISPLAYMODES = 1024;
 
         /// <summary> ADLImport class</summary>
         private static class ADLImport
@@ -322,29 +347,29 @@ namespace Ati.Adl
             internal const string Atiadlxx_FileName = "atiadlxx.dll";
             /// <summary> Kernel32_FileName </summary>
             internal const string Kernel32_FileName = "kernel32.dll";
-            
+
             [DllImport(Kernel32_FileName)]
-            internal static extern HMODULE GetModuleHandle (string moduleName);
+            internal static extern HMODULE GetModuleHandle(string moduleName);
 
             [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL_Main_Control_Create (ADL_Main_Memory_Alloc callback, int enumConnectedAdapters);
+            internal static extern int ADL_Main_Control_Create(ADL_Main_Memory_Alloc callback, int enumConnectedAdapters);
 
             [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL_Main_Control_Destroy ();
+            internal static extern int ADL_Main_Control_Destroy();
             [DllImport(Atiadlxx_FileName)]
             internal static extern int ADL_Flush_Driver_Data(int flush);
-            
-            [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL_Main_Control_IsFunctionValid (HMODULE module, string procName);
 
             [DllImport(Atiadlxx_FileName)]
-            internal static extern FARPROC ADL_Main_Control_GetProcAddress (HMODULE module, string procName);
+            internal static extern int ADL_Main_Control_IsFunctionValid(HMODULE module, string procName);
 
             [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL_Adapter_NumberOfAdapters_Get (ref int numAdapters);
+            internal static extern FARPROC ADL_Main_Control_GetProcAddress(HMODULE module, string procName);
 
             [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL_Adapter_AdapterInfo_Get (IntPtr info, int inputSize);
+            internal static extern int ADL_Adapter_NumberOfAdapters_Get(ref int numAdapters);
+
+            [DllImport(Atiadlxx_FileName)]
+            internal static extern int ADL_Adapter_AdapterInfo_Get(IntPtr info, int inputSize);
 
             [DllImport(Atiadlxx_FileName)]
             internal static extern int ADL_Adapter_Active_Get(int adapterIndex, ref int status);
@@ -363,20 +388,20 @@ namespace Ati.Adl
             [DllImport(Atiadlxx_FileName)]
             internal static extern int ADL2_Device_PMLog_Device_Create(IntPtr context, int iAdapterIndex, out uint pDevice);
             [DllImport(Atiadlxx_FileName)]
-            internal static extern int ADL2_Device_PMLog_Device_Destroy (IntPtr context, uint hDevice);
+            internal static extern int ADL2_Device_PMLog_Device_Destroy(IntPtr context, uint hDevice);
         }
 
         /// <summary> ADLCheckLibrary class</summary>
         private class ADLCheckLibrary : IDisposable
         {
             private HMODULE ADLLibrary = System.IntPtr.Zero;
-            
+
             /// <summary> new a private instance</summary>
             private static ADLCheckLibrary ADLCheckLibrary_ = new ADLCheckLibrary();
             private bool _isDisposed;
 
             /// <summary> Constructor</summary>
-            private ADLCheckLibrary ()
+            private ADLCheckLibrary()
             {
                 try
                 {
@@ -389,16 +414,16 @@ namespace Ati.Adl
                 catch (EntryPointNotFoundException) { }
                 catch (Exception) { }
             }
-            
+
             /// <summary> Destructor to force calling ADL Destroy function before free up the ADL library</summary>
-            ~ADLCheckLibrary ()
+            ~ADLCheckLibrary()
             {
                 Dispose(disposing: false);
             }
             /// <summary> Check the import function to see it exists or not</summary>
             /// <param name="functionName"> function name</param>
             /// <returns>return true, if function exists</returns>
-            public static bool IsFunctionValid (string functionName)
+            public static bool IsFunctionValid(string functionName)
             {
                 bool result = false;
                 if (System.IntPtr.Zero != ADLCheckLibrary_.ADLLibrary)
@@ -410,11 +435,11 @@ namespace Ati.Adl
                 }
                 return result;
             }
-   
+
             /// <summary> Get the unmanaged function pointer </summary>
             /// <param name="functionName"> function name</param>
             /// <returns>return function pointer, if function exists</returns>
-            public static FARPROC GetProcAddress (string functionName)
+            public static FARPROC GetProcAddress(string functionName)
             {
                 FARPROC result = System.IntPtr.Zero;
                 if (System.IntPtr.Zero != ADLCheckLibrary_.ADLLibrary)
@@ -447,33 +472,33 @@ namespace Ati.Adl
                 Dispose(disposing: true);
                 GC.SuppressFinalize(this);
             }
-   
+
         }
-        
-        
+
+
         /// <summary> Build in memory allocation function</summary>
         public static ADL_Main_Memory_Alloc ADL_Main_Memory_Alloc = ADL_Main_Memory_Alloc_;
         /// <summary> Build in memory allocation function</summary>
         /// <param name="size">input size</param>
         /// <returns>return the memory buffer</returns>
-        private static IntPtr ADL_Main_Memory_Alloc_ (int size)
+        private static IntPtr ADL_Main_Memory_Alloc_(int size)
         {
             IntPtr result = Marshal.AllocCoTaskMem(size);
             return result;
         }
-        
+
         /// <summary> Build in memory free function</summary>
         /// <param name="buffer">input buffer</param>
-        public static void ADL_Main_Memory_Free (IntPtr buffer)
+        public static void ADL_Main_Memory_Free(IntPtr buffer)
         {
             if (IntPtr.Zero != buffer)
             {
                 Marshal.FreeCoTaskMem(buffer);
             }
         }
-       
+
         /// <summary> ADL_Main_Control_Create Delegates</summary>
-        public static ADL_Main_Control_Create? ADL_Main_Control_Create
+        public static ADL_Main_Control_Create ADL_Main_Control_Create
         {
             get
             {
@@ -489,12 +514,12 @@ namespace Ati.Adl
             }
         }
         /// <summary> Private Delegate</summary>
-        private static ADL_Main_Control_Create? ADL_Main_Control_Create_ = null;
+        private static ADL_Main_Control_Create ADL_Main_Control_Create_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Main_Control_Create_Check = false;
-        
+
         /// <summary> ADL_Main_Control_Destroy Delegates</summary>
-        public static ADL_Main_Control_Destroy? ADL_Main_Control_Destroy
+        public static ADL_Main_Control_Destroy ADL_Main_Control_Destroy
         {
             get
             {
@@ -510,17 +535,17 @@ namespace Ati.Adl
             }
         }
         /// <summary> Private Delegate</summary>
-        private static ADL_Main_Control_Destroy? ADL_Main_Control_Destroy_ = null;
+        private static ADL_Main_Control_Destroy ADL_Main_Control_Destroy_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Main_Control_Destroy_Check = false;
-        public static ADL_Flush_Driver_Data? ADL_Flush_Driver_Data
+        public static ADL_Flush_Driver_Data ADL_Flush_Driver_Data
         {
             get
             {
-                if(!ADL_Flush_Driver_Data_Check && null == ADL_Flush_Driver_Data_)
+                if (!ADL_Flush_Driver_Data_Check && null == ADL_Flush_Driver_Data_)
                 {
                     ADL_Flush_Driver_Data_Check = true;
-                    if(ADLCheckLibrary.IsFunctionValid("ADL_Flush_Driver_Data_Check"))
+                    if (ADLCheckLibrary.IsFunctionValid("ADL_Flush_Driver_Data_Check"))
                     {
                         ADL_Flush_Driver_Data_ = ADLImport.ADL_Flush_Driver_Data;
                     }
@@ -528,11 +553,11 @@ namespace Ati.Adl
                 return ADL_Flush_Driver_Data_;
             }
         }
-        private static ADL_Flush_Driver_Data? ADL_Flush_Driver_Data_ = null;
+        private static ADL_Flush_Driver_Data ADL_Flush_Driver_Data_ = null;
         private static bool ADL_Flush_Driver_Data_Check = false;
 
         /// <summary> ADL_Adapter_NumberOfAdapters_Get Delegates</summary>
-        public static ADL_Adapter_NumberOfAdapters_Get? ADL_Adapter_NumberOfAdapters_Get
+        public static ADL_Adapter_NumberOfAdapters_Get ADL_Adapter_NumberOfAdapters_Get
         {
             get
             {
@@ -548,12 +573,12 @@ namespace Ati.Adl
             }
         }
         /// <summary> Private Delegate</summary>
-        private static ADL_Adapter_NumberOfAdapters_Get? ADL_Adapter_NumberOfAdapters_Get_ = null;
+        private static ADL_Adapter_NumberOfAdapters_Get ADL_Adapter_NumberOfAdapters_Get_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Adapter_NumberOfAdapters_Get_Check = false;
-        
+
         /// <summary> ADL_Adapter_AdapterInfo_Get Delegates</summary>
-        public static ADL_Adapter_AdapterInfo_Get? ADL_Adapter_AdapterInfo_Get
+        public static ADL_Adapter_AdapterInfo_Get ADL_Adapter_AdapterInfo_Get
         {
             get
             {
@@ -569,12 +594,12 @@ namespace Ati.Adl
             }
         }
         /// <summary> Private Delegate</summary>
-        private static ADL_Adapter_AdapterInfo_Get? ADL_Adapter_AdapterInfo_Get_ = null;
+        private static ADL_Adapter_AdapterInfo_Get ADL_Adapter_AdapterInfo_Get_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Adapter_AdapterInfo_Get_Check = false;
-        
+
         /// <summary> ADL_Adapter_Active_Get Delegates</summary>
-        public static ADL_Adapter_Active_Get? ADL_Adapter_Active_Get
+        public static ADL_Adapter_Active_Get ADL_Adapter_Active_Get
         {
             get
             {
@@ -590,12 +615,12 @@ namespace Ati.Adl
             }
         }
         /// <summary> Private Delegate</summary>
-        private static ADL_Adapter_Active_Get? ADL_Adapter_Active_Get_ = null;
+        private static ADL_Adapter_Active_Get ADL_Adapter_Active_Get_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Adapter_Active_Get_Check = false;
-        
+
         /// <summary> ADL_Display_DisplayInfo_Get Delegates</summary>
-        public static ADL_Display_DisplayInfo_Get? ADL_Display_DisplayInfo_Get
+        public static ADL_Display_DisplayInfo_Get ADL_Display_DisplayInfo_Get
         {
             get
             {
@@ -610,11 +635,11 @@ namespace Ati.Adl
                 return ADL_Display_DisplayInfo_Get_;
             }
         }
-        private static ADL_Display_DisplayInfo_Get? ADL_Display_DisplayInfo_Get_ = null;
+        private static ADL_Display_DisplayInfo_Get ADL_Display_DisplayInfo_Get_ = null;
         /// <summary> check flag to indicate the delegate has been checked</summary>
         private static bool ADL_Display_DisplayInfo_Get_Check = false;
 
-        public static ADL2_Adapter_Active_Get? ADL2_Adapter_Active_Get
+        public static ADL2_Adapter_Active_Get ADL2_Adapter_Active_Get
         {
             get
             {
@@ -629,10 +654,10 @@ namespace Ati.Adl
                 return ADL2_Adapter_Active_Get_;
             }
         }
-        private static ADL2_Adapter_Active_Get? ADL2_Adapter_Active_Get_ = null;
+        private static ADL2_Adapter_Active_Get ADL2_Adapter_Active_Get_ = null;
         private static bool ADL2_Adapter_Active_Get_Check = false;
 
-        public static ADL2_Adapter_PMLog_Support_Get? ADL2_Adapter_PMLog_Support_Get
+        public static ADL2_Adapter_PMLog_Support_Get ADL2_Adapter_PMLog_Support_Get
         {
             get
             {
@@ -647,10 +672,10 @@ namespace Ati.Adl
                 return ADL2_Adapter_PMLog_Support_Get_;
             }
         }
-        private static ADL2_Adapter_PMLog_Support_Get? ADL2_Adapter_PMLog_Support_Get_ = null;
+        private static ADL2_Adapter_PMLog_Support_Get ADL2_Adapter_PMLog_Support_Get_ = null;
         private static bool ADL2_Adapter_PMLog_Support_Get_Check = false;
 
-        public static ADL2_Adapter_PMLog_Support_Start? ADL2_Adapter_PMLog_Start
+        public static ADL2_Adapter_PMLog_Support_Start ADL2_Adapter_PMLog_Start
         {
             get
             {
@@ -665,10 +690,10 @@ namespace Ati.Adl
                 return ADL2_Adapter_PMLog_Start_;
             }
         }
-        private static ADL2_Adapter_PMLog_Support_Start? ADL2_Adapter_PMLog_Start_ = null;
+        private static ADL2_Adapter_PMLog_Support_Start ADL2_Adapter_PMLog_Start_ = null;
         private static bool ADL2_Adapter_PMLog_Start_Check = false;
 
-        public static ADL2_Adapter_PMLog_Support_Stop? ADL2_Adapter_PMLog_Stop
+        public static ADL2_Adapter_PMLog_Support_Stop ADL2_Adapter_PMLog_Stop
         {
             get
             {
@@ -683,10 +708,10 @@ namespace Ati.Adl
                 return ADL2_Adapter_PMLog_Stop_;
             }
         }
-        private static ADL2_Adapter_PMLog_Support_Stop? ADL2_Adapter_PMLog_Stop_ = null;
+        private static ADL2_Adapter_PMLog_Support_Stop ADL2_Adapter_PMLog_Stop_ = null;
         private static bool ADL2_Adapter_PMLog_Stop_Check = false;
 
-        public static ADL2_Device_PMLog_Device_Create? ADL2_Device_PMLog_Device_Create
+        public static ADL2_Device_PMLog_Device_Create ADL2_Device_PMLog_Device_Create
         {
             get
             {
@@ -702,10 +727,10 @@ namespace Ati.Adl
             }
         }
 
-        private static ADL2_Device_PMLog_Device_Create? ADL2_Device_PMLog_Device_Create_ = null;
+        private static ADL2_Device_PMLog_Device_Create ADL2_Device_PMLog_Device_Create_ = null;
         private static bool ADL2_Device_PMLog_Device_Create_Check = false;
 
-        public static ADL2_Device_PMLog_Device_Destroy? ADL2_Device_PMLog_Device_Destroy
+        public static ADL2_Device_PMLog_Device_Destroy ADL2_Device_PMLog_Device_Destroy
         {
             get
             {
@@ -721,7 +746,7 @@ namespace Ati.Adl
             }
         }
 
-        private static ADL2_Device_PMLog_Device_Destroy? ADL2_Device_PMLog_Device_Destroy_ = null;
+        private static ADL2_Device_PMLog_Device_Destroy ADL2_Device_PMLog_Device_Destroy_ = null;
         private static bool ADL2_Device_PMLog_Device_Destroy_Check = false;
 
     }

@@ -3,7 +3,7 @@
 using System.Runtime.InteropServices;
 namespace HWKit
 {
-    public class AmdAdlGpuProvider: HardwareInfoProviderBase
+    public class AmdAdlGpuProvider : HardwareInfoProviderBase
     {
         protected override string GetDisplayName()
         {
@@ -15,132 +15,54 @@ namespace HWKit
         }
         class LogAccessor
         {
-            static float ReadSensor(uint[] ulValues, ADL_PMLOG_SENSORS sensor)
-            {
-                // ulValues is interleaved: [sensorId, value, sensorId, value, ...]
-                for (int i = 0; i < ulValues.Length - 1; i += 2)
-                {
-                    if (ulValues[i] == (uint)sensor)
-                        return ulValues[i + 1];
-                }
-                return float.NaN; // not found / unsupported
-            }
-            IntPtr _loggingAddress;
+            // In ADLPMLogData, ulValues starts at byte offset 16:
+            //   uint ulVersion (4) + uint ulActiveSampleRate (4) + ulong ulLastUpdated (8).
+            // It is really uint[256][2], i.e. 256 interleaved [sensorId, value] pairs.
+            const int ValuesOffset = 16;
+            const int PairCount = 256;
+
+            readonly IntPtr _loggingAddress;
             public LogAccessor(IntPtr loggingAddrss)
             {
                 _loggingAddress = loggingAddrss;
-
-            }
-            ADLPMLogData GetData()
-            {
-                return Marshal.PtrToStructure<ADLPMLogData>(_loggingAddress);
-            }
-            public float Clock
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_GFXCLK);
-                }
-            }
-            public float Temperature
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX);
-                }
-            }
-            public float FanSpeed
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM);
-                }
             }
 
-            public float FanLoad
+            // Reads straight from the driver's live buffer using reflection-free,
+            // NativeAOT-safe Marshal.ReadInt32 calls -- no Marshal.PtrToStructure
+            // and no per-read copy of the whole ~3 KB struct.
+            float ReadSensor(ADL_PMLOG_SENSORS sensor)
             {
-                get
+                for (int i = 0; i < PairCount; i++)
                 {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE);
+                    int off = ValuesOffset + i * 2 * sizeof(uint);
+                    uint id = (uint)Marshal.ReadInt32(_loggingAddress, off);
+                    if (id == (uint)sensor)
+                        return (uint)Marshal.ReadInt32(_loggingAddress, off + sizeof(uint));
                 }
+                return float.NaN; // not found / unsupported
             }
-            public float Load
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX);
-                }
-            }
-            public float RamLoad
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM);
-                }
-            }
-            public float CpuTemperature
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_CPU);
-                }
-            }
-            public float RamTemperature
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM);
-                }
-            }
-            public float PackageTemperature
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_SOC);
-                }
-            }
-            public float RamClock
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_MEMCLK);
-                }
-            }
-            public float SocClock
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_SOCCLK);
-                }
-            }
-            public float CpuClock
-            {
-                get
-                {
-                    var data = GetData();
-                    return ReadSensor(data.ulValues, ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK);
-                }
-            }
+
+            public float Clock => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_GFXCLK);
+            public float Temperature => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX);
+            public float FanSpeed => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM);
+            public float FanLoad => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE);
+            public float Load => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX);
+            public float RamLoad => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM);
+            public float CpuTemperature => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_CPU);
+            public float RamTemperature => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM);
+            public float PackageTemperature => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_SOC);
+            public float RamClock => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_MEMCLK);
+            public float SocClock => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_SOCCLK);
+            public float CpuClock => ReadSensor(ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK);
         }
-        void PublishPaths(int index,ref ADLPMLogSupportInfo support, IntPtr loggingAddress)
+        void PublishPaths(int index, ref ADLPMLogSupportInfo support, IntPtr loggingAddress)
         {
             var accessor = new LogAccessor(loggingAddress);
             var isApu = false;
             var i = 0;
-            while (support.usSensors[i]!=0)
+            while (support.usSensors[i] != 0)
             {
-                if (support.usSensors[i]==(uint)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK)
+                if (support.usSensors[i] == (uint)ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK)
                 {
                     isApu = true; break;
                 }
@@ -152,11 +74,11 @@ namespace HWKit
                 switch ((ADL_PMLOG_SENSORS)support.usSensors[i])
                 {
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_GFXCLK:
-                        Publish($"/gpu/{index}/clock","MHz", () => accessor.Clock);
+                        Publish($"/gpu/{index}/clock", "MHz", () => accessor.Clock);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_MEMCLK:
                         Publish($"/gpu/{index}/clock/ram", "MHz", () => accessor.RamClock);
-                        if(isApu)
+                        if (isApu)
                         {
                             Publish($"/cpu/{index}/clock/ram", "MHz", () => accessor.RamClock);
                         }
@@ -165,31 +87,31 @@ namespace HWKit
                         Publish($"/soc/{index}/clock", "MHz", () => accessor.SocClock);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM:
-                        Publish($"/gpu/{index}/temperature/ram", "°",() => accessor.RamTemperature);
+                        Publish($"/gpu/{index}/temperature/ram", "°", () => accessor.RamTemperature);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/temperature/ram", "°",() => accessor.RamTemperature);
+                            Publish($"/cpu/{index}/temperature/ram", "°", () => accessor.RamTemperature);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM:
-                        Publish($"/gpu/{index}/speed/fan", "RPM",() => accessor.FanSpeed);
+                        Publish($"/gpu/{index}/speed/fan", "RPM", () => accessor.FanSpeed);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/speed/fan","RPM", () => accessor.FanSpeed);
+                            Publish($"/cpu/{index}/speed/fan", "RPM", () => accessor.FanSpeed);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE:
-                        Publish($"/gpu/{index}/load/fan","%", () => accessor.FanLoad);
+                        Publish($"/gpu/{index}/load/fan", "%", () => accessor.FanLoad);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/load/fan","%", () => accessor.FanLoad);
+                            Publish($"/cpu/{index}/load/fan", "%", () => accessor.FanLoad);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX:
-                        Publish($"/gpu/{index}/load","%", () => accessor.Load);
+                        Publish($"/gpu/{index}/load", "%", () => accessor.Load);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM:
-                        Publish($"/gpu/{index}/load/ram","%", () => accessor.RamLoad);
+                        Publish($"/gpu/{index}/load/ram", "%", () => accessor.RamLoad);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX:
                         Publish($"/gpu/{index}/temperature", "°", () => accessor.Temperature);
@@ -203,7 +125,7 @@ namespace HWKit
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_CLK_CPUCLK:
                         Publish($"/cpu/{index}/clock", "MHz", () => accessor.CpuClock);
                         break;
-                
+
                 }
                 ++i;
             }
@@ -226,7 +148,7 @@ namespace HWKit
                 {
                     ADL.ADL_Adapter_NumberOfAdapters_Get(ref NumberOfAdapters);
                 }
-                
+
                 if (0 < NumberOfAdapters)
                 {
                     // Get OS adpater info from ADL
@@ -236,21 +158,22 @@ namespace HWKit
                     if (null != ADL.ADL_Adapter_AdapterInfo_Get)
                     {
                         IntPtr AdapterBuffer = IntPtr.Zero;
-                        int size = Marshal.SizeOf(OSAdapterInfoData);
-                        AdapterBuffer = Marshal.AllocCoTaskMem((int)size);
-                        Marshal.StructureToPtr(OSAdapterInfoData, AdapterBuffer, false);
+                        // SizeOf<T>() / PtrToStructure<T>() are NativeAOT-safe here
+                        // because ADLAdapterInfoArray is now blittable. The driver
+                        // fills the buffer, so no StructureToPtr pre-init is needed.
+                        int size = Marshal.SizeOf<ADLAdapterInfoArray>();
+                        AdapterBuffer = Marshal.AllocCoTaskMem(size);
 
                         if (null != ADL.ADL_Adapter_AdapterInfo_Get)
                         {
                             ADLRet = ADL.ADL_Adapter_AdapterInfo_Get(AdapterBuffer, size);
                             if (ADL.ADL_SUCCESS == ADLRet)
                             {
-                                OSAdapterInfoData = (ADLAdapterInfoArray)Marshal.PtrToStructure(AdapterBuffer, OSAdapterInfoData.GetType())!;
-                                
+                                OSAdapterInfoData = Marshal.PtrToStructure<ADLAdapterInfoArray>(AdapterBuffer);
+
                                 for (int i = 0; i < NumberOfAdapters; i++)
                                 {
                                     ADLPMLogStartInput logStartInput = default;
-                                    logStartInput.usSensors = new ushort[256];
                                     ADLPMLogStartOutput logStartOutput = default;
                                     uint hDevice = 0;
                                     ADLPMLogSupportInfo support = default;
@@ -271,7 +194,7 @@ namespace HWKit
                                         if (ADL.ADL_SUCCESS == ADLRet)
                                         {
                                             int j = 0;
-                                            while (support.usSensors![j] != 0)
+                                            while (support.usSensors[j] != 0)
                                             {
                                                 logStartInput.usSensors[j] = support.usSensors[j];
                                                 j++;
@@ -283,7 +206,7 @@ namespace HWKit
                                             {
                                                 ADLRet = ADL.ADL2_Adapter_PMLog_Start(IntPtr.Zero, OSAdapterInfoData.ADLAdapterInfo[i].AdapterIndex, ref logStartInput, out logStartOutput, hDevice);
                                             }
-                                            if(ADL.ADL_SUCCESS != ADLRet)
+                                            if (ADL.ADL_SUCCESS != ADLRet)
                                             {
                                                 throw new SystemException(ADLRet.ToString());
                                             }
@@ -293,7 +216,8 @@ namespace HWKit
                                         {
                                             throw new SystemException(ADLRet.ToString());
                                         }
-                                    } else
+                                    }
+                                    else
                                     {
                                         throw new SystemException(ADLRet.ToString());
                                     }
@@ -338,7 +262,7 @@ namespace HWKit
             {
                 return;
             }
-            for(var i = 0;i<_devices.Count;++i)
+            for (var i = 0; i < _devices.Count; ++i)
             {
                 var t = _devices[i];
                 if (null != ADL.ADL2_Adapter_PMLog_Stop)
