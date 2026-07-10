@@ -155,6 +155,7 @@ All functions are called with parentheses and operate on a list.
 | `round(x)` | round **each** value to a whole number | list (same size) |
 | `round1(x)` | round **each** value to 1 decimal place | list (same size) |
 | `past(period, x)` | look back in time — track `x` over the last `period` | historical list |
+| `alt(primary, fallback)` | choose the primary unless empty or all NaN, otherwise choose the fallback |
 
 A few details:
 

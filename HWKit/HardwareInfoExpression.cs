@@ -97,6 +97,14 @@ namespace HWKit
                 yield return value;
             }
         }
+        private static IEnumerable<HardwareInfoEntry> FnAlt(IEnumerable<IEnumerable<HardwareInfoEntry>> input)
+        {
+            var arg = input.Single();
+            foreach (var value in arg)
+            {
+                yield return value;
+            }
+        }
         public bool Equals(HardwareInfoFunction other)
         {
             return (other.Name.Equals(Name, StringComparison.Ordinal));
@@ -185,6 +193,7 @@ namespace HWKit
         public static readonly HardwareInfoFunction Round = new("round", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
         public static readonly HardwareInfoFunction Round1 = new("round1", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
         public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input));
+        public static readonly HardwareInfoFunction Alt = new("alt", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnAlt(input));
 
     }
 
@@ -845,6 +854,9 @@ namespace HWKit
                     case "past":
                         func = HardwareInfoFunction.Past;
                         break;
+                    case "alt":
+                        func = HardwareInfoFunction.Alt;
+                        break;
                     case "round":
                         func = HardwareInfoFunction.Round;
                         break;
@@ -1436,11 +1448,11 @@ namespace HWKit
         private static long TimeUnitToMs(float value, string unit)
         {
             if (float.IsNaN(value)) return 0;
-            if (unit.StartsWith("day", StringComparison.OrdinalIgnoreCase) || unit.Equals("d", StringComparison.OrdinalIgnoreCase))
+            if (unit.Equals("day", StringComparison.OrdinalIgnoreCase) || unit.Equals("d", StringComparison.OrdinalIgnoreCase))
             {
                 return (long)(value * 1000 * 60 * 60 * 24);
             }
-            if (unit.StartsWith("hr", StringComparison.OrdinalIgnoreCase) || unit.StartsWith("hour", StringComparison.OrdinalIgnoreCase) || unit.Equals("h", StringComparison.OrdinalIgnoreCase))
+            if (unit.Equals("hr", StringComparison.OrdinalIgnoreCase) || unit.Equals("hour", StringComparison.OrdinalIgnoreCase) || unit.Equals("h", StringComparison.OrdinalIgnoreCase))
             {
                 return (long)(value * 1000 * 60 * 60);
             }
@@ -1458,16 +1470,27 @@ namespace HWKit
             }
             throw new ArgumentException($"The unit \"{unit}\" was not recognized", nameof(unit));
         }
+        
         public override IEnumerable<HardwareInfoEntry> Evaluate(HardwareInfoCollection hardwareInfo)
         {
             // we handle tracking separately here
-            if (Function.Name == "past")
+            if (Function.Name.Equals("past",StringComparison.Ordinal))
             {
                 var period = Children[0].Evaluate(hardwareInfo).Single();
                 var ms = TimeUnitToMs(period.Value, period.Unit);
                 foreach (var value in hardwareInfo.Track(Children[1], ms))
                 {
                     yield return new HardwareInfoEntry(() => value.Value, value.Unit, null);
+                }
+            } else if(Function.Name.Equals("alt",StringComparison.Ordinal))
+            {
+                var target = Children[0].Evaluate(hardwareInfo);
+                if(target.All(p=>float.IsNaN(p.Value))) { 
+                    target = Children[1].Evaluate(hardwareInfo);
+                }
+                foreach(var value in target)
+                {
+                    yield return value;
                 }
             }
             else

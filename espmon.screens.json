@@ -1,116 +1,116 @@
 ﻿[
-    {
-        "name": "default",
-        "definition": {
-            "top": {
-                "label": "CPU",
-                "color": "light-blue",
-                "value1": {
-                    "value": "round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))",
-                    "max": 100,
-                    "min": 0,
-                    "color": "green"
-                },
-                "value2": {
-                    "value": "round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))",
-                    "max": "min('^/coretemp/cpu/[0-9]+/tjmax$')",
-                    "min": 0,
-                    "color": "orange",
-                    "has_gradient": true
-                }
-            },
-            "bottom": {
-                "label": "GPU",
-                "color": "light-salmon",
-                "value1": {
-                    "value": "round(avg('^/.+/gpu/[0-9]+/load$'))",
-                    "max": 100,
-                    "min": 0
-                },
-                "value2": {
-                    "value": "round(max('^/.+/gpu/[0-9]+/temperature$'))",
-                    "max": 90,
-                    "min": 0,
-                    "color": "purple",
-                    "has_gradient": true
-                }
-            }
+  {
+    "name": "default",
+    "definition": {
+      "top": {
+        "label": "CPU",
+        "color": "light-blue",
+        "value1": {
+          "value": "alt(round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$')),round(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/load$')))",
+          "max": 100,
+          "min": 0,
+          "color": "green"
+        },
+        "value2": {
+          "value": "alt(round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$')),round1(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/clock$')/1000)GHz)",
+          "max": "alt(min('^/coretemp/cpu/[0-9]+/tjmax$'),5GHz)",
+          "min": 0,
+          "color": "orange",
+          "has_gradient": true
         }
-    },
-    {
-        "name": "gaming",
-        "definition": {
-            "interval": 100,
-            "top": {
-                "label": "1%</Avg",
-                "color": "yellow",
-                "value1": {
-                    "value": "round(/dxgi/framerate)",
-                    "max": "/dxgi/refreshrate",
-                    "min": 0,
-                    "color": "#91CFD9"
-                },
-                "value2": {
-                    "value": "round(/dxgi/1pctlows)",
-                    "max": "/dxgi/refreshrate",
-                    "min": 0,
-                    "color": "#CCCAFF"
-                }
-            },
-            "bottom": {
-                "label": "Min/Max",
-                "color": "light-sea-green",
-                "value1": {
-                    "value": "round1(/dxgi/maxrender)",
-                    "max": 1000,
-                    "min": 0,
-                    "color": "#780507"
-                },
-                "value2": {
-                    "value": "round1(/dxgi/minrender)",
-                    "max": 1000,
-                    "min": 0,
-                    "color": "#DB8FD4"
-                }
-            }
+      },
+      "bottom": {
+        "label": "GPU",
+        "color": "light-salmon",
+        "value1": {
+          "value": "round(avg('^/.+/gpu/[0-9]+/load$'))",
+          "max": 100,
+          "min": 0
+        },
+        "value2": {
+          "value": "round(max('^/.+/gpu/[0-9]+/temperature$'))",
+          "max": 90,
+          "min": 0,
+          "color": "purple",
+          "has_gradient": true
         }
-    },
-    {
-        "name": "history",
-        "definition": {
-            "top": {
-                "label": "CPU 5 min",
-                "color": "#1228E6",
-                "value1": {
-                    "value": "max(past(5m, round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))))",
-                    "max": 100,
-                    "min": 0,
-                    "color": "green"
-                },
-                "value2": {
-                    "value": "round(max(past(5m, max('/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))))",
-                    "max": "min('/coretemp/cpu/[0-9]+/tjmax$')",
-                    "min": 0,
-                    "color": "orange",
-                    "has_gradient": true
-                }
-            },
-            "bottom": {
-                "label": "GPU 5 min",
-                "color": "#FF654C",
-                "value1": {
-                    "value": "max(past(5m, round(avg('^/.+/gpu/[0-9]+/load$'))))",
-                    "max": 100,
-                    "min": 0
-                },
-                "value2": {
-                    "value": "max(past(5m, round(avg('^/.+/gpu/[0-9]+/temperature$'))))",
-                    "max": 90,
-                    "min": 0,
-                    "color": "purple",
-                    "has_gradient": true
-                }
-            }
-        }
+      }
     }
+  },
+  {
+    "name": "gaming",
+    "definition": {
+      "interval": 100,
+      "top": {
+        "label": "1%</Avg",
+        "color": "yellow",
+        "value1": {
+          "value": "round(/dxgi/framerate)",
+          "max": "/dxgi/refreshrate",
+          "min": 0,
+          "color": "#91CFD9"
+        },
+        "value2": {
+          "value": "round(/dxgi/1pctlows)",
+          "max": "/dxgi/refreshrate",
+          "min": 0,
+          "color": "#CCCAFF"
+        }
+      },
+      "bottom": {
+        "label": "Min/Max",
+        "color": "light-sea-green",
+        "value1": {
+          "value": "round1(/dxgi/maxrender)",
+          "max": 1000,
+          "min": 0,
+          "color": "#780507"
+        },
+        "value2": {
+          "value": "round1(/dxgi/minrender)",
+          "max": 1000,
+          "min": 0,
+          "color": "#DB8FD4"
+        }
+      }
+    }
+  },
+  {
+    "name": "history",
+    "definition": {
+      "top": {
+        "label": "CPU 5 min",
+        "color": "#1228E6",
+        "value1": {
+          "value": "max(past(5m, round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$'))))",
+          "max": 100,
+          "min": 0,
+          "color": "green"
+        },
+        "value2": {
+          "value": "round(max(past(5m, max('/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'))))",
+          "max": "min('/coretemp/cpu/[0-9]+/tjmax$')",
+          "min": 0,
+          "color": "orange",
+          "has_gradient": true
+        }
+      },
+      "bottom": {
+        "label": "GPU 5 min",
+        "color": "#FF654C",
+        "value1": {
+          "value": "max(past(5m, round(avg('^/.+/gpu/[0-9]+/load$'))))",
+          "max": 100,
+          "min": 0
+        },
+        "value2": {
+          "value": "max(past(5m, round(avg('^/.+/gpu/[0-9]+/temperature$'))))",
+          "max": 90,
+          "min": 0,
+          "color": "purple",
+          "has_gradient": true
+        }
+      }
+    }
+  }
 ]
