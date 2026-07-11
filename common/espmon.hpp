@@ -448,8 +448,7 @@ class bar : public uix::control<ControlSurfaceType> {
             gfx::hsva_pixel<32> px2 = gfx::color<gfx::hsva_pixel<32>>::green;
             auto h1 = px.channel<gfx::channel_name::H>();
             auto h2 = px2.channel<gfx::channel_name::H>();
-            // adjust so we don't overshoot
-            h2 -= 64;
+            h2-=24;
             // the actual range we're drawing
             auto range = abs(h2 - h1) + 1;
             // the width of each gradient segment
