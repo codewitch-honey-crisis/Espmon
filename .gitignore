@@ -436,3 +436,12 @@ FodyWeavers.xsd
 /Espmon.zip
 /espmon-esp32/boards/m5stack-core2/managed_components
 /espmon-esp32/boards/m5stack-core2/build
+/espmon-esp32/boards/cyd-2432S028/main/idf_component.yml
+/espmon-esp32/boards/m5stack-core2/main/idf_component.yml
+/espmon-esp32/boards/ttgo-t1/main/idf_component.yml
+/espmon-esp32/boards/ttgo-t1/dependencies.lock
+/espmon-esp32/boards/m5stack-core2/dependencies.lock
+/espmon-esp32/boards/cyd-2432S028/dependencies.lock
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/src/gfx_pixel.hpp
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/CMakeLists.txt
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/README.md
