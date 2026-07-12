@@ -361,13 +361,14 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     }
     public MainViewModel()
     {
+        SettingsMessage = "";
         _elevator = new Elevator();
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         if (!Directory.Exists(path))
         {
             Directory.CreateDirectory(path);
         }
-
+        
 
         PortController = new LocalPortController(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon"), SynchronizationContext.Current);
         PortController.Screens.CollectionChanged += Screens_CollectionChanged;

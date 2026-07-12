@@ -3,9 +3,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platform>AnyCPU</Platform>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RootNamespace>Espmon</RootNamespace>
-    <Platforms>AnyCPU</Platforms>
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
     <SignAssembly>True</SignAssembly>
   </PropertyGroup>

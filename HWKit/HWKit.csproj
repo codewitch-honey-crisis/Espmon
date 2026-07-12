@@ -4,7 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platforms>AnyCPU</Platforms>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
     <SignAssembly>True</SignAssembly>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>

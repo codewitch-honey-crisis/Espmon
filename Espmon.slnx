@@ -1,31 +1,41 @@
 <Solution>
-   <Configurations>
-      <Platform Name="x64" />
-   </Configurations>
-   <Folder Name="/Solution Items/">
-      <File Path="espmon-esp32/LICENSE" />
-      <File Path="espmon.screens.json" />
-      <File Path="README.md" />
-   </Folder>
-   <Project Path="Espmon.Elevation.Interface/Espmon.Elevation.Interface.csproj" Id="2097d9ee-7915-4f54-8d6b-c4f8c17ed042">
-      <Platform Project="x64" />
-   </Project>
-   <Project Path="Espmon.Elevation/Espmon.Elevation.csproj" Id="382b840f-0c07-49d7-ac8e-9644caf9cf90">
-      <Platform Project="x64" />
-   </Project>
-   <Project Path="Espmon.Json/Espmon.Json.csproj" />
-   <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj" />
-   <Project Path="Espmon.Service.Interface/Espmon.Service.Interface.csproj" Id="d6e6668a-ee93-41de-ad8e-ac7493497fbc" />
-   <Project Path="Espmon.Service/Espmon.Service.csproj" Id="c0a8aaf5-7ee3-43ce-b1a3-f7c3ceefd5c0">
-      <Platform Project="x64" />
-   </Project>
-   <Project Path="Espmon/Espmon.csproj">
-      <Platform Project="x64" />
-      <Deploy />
-   </Project>
-   <Project Path="HWKit/HWKit.csproj" />
-   <Project Path="Uninstall/Uninstall.csproj" Id="0b621a56-96c1-48bc-98e7-c10add99a4e4">
-   </Project>
-   <Project Path="Installer/Installer.csproj" Id="9cc33b7e-fd3d-4895-ad8d-5c2f209cc668">
-   </Project>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="espmon.screens.json" />
+    <File Path="LICENSE.txt" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="Espmon.Elevation.Interface/Espmon.Elevation.Interface.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon.Elevation/Espmon.Elevation.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon.Json/Espmon.Json.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon.PortDispatcher/Espmon.PortDispatcher.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon.Service.Interface/Espmon.Service.Interface.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon.Service/Espmon.Service.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Espmon/Espmon.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="HWKit/HWKit.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Installer/Installer.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="Uninstall/Uninstall.csproj">
+    <Platform Project="x64" />
+  </Project>
+   
 </Solution>

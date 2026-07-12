@@ -7,6 +7,8 @@
     <SelfContained>True</SelfContained>
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
     <SignAssembly>True</SignAssembly>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IsAotCompatible>True</IsAotCompatible>

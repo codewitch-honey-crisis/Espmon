@@ -3,9 +3,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Platform>AnyCPU</Platform>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+
     <RootNamespace>Espmon</RootNamespace>
-    <Platforms>AnyCPU</Platforms>
+    
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
   </PropertyGroup>
