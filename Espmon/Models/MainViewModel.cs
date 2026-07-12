@@ -34,7 +34,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public Visibility DevicePanel1Visibility
     {
-        get => _devicePanelIndex == 0 ? Visibility.Visible:Visibility.Collapsed;
+        get => _devicePanelIndex == 0 && SelectedSession!=null ? Visibility.Visible:Visibility.Collapsed;
     }
     public Visibility DevicePanel2Visibility
     {
