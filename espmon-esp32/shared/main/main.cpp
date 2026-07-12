@@ -1,3 +1,7 @@
+// If the CMD_SCREEN response for an input-driven advance never arrives, don't
+// lock out navigation forever — clear the input gate after this.
+#define SCREEN_CHANGE_TIMEOUT_MS 1000
+#define INPUT_STABLE_MS 30   // contact must hold this long to be trusted
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -53,6 +57,8 @@ static TickType_t disconnect_ts = xTaskGetTickCount();
 static uint8_t mac_address[6] = {0};
 static float dpi = 0.0f;
 static float pixel_size = 0.0f;
+static bool screen_change_pending = false;
+static TickType_t screen_change_ts = 0;
 static int8_t screen_index = -1;
 
 int serial_read(void* state) {
@@ -191,42 +197,52 @@ static void write_nop(port_t* pt) {
 }
 
 #ifdef HAS_INPUT
+// Feed the raw "is a contact present right now" signal each poll. Returns true
+// exactly once, on a *confirmed* release: a press that stayed stable-down for
+// INPUT_STABLE_MS followed by a release stable-up for INPUT_STABLE_MS. Glitches
+// shorter than that — an FT6x36 spurious blip, or a count==0 dropout mid-hold —
+// never commit, so they produce no edge and no advance.
+static bool input_released(bool raw_down) {
+    static bool       stable_down = false;   // debounced/confirmed state
+    static bool       raw_last    = false;   // last raw sample
+    static TickType_t raw_change_ts = 0;     // when the raw sample last changed
+    TickType_t now = xTaskGetTickCount();
+    if(raw_down != raw_last) {
+        raw_last = raw_down;
+        raw_change_ts = now;
+    }
+    bool released = false;
+    if((uint32_t)(now - raw_change_ts) >= pdMS_TO_TICKS(INPUT_STABLE_MS)) {
+        if(raw_down != stable_down) {        // raw held long enough; commit it
+            if(!raw_down) {
+                released = true;             // confirmed down -> up
+            }
+            stable_down = raw_down;
+        }
+    }
+    return released;
+}
 
 static void update_input(port_t* pt) {
+    bool raw_down = false;
 #ifdef TOUCH_BUS
     panel_touch_update();
     uint16_t x,y,s;
     size_t count = 1;
     panel_touch_read_raw(&count,&x,&y,&s);
-    if(count>0) {
-        if(pressed==0) {
-            pressed = xTaskGetTickCount();
-        }
-    } else {
-        if(pressed>0) {
-            if(app.connected()) {
-                ++screen_index;
-                write_screen_req(pt,screen_index);
-            }
-        }
-        pressed = 0;
-    }
+    if(count>0) raw_down = true;
 #endif
 #ifdef BUTTON
-    if(panel_button_read_all()) {
-        if(pressed==0) {
-            pressed = xTaskGetTickCount();
-        }
-    } else {
-        if(pressed>0) {
-            if(app.connected()) {
-                ++screen_index;
-                write_screen_req(pt, screen_index);
-            }
-        }
-        pressed = 0;
-    }
+    if(panel_button_read_all()) raw_down = true;
 #endif
+    if(input_released(raw_down)) {
+        if(app.connected() && !screen_change_pending) {
+            ++screen_index;
+            screen_change_pending = true;
+            screen_change_ts = xTaskGetTickCount();
+            write_screen_req(pt,screen_index);
+        }
+    }
 }
 #endif
 static void process_frame(port_t* pt, uint8_t cmd, void* p, size_t len) {
@@ -239,6 +255,7 @@ static void process_frame(port_t* pt, uint8_t cmd, void* p, size_t len) {
         case CMD_SCREEN:
             if(-1<response_screen_read(&resp.screen,on_read_buffer,&cur)) {
                 screen_index = resp.screen.header.index;
+                screen_change_pending = false;
                 app.accept_packet((command_t)cmd,resp,false);
             } else {
                 ESP_LOGE(TAG, "CMD_SCREEN READ ERROR");
@@ -274,6 +291,7 @@ static void process_frame(port_t* pt, uint8_t cmd, void* p, size_t len) {
         case CMD_REFRESH_SCREEN:
             if(-1<response_refresh_screen_read(&resp.refresh_screen,on_read_buffer,&cur)) {
                 screen_index = -1;
+                screen_change_pending = false;
             } else {
                 ESP_LOGE(TAG, "CMD_REFRESH_SCREEN READ ERROR");
             }
@@ -370,6 +388,7 @@ extern "C" void app_main() {
             connected = false;
             disconnect_ts = 0;
             screen_index=-1;
+            screen_change_pending = false;
             // Link is dead. Reset ARQ state so a reconnect that does NOT reboot the
             // MCU (native USB CDC) still realigns sequence numbers. Only fires after
             // 5s of no frames, so it can't disturb a live link. The active handle
@@ -431,7 +450,10 @@ extern "C" void app_main() {
         pump_send(&port2);
         service_retransmit(&port2);
 #endif
-
+        if(screen_change_pending &&
+           (uint32_t)(xTaskGetTickCount() - screen_change_ts) >= pdMS_TO_TICKS(SCREEN_CHANGE_TIMEOUT_MS)) {
+            screen_change_pending = false;
+        }
 #ifdef HAS_INPUT
         update_input(active);
 #endif
