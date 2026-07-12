@@ -136,6 +136,7 @@ internal partial class EspSerialSession : IDisposable
     readonly List<byte> _log;
     readonly object _logLock;
     readonly object _ioLock;
+    readonly object _closeLock;
     bool _logging;
     SynchronizationContext? _sync;
     Task? _readTask, _statTask;
@@ -352,10 +353,17 @@ internal partial class EspSerialSession : IDisposable
     }
     void WriteFrame(ReadOnlySpan<byte> frame)
     {
-        lock (_sendLock)                              // one whole frame at a time on the wire
+        lock (_sendLock)
         {
             try { WriteAll(frame); }
-            catch (Win32Exception) { OnConnectionError(EventArgs.Empty); Dispose(true); }
+            catch (Win32Exception)
+            {
+                // Do NOT Dispose/Close here — this runs on the read-loop thread, and
+                // Close() joins that same task (self-join). Just report; the owner's
+                // ConnectionError handler drives teardown. Suppress during deliberate
+                // close, like the loops do.
+                if (!_closing) OnConnectionError(EventArgs.Empty);
+            }
         }
     }
     // Called holding _arq. Stamps seq, builds+retains, arms timer, returns bytes to write.
@@ -434,17 +442,17 @@ internal partial class EspSerialSession : IDisposable
         if (_disposed) return;
         if (_connErrorFired) return;
         _connErrorFired = true;
-        if (ConnectionError != null)
-        {
-            if (_sync == null)
-            {
-                ConnectionError?.Invoke(this, args);
-            }
-            else
-            {
-                _sync.Post((state) => ConnectionError?.Invoke(this, args), null);
-            }
-        }
+        var handler = ConnectionError;
+        if (handler == null) return;
+
+        // The loops call this inline. With _sync null, invoking directly runs the
+        // host handler on the loop thread; if it calls Stop()/Close(), Close() waits
+        // on the task it's running -> self-join. Post elsewhere so Close() is always
+        // on another thread.
+        if (_sync != null)
+            _sync.Post(_ => handler(this, args), null);
+        else
+            ThreadPool.QueueUserWorkItem(_ => handler(this, args));
     }
 
     public byte[] GetNextLogData()
@@ -502,7 +510,8 @@ internal partial class EspSerialSession : IDisposable
             var ov = boundHandle.AllocateNativeOverlapped(
                 (errorCode, numBytes, pOv) =>
                 {
-                    boundHandle.FreeNativeOverlapped(pOv);   // was _boundHandle
+                    try { boundHandle.FreeNativeOverlapped(pOv); }
+                    catch (ObjectDisposedException) { }   // lost race with a forced close; overlapped reclaimed via handle teardown
                     if (errorCode == 0)
                         tcs.TrySetResult((int)numBytes);
                     else if (errorCode == ERROR_OPERATION_ABORTED)
@@ -568,8 +577,9 @@ internal partial class EspSerialSession : IDisposable
                 (errorCode, numBytes, pOv) =>
                 {
                     int mask = maskArr[0];
-                    maskPin.Free();
-                    boundHandle.FreeNativeOverlapped(pOv);
+                    if (maskPin.IsAllocated) maskPin.Free();
+                    try { boundHandle.FreeNativeOverlapped(pOv); }
+                    catch (ObjectDisposedException) { }
                     if (errorCode == 0)
                         tcs.TrySetResult(mask);
                     else if (errorCode == ERROR_OPERATION_ABORTED)
@@ -769,7 +779,7 @@ internal partial class EspSerialSession : IDisposable
             throw new Win32Exception(Marshal.GetLastWin32Error());
         RegisterPowerNotification();
 
-        _statTask = Task.Factory.StartNew(async () =>
+        _statTask = Task.Run(async () =>
         {
             try
             {
@@ -790,7 +800,7 @@ internal partial class EspSerialSession : IDisposable
                     OnConnectionError(EventArgs.Empty);
                 }
             }
-        }, default, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+        });
 
         _readTask = Task.Run(async () =>
         {
@@ -842,40 +852,70 @@ internal partial class EspSerialSession : IDisposable
     public void Close()
     {
         UnregisterPowerNotification();
-        if (!IsOpen)
+
+        // Fast-path guard: if we're somehow on a loop task, never join (that waits on
+        // the current task). Just request stop + abort I/O; the owner's Close joins.
+        // Best-effort only — see caveat below — but the timeout makes it non-fatal
+        // even when this misses.
+        int? cur = Task.CurrentId;
+        if ((_readTask != null && _readTask.Id == cur) ||
+            (_statTask != null && _statTask.Id == cur))
         {
+            _closing = true;
+            Thread.MemoryBarrier();
+            try { if (_handle is { IsInvalid: false, IsClosed: false }) CancelIoEx(_handle, IntPtr.Zero); }
+            catch (Win32Exception) { }
             return;
         }
-        _closing = true;
-        Thread.MemoryBarrier();
-        // CancelIoEx unblocks any pending ReadFile / WaitCommEvent; they complete
-        // with ERROR_OPERATION_ABORTED and their IOCP callbacks free the overlappeds.
-        try
-        {
-            if (_handle != null && !_handle.IsInvalid && !_handle.IsClosed)
-            {
-                CancelIoEx(_handle, IntPtr.Zero);
-            }
-        }
-        catch (Win32Exception) { }
 
-        // Wait for BOTH loops to fully unwind before disposing the bound handle.
-        // This must happen on every close, not just the _connErrorFired path, and
-        // must not gate on TaskStatus (an awaiting async task is not "Running").
-        // Only once the loops have exited is every overlapped guaranteed freed.
-        try
+        lock (_closeLock)                 // serialize concurrent/nested closes
         {
+            if (!IsOpen) return;
+
+            _closing = true;
+            Thread.MemoryBarrier();
+
+            try { if (_handle is { IsInvalid: false, IsClosed: false }) CancelIoEx(_handle, IntPtr.Zero); }
+            catch (Win32Exception) { }
+
             var pending = new List<Task>(2);
             if (_readTask != null) pending.Add(_readTask);
             if (_statTask != null) pending.Add(_statTask);
-            if (pending.Count > 0) Task.WaitAll(pending.ToArray());
-        }
-        catch (AggregateException) { }
 
-        _boundHandle?.Dispose();
-        _handle?.Dispose();
-        _closing = false;
-        _connErrorFired = false;
+            bool drained = true;
+            if (pending.Count > 0)
+            {
+                try { drained = Task.WaitAll(pending.ToArray(), TimeSpan.FromSeconds(5)); }
+                catch (AggregateException) { drained = true; }   // faulted still means the loop exited
+            }
+
+            if (drained)
+            {
+                // Every overlapped is freed; safe to dispose both handles in order.
+                _boundHandle?.Dispose();
+                _handle?.Dispose();
+            }
+            else
+            {
+                // A loop is wedged for an unknown reason and we refuse to hang.
+                // Closing the FILE handle aborts any pending overlapped, so the loop
+                // callbacks complete ABORTED and free their overlappeds against the
+                // still-live bound handle. We deliberately do NOT dispose the bound
+                // handle while an overlapped may be in flight: that is undefined
+                // behavior (heap corruption, not a catchable exception). Leak it and
+                // let finalization reclaim it after the handle close drains the I/O.
+                Console.Error.WriteLine(
+                    "[EspSerialSession] Close timed out waiting for I/O loops; forcing handle close.");
+                try { _handle?.Dispose(); } catch { }
+                try { Task.WaitAll(pending.ToArray(), TimeSpan.FromSeconds(2)); } catch { }  // grace for now-unblocked loops
+            }
+
+            _handle = null;
+            _boundHandle = null;
+            // _closing / _connErrorFired are intentionally NOT reset here — Open()
+            // resets them (lines 706–707). Resetting now races a loop that is only
+            // just observing _closing == true.
+        }
     }
 
     private void OnSuspend()
@@ -908,6 +948,7 @@ internal partial class EspSerialSession : IDisposable
     {
         _logLock = new object();
         _ioLock = new object();
+        _closeLock = new object();
         _sync = syncContext;
         _log = new List<byte>();
         _portName = port;

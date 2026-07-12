@@ -10,6 +10,6 @@ namespace Espmon
     {
         public static readonly ushort VersionMajor = 4;
         public static readonly ushort VersionMinor = 0;
-        public static readonly ulong Timestamp = (ulong)1783740834;
+        public static readonly ulong Timestamp = (ulong)1783871026;
     }
 }

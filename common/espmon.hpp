@@ -893,20 +893,24 @@ class espmon {
         return m_has_graph;
     }
     void has_graph(bool value) {
-        m_has_graph = value;
-        init_screen();
-        m_is_screen_populated = false;
-        m_screen.validate_all();
-        m_screen.invalidate();
+        if(m_has_graph!=value) {
+            m_has_graph = value;
+            init_screen();
+            m_is_screen_populated = false;
+            m_screen.validate_all();
+            m_screen.invalidate();
+        }
     }
     bool is_monochrome() const {
         return m_is_monochrome;
     }
     void is_monochrome(bool value) {
-        m_is_monochrome = value;
-        m_is_screen_populated = false;
-        m_screen.validate_all();
-        m_screen.invalidate();
+        if(m_is_monochrome!=value) {
+            m_is_monochrome = value;
+            m_is_screen_populated = false;
+            m_screen.validate_all();
+            m_screen.invalidate();
+        }
     }
     espmon_hit hit_test(gfx::spoint16 pt) {
         for (size_t i = 0; i < hit_boxes_size - (!has_graph()); ++i) {
@@ -917,20 +921,22 @@ class espmon {
         return espmon_hit::none;
     }
     void dimensions(gfx::size16 dimensions) {
-        m_screen.unregister_controls();
-        m_screen.dimensions((gfx::ssize16)dimensions);
-        m_display_size = dimensions;
-        init_screen();
-        m_is_screen_populated = false;
-        m_screen.update_strategy(uix::screen_update_strategy::balanced);
-        m_screen.validate_all();
-        m_screen.invalidate();
+        if(dimensions!=m_display_size) {
+            m_screen.unregister_controls();
+            m_screen.dimensions((gfx::ssize16)dimensions);
+            m_display_size = dimensions;
+            init_screen();
+            m_is_screen_populated = false;
+            m_screen.update_strategy(uix::screen_update_strategy::balanced);
+            m_screen.validate_all();
+            m_screen.invalidate();
 
-        m_disconnected_screen.unregister_controls();
-        m_disconnected_screen.dimensions((gfx::ssize16)dimensions);
-        init_disconnected_screen();
-        m_disconnected_screen.validate_all();
-        m_disconnected_screen.invalidate();
+            m_disconnected_screen.unregister_controls();
+            m_disconnected_screen.dimensions((gfx::ssize16)dimensions);
+            init_disconnected_screen();
+            m_disconnected_screen.validate_all();
+            m_disconnected_screen.invalidate();
+        }
     }
     uix::size16 dimensions() const {
         return m_display_size;

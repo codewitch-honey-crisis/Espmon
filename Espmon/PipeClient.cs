@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Espmon.Service;
+
+using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Threading;
@@ -148,7 +150,21 @@ internal sealed class PipeClient : IDisposable
             await pipe.WriteAsync(payload!, ct);
         await pipe.FlushAsync(ct);
     }
-
+    static (byte Cmd, byte[] Payload) ReadFrameOrTimeout(NamedPipeClientStream pipe, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        // On timeout, dispose the handle out from under the blocked read.
+        // ReadFrame then throws, which we translate to TimeoutException.
+        using var reg = cts.Token.Register(() => { try { pipe.Dispose(); } catch { } });
+        try
+        {
+            return PipeFrame.ReadFrame(pipe);
+        }
+        catch when (cts.IsCancellationRequested)
+        {
+            throw new TimeoutException("Espmon.Service did not respond within the timeout.");
+        }
+    }
     private static (byte Cmd, byte[] Payload) ReadFrame(PipeStream pipe)
     {
         var header = new byte[5];

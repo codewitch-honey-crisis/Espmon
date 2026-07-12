@@ -17,7 +17,21 @@ namespace Espmon.Service
                 pipe.ReadExactly(buf);
             return (cmd, buf);
         }
-
+        public static (byte Cmd, byte[] Payload) ReadFrameOrTimeout(NamedPipeClientStream pipe, TimeSpan timeout)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            // On timeout, dispose the handle out from under the blocked read.
+            // ReadFrame then throws, which we translate to TimeoutException.
+            using var reg = cts.Token.Register(() => { try { pipe.Dispose(); } catch { } });
+            try
+            {
+                return PipeFrame.ReadFrame(pipe);
+            }
+            catch when (cts.IsCancellationRequested)
+            {
+                throw new TimeoutException("Espmon.Service did not respond within the timeout.");
+            }
+        }
         public static void WriteFrame(PipeStream pipe, byte cmd, byte[]? payload)
         {
             var len = payload?.Length ?? 0;

@@ -174,35 +174,37 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         if (StartWithWindows)
         {
-            using var pipe = new NamedPipeClientStream(".","Espmon.Service",PipeDirection.InOut,PipeOptions.Asynchronous);
-            // retry loop
             Exception? lastException = null;
             bool loaded = false;
+
             for (int i = 0; i < 10; i++)
             {
-                try { pipe.Connect(500);
+                // Fresh pipe each attempt — a timed-out / half-read pipe is never reused.
+                using var pipe = new NamedPipeClientStream(
+                    ".", "Espmon.Service", PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    pipe.Connect(500);
+
                     var req = new Espmon.Service.ServiceAppStartRequest();
                     var payload = new byte[req.SizeOfStruct];
                     PipeFrame.WriteFrame(pipe, (byte)ServiceCommand.AppStart, payload);
-                    var res = PipeFrame.ReadFrame(pipe);
+
+                    var res = PipeFrame.ReadFrameOrTimeout(pipe, TimeSpan.FromMilliseconds(2000));
                     ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
+
                     loaded = true;
-                    //Thread.Sleep(100);
                     break;
-                    
                 }
-                catch (Exception e) {  lastException = e; Thread.Sleep(200); }
-            }
-            if(!loaded)
-            {
-                if (lastException != null)
+                catch (Exception e)
                 {
-                    throw lastException;
-                } else
-                {
-                    throw new Exception("The service could not be communicated with");
+                    lastException = e;
+                    Thread.Sleep(200);
                 }
             }
+
+            if (!loaded)
+                throw lastException ?? new Exception("The service could not be communicated with");
         }
         PortController.Start();
         PortController.SessionStatusChanged += PortController_SessionStatusChanged;
