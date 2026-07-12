@@ -904,7 +904,7 @@ internal partial class EspSerialSession : IDisposable
                 // handle while an overlapped may be in flight: that is undefined
                 // behavior (heap corruption, not a catchable exception). Leak it and
                 // let finalization reclaim it after the handle close drains the I/O.
-                Console.Error.WriteLine(
+                System.Diagnostics.Debug.WriteLine(
                     "[EspSerialSession] Close timed out waiting for I/O loops; forcing handle close.");
                 try { _handle?.Dispose(); } catch { }
                 try { Task.WaitAll(pending.ToArray(), TimeSpan.FromSeconds(2)); } catch { }  // grace for now-unblocked loops
