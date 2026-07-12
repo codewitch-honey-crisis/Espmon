@@ -1,19 +1,22 @@
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
-using System.Runtime.Versioning;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.Versioning;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace Espmon;
 
-public record IntervalOption(string Display, int Milliseconds);
-public static class IntervalOptions
-{
-    public record Option(string Display, int Milliseconds);
+[WinRT.GeneratedBindableCustomProperty]
+public partial record IntervalOption(string Display, int Milliseconds);
 
-    public static Option[] All { get; } =
+[WinRT.GeneratedBindableCustomProperty]
+public static partial class IntervalOptions
+{
+    public static IReadOnlyList<IntervalOption> All { get; } = new List<IntervalOption>
     {
         new("10 Hz", 100),
         new("5 Hz", 200),
@@ -41,9 +44,6 @@ public sealed partial class ScreenEditor : UserControl
     public ScreenEditor()
     {
         InitializeComponent();
-        _suppressChange = true;
-        screenPartComboBox.SelectedIndex = 0;
-        _suppressChange = false;
         CollapseAll();
     }
     public static readonly DependencyProperty ScalingModeProperty =
@@ -97,13 +97,14 @@ public sealed partial class ScreenEditor : UserControl
         }
     }
 
- 
+
     public static readonly DependencyProperty ScreenProperty =
     DependencyProperty.Register(
         nameof(Screen),
         typeof(ScreenController),
         typeof(ScreenEditor),
-        new PropertyMetadata(null, null));
+        new PropertyMetadata(null, OnScreenChanged));   // was null, null
+
 
     public ScreenController? Screen
     {
@@ -119,13 +120,41 @@ public sealed partial class ScreenEditor : UserControl
             }
         }
     }
+    private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var editor = (ScreenEditor)d;
+        editor.SelectedInterval = editor.Screen is null
+            ? null
+            : IntervalOptions.All.FirstOrDefault(o => o.Milliseconds == editor.Screen.Interval);
+    }
+    public static readonly DependencyProperty SelectedIntervalProperty =
+    DependencyProperty.Register(
+        nameof(SelectedInterval),
+        typeof(IntervalOption),
+        typeof(ScreenEditor),
+        new PropertyMetadata(null, OnSelectedIntervalChanged));
 
+    public IntervalOption? SelectedInterval
+    {
+        get => (IntervalOption?)GetValue(SelectedIntervalProperty);
+        set => SetValue(SelectedIntervalProperty, value);
+    }
 
+    // User picked an item -> write it into the model
+    private static void OnSelectedIntervalChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var editor = (ScreenEditor)d;
+        if (e.NewValue is IntervalOption opt && editor.Screen is not null
+            && editor.Screen.Interval != opt.Milliseconds)
+        {
+            editor.Screen.Interval = opt.Milliseconds;
+        }
+    }
     //private static void OnScreenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     //{
-        
+
     //}
-   
+
     private bool _suppressChange = false;
     private void SetHit(ScreenViewHitType hitType)
     {
@@ -186,9 +215,16 @@ public sealed partial class ScreenEditor : UserControl
         var cb = (ComboBox)sender;
         if (cb.SelectedIndex == -1 && cb.SelectedValue != null)
         {
-            var v = cb.SelectedValue;
-            //cb.SelectedValue = null;   // clear the un-resolved state
-            cb.SelectedValue = v;      // re-apply now that items are realized
+            try
+            {
+                var v = cb.SelectedValue;
+                //cb.SelectedValue = null;   // clear the un-resolved state
+                cb.SelectedValue = v;      // re-apply now that items are realized
+            }
+            catch
+            {
+
+            }
         }
     }
 }

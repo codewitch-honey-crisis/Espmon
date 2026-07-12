@@ -387,20 +387,35 @@ namespace Espmon
         }
         public IList<HardwareInfoEntry>? Matches => _results.ToObservableList();
 
+        //public IList<string>? MatchingPaths
+        //{
+        //    get
+        //    {
+        //        try
+        //        {
+        //            return _results
+        //        .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
+        //        .ToLazyList()
+        //        .ToObservableList();
+        //        }
+        //        catch
+        //        {
+        //            return Array.Empty<string>().ToObservableList();
+        //        }
+        //    }
+        //}
         public IList<string>? MatchingPaths
         {
             get
             {
                 try
                 {
-                    return _results
-                .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
-                .ToLazyList()
-                .ToObservableList();
+                    return new ObservableCollection<string>(
+                        _results.Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}"));
                 }
                 catch
                 {
-                    return Array.Empty<string>().ToObservableList();
+                    return new ObservableCollection<string>();
                 }
             }
         }

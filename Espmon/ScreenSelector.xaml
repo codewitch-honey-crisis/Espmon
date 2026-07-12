@@ -85,7 +85,7 @@
                     SelectionMode="Single">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:ScreenListEntry">
-                        <TextBlock Text="{x:Bind Name}" />
+                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" />
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>

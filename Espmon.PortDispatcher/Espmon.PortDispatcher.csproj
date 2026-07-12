@@ -39,6 +39,18 @@
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
     <SignAssembly>True</SignAssembly>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --lengths --namespace Espmon --out . &quot;$(SolutionDir)common\interface.h&quot;" />
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-esp32.ps1&quot;" />

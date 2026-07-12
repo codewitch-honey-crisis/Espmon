@@ -664,6 +664,17 @@ public class LocalPortController : PortController
     protected override void OnStop()
     {
         _hardwareInfo.StopAll();
+        foreach (var session in Sessions)
+        {
+            try
+            {
+                session.Disconnect();
+            }
+            catch
+            {
+
+            }
+        }
         for (var i = 0; i < _hookedDevices.Count; ++i)
         {
             _hookedDevices[i].PropertyChanging -= Device_PropertyChanging;

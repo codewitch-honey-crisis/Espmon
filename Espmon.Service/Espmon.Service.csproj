@@ -30,6 +30,17 @@
     <ProjectReference Include="..\Espmon.PortDispatcher\Espmon.PortDispatcher.csproj" />
     <ProjectReference Include="..\Espmon.Service.Interface\Espmon.Service.Interface.csproj" />
   </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>True</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>True</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+
   <!--<Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <ServiceOutput Include="$(OutputPath)**\*.*" />

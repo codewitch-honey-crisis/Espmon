@@ -25,7 +25,18 @@ internal static unsafe partial class Program
     // The service's executable file name. If the registered service points at any other
     // exe, we treat it as "not ours" and leave it untouched.
     private const string ServiceExeName = "Espmon.Service.exe";
+    // Written into the install directory whenever the installer (re)creates the service
+    // itself, so the service can locate the per-user Espmon data folder. Same name and
+    // shape as the config the app ships.
+    private const string ServiceConfigFileName = "espmon.service.config.json";
     // -----------------------------------------------------------------------
+
+    // Set when the installer deletes and/or recreates the service during this run. A
+    // deleted service stays "marked for deletion" until reboot and a freshly (re)created
+    // one may not surface until reboot -- so these drive the end-of-install reboot prompt
+    // (_serviceDeleted) and the config-file write (_serviceRecreated).
+    private static bool _rebootNeeded;
+    private static bool _serviceRecreated;
 
     private const int ID_EDIT = 101, ID_BROWSE = 102, ID_DESKTOP = 103,
                       ID_STARTMENU = 104, ID_INSTALL = 105;
@@ -166,6 +177,8 @@ internal static unsafe partial class Program
     private static void OnInstall(nint hWnd)
     {
         bool weStoppedService = false;
+        _rebootNeeded = false;
+        _serviceRecreated = false;
         try
         {
             string target = GetText(_hEdit);
@@ -179,7 +192,12 @@ internal static unsafe partial class Program
             // overwritten at 'target', so it must not be running (files would be locked).
             // If it won't stop in time this throws -> we abort before touching any files.
             weStoppedService = StopServiceIfRunning();
-
+            if (!ClearInstallDir(hWnd, target))
+            {
+                MaybePromptReboot(hWnd);
+                DestroyWindow(hWnd);
+                return;
+            }
             ExtractEmbeddedZip(target);
 
             string exe = Path.Combine(target, ExeUnderRoot);
@@ -206,7 +224,9 @@ internal static unsafe partial class Program
             // surface a warning with the correct exe path and let the user finish manually.
             try
             {
-                RelocateServiceIfNeeded(target);      // no-op if absent / already correct / not ours
+                RelocateServiceIfNeeded(target);
+                if (FindServiceExe(target) is not null)   // payload ships the service -> its config was wiped, rewrite it
+                    WriteServiceConfig(target);
                 if (weStoppedService)
                     StartService();
             }
@@ -218,11 +238,13 @@ internal static unsafe partial class Program
                     svcEx.Message + "\n\nCheck it in services.msc; it should point at:\n" +
                     Path.Combine(target, ServiceExeName),
                     AppName, MB_ICONWARNING);
+                MaybePromptReboot(hWnd); // a delete may have gone through even if recreate/start didn't
                 DestroyWindow(hWnd);
                 return;
             }
 
             MessageBoxW(hWnd, AppName + " was installed to:\n" + target, AppName, MB_ICONINFORMATION);
+            MaybePromptReboot(hWnd);
             DestroyWindow(hWnd); // success: tear down -> WM_DESTROY -> PostQuitMessage -> exit
         }
         catch (Exception ex)
@@ -368,6 +390,7 @@ internal static unsafe partial class Program
                 if (!DeleteService(svc))
                     throw new InvalidOperationException(
                         "Failed to remove the old service registration (error " + Marshal.GetLastPInvokeError() + ").");
+                _rebootNeeded = true; // now marked-for-delete until reboot -> warrants a reboot prompt
                 CloseServiceHandle(svc);
                 svc = 0;
 
@@ -377,6 +400,7 @@ internal static unsafe partial class Program
                 nint created = CreateServiceWithRetry(
                     scm, ServiceName, ServiceDisplayName, serviceType, startType, errorControl,
                     newBinaryPath, cfg->lpLoadOrderGroup, cfg->lpDependencies, account);
+                _serviceRecreated = true; // the installer now owns this registration -> write its config
                 try { SetServiceDescription(created, ServiceDescription); }
                 finally { CloseServiceHandle(created); }
             }
@@ -537,6 +561,129 @@ internal static unsafe partial class Program
         }
     }
 
+    // ---- Service config file ----------------------------------------------
+    // Writes espmon.service.config.json into the install directory, pointing app_path at
+    // the per-user Local AppData Espmon folder. Resolved against the *installer process's*
+    // account -- which, under this project's on-demand elevation model, is the interactive
+    // user. Same shape/indentation as the config the app ships.
+    private static void WriteServiceConfig(string installRoot)
+    {
+        string appPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppName);
+        string dest = Path.Combine(installRoot, ServiceConfigFileName);
+        string json = "{\n    \"app_path\": \"" + JsonEscape(appPath) + "\"\n}";
+        File.WriteAllText(dest, json);
+    }
+
+    // Minimal JSON string escaping -- enough for a Windows path (backslashes, quotes; other
+    // control chars can't occur in a filesystem path).
+    private static string JsonEscape(string s) =>
+        s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    // ---- Reboot prompt ----------------------------------------------------
+    // If the installer deleted the service this run, recommend a reboot and offer to do it.
+    // A deleted service lingers as "marked for deletion" until reboot, and a recreated one
+    // may not surface until then -- which is the behavior we're papering over here.
+    private static void MaybePromptReboot(nint hWnd)
+    {
+        if (!_rebootNeeded) return;
+
+        int r = MessageBoxW(hWnd,
+            "It is recommended that the system be rebooted." +
+            "Some functionality may not work until reboot.\n\nWould you like to reboot now?",
+            AppName, MB_ICONINFORMATION | MB_YESNO);
+
+        if (r == IDYES)
+            RebootSystem(hWnd);
+    }
+
+    // Graceful reboot: apps receive the usual end-session messages and may block/delay it
+    // (no EWX_FORCE). Requires SeShutdownPrivilege, which we enable on our own token first.
+    private static void RebootSystem(nint hWnd)
+    {
+        if (!EnableShutdownPrivilege())
+        {
+            MessageBoxW(hWnd,
+                "Couldn't obtain permission to reboot. Please reboot manually to finalize the installation.",
+                AppName, MB_ICONWARNING);
+            return;
+        }
+
+        if (!ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_INSTALL))
+            MessageBoxW(hWnd,
+                "The reboot request failed (error " + Marshal.GetLastPInvokeError() +
+                "). Please reboot manually to finalize the installation.",
+                AppName, MB_ICONWARNING);
+    }
+
+    // Enables SeShutdownPrivilege on the current process token so ExitWindowsEx can run.
+    private static bool EnableShutdownPrivilege()
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out nint tok))
+            return false;
+        try
+        {
+            fixed (char* pName = "SeShutdownPrivilege")
+            {
+                if (!LookupPrivilegeValueW(null, pName, out LUID luid))
+                    return false;
+
+                var tp = new TOKEN_PRIVILEGES
+                {
+                    PrivilegeCount = 1,
+                    Luid = luid,
+                    Attributes = SE_PRIVILEGE_ENABLED,
+                };
+                if (!AdjustTokenPrivileges(tok, false, &tp, 0, null, null))
+                    return false;
+
+                // AdjustTokenPrivileges "succeeds" even when the privilege wasn't held; the
+                // real verdict is in the last error (ERROR_NOT_ALL_ASSIGNED == 1300).
+                return Marshal.GetLastPInvokeError() == 0;
+            }
+        }
+        finally { CloseHandle(tok); }
+    }
+    // Wipes the target directory before extraction so stale files from a previous install
+    // don't linger. The service is already stopped by this point, so its exe is unlocked.
+    // If files are still locked (e.g. the main app is running), prompts the user to close it
+    // and retry. Returns false if they cancel -- caller should abort the install.
+    private static bool ClearInstallDir(nint hWnd, string installRoot)
+    {
+        string root = Path.GetFullPath(installRoot);
+        if (!Directory.Exists(root)) return true; // nothing to clear -> proceed
+
+        // Guard: never wipe a drive root (e.g. "C:\") -- a typo in the install box shouldn't
+        // nuke a whole volume. Remove this block if you don't want the check.
+        string? drive = Path.GetPathRoot(root);
+        if (drive is not null &&
+            drive.TrimEnd('\\', '/').Equals(root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Refusing to clear a drive root: " + root);
+
+        while (true)
+        {
+            try
+            {
+                // Clear read-only/hidden attributes first (Directory.Delete throws on them).
+                foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                {
+                    try { File.SetAttributes(file, FileAttributes.Normal); } catch { /* best effort */ }
+                }
+                Directory.Delete(root, recursive: true);
+                return true; // cleared -> proceed (ExtractEmbeddedZip recreates the dir)
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                int r = MessageBoxW(hWnd,
+                    "Some files in the install folder are in use. Please close any running instance of " +
+                    AppName + " and try again.",
+                    AppName, MB_ICONWARNING | MB_RETRYCANCEL);
+                if (r == IDRETRY) continue; // user closed the app -> try the delete again
+                _rebootNeeded = true;
+                return false;
+            }
+        }
+    }
     // ---- Extraction (AOT-safe) --------------------------------------------
     private static void ExtractEmbeddedZip(string installRoot)
     {
@@ -626,6 +773,10 @@ internal static unsafe partial class Program
     private const uint SS_LEFT = 0x0000;
     private const uint BIF_RETURNONLYFSDIRS = 0x0001, BIF_NEWDIALOGSTYLE = 0x0040;
     private const uint MB_ICONERROR = 0x10, MB_ICONWARNING = 0x30, MB_ICONINFORMATION = 0x40;
+    private const uint MB_YESNO = 0x00000004;
+    private const uint MB_RETRYCANCEL = 0x00000005;
+    private const int IDRETRY = 4;
+    private const int IDYES = 6;
     private const int SW_SHOW = 5, COLOR_BTNFACE = 15, IDC_ARROW = 32512,
                       DEFAULT_GUI_FONT = 17, BST_CHECKED = 1, CLSCTX_INPROC_SERVER = 1;
     private const uint COINIT_APARTMENTTHREADED = 0x2;
@@ -642,6 +793,13 @@ internal static unsafe partial class Program
     private const int ERROR_INSUFFICIENT_BUFFER = 122, ERROR_SERVICE_ALREADY_RUNNING = 1056,
                       ERROR_SERVICE_DOES_NOT_EXIST = 1060, ERROR_SERVICE_NOT_ACTIVE = 1062,
                       ERROR_SERVICE_MARKED_FOR_DELETE = 1072;
+
+    // Reboot / shutdown privilege
+    private const uint EWX_REBOOT = 0x00000002;
+    private const uint TOKEN_ADJUST_PRIVILEGES = 0x0020, TOKEN_QUERY = 0x0008;
+    private const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+    // MAJOR_APPLICATION | MINOR_INSTALLATION | FLAG_PLANNED -- a clean, expected reboot.
+    private const uint SHTDN_REASON_INSTALL = 0x00040000 | 0x00000002 | 0x80000000;
 
     private static readonly Guid CLSID_ShellLink = new("00021401-0000-0000-C000-000000000046");
     private static readonly Guid IID_IShellLinkW = new("000214F9-0000-0000-C000-000000000046");
@@ -704,6 +862,10 @@ internal static unsafe partial class Program
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int MessageBoxW(nint h, string text, string caption, uint type);
 
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ExitWindowsEx(uint uFlags, uint dwReason);
+
     [LibraryImport("gdi32.dll")]
     private static partial nint GetStockObject(int i);
 
@@ -729,6 +891,13 @@ internal static unsafe partial class Program
 
     [LibraryImport("kernel32.dll")]
     private static partial void Sleep(uint dwMilliseconds);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial nint GetCurrentProcess();
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint hObject);
 
     [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial nint OpenSCManagerW(string? machineName, string? databaseName, uint desiredAccess);
@@ -777,6 +946,20 @@ internal static unsafe partial class Program
         char* lpLoadOrderGroup, uint* lpdwTagId, char* lpDependencies,
         string? lpServiceStartName, string? lpPassword);
 
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool OpenProcessToken(nint processHandle, uint desiredAccess, out nint tokenHandle);
+
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool LookupPrivilegeValueW(char* lpSystemName, char* lpName, out LUID lpLuid);
+
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AdjustTokenPrivileges(nint tokenHandle,
+        [MarshalAs(UnmanagedType.Bool)] bool disableAll, TOKEN_PRIVILEGES* newState,
+        uint bufferLength, void* previousState, uint* returnLength);
+
     // ====================== structs =========================================
     [StructLayout(LayoutKind.Sequential)]
     private struct WNDCLASSEXW
@@ -815,6 +998,23 @@ internal static unsafe partial class Program
     private struct SERVICE_DESCRIPTION
     {
         public char* lpDescription;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LUID
+    {
+        public uint LowPart;
+        public int HighPart;
+    }
+
+    // TOKEN_PRIVILEGES with a single privilege entry flattened inline (PrivilegeCount is
+    // always 1 here), so the LUID_AND_ATTRIBUTES fields sit directly after the count.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TOKEN_PRIVILEGES
+    {
+        public uint PrivilegeCount;
+        public LUID Luid;
+        public uint Attributes;
     }
 
     [StructLayout(LayoutKind.Sequential)]

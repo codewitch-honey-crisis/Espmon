@@ -3,13 +3,13 @@
     "label": "CPU",
     "color": "light-blue",
     "value1": {
-      "value": "alt(round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$')),round(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/load$')))",
+      "value": "alt(round(avg('^/coretemp/cpu/[0-9]+/core/[0-9]+/load$')),round(avg('^/win32/cpu/[0-9]+/thread/[0-9]+/load$')))",
       "max": 100,
       "min": 0,
       "color": "green"
     },
     "value2": {
-      "value": "alt(round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$')),round1(avg('^/cim_cpu/cpu/[0-9]+/thread/[0-9]+/clock$')/1000)GHz)",
+      "value": "alt(round(max('^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$')),round1(avg('^/win32/cpu/[0-9]+/thread/[0-9]+/clock$')/1000)GHz)",
       "max": "alt(min('^/coretemp/cpu/[0-9]+/tjmax$'),5GHz)",
       "min": 0,
       "color": "orange",

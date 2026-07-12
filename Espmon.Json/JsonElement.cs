@@ -10,7 +10,11 @@ public interface IJsonElement
 	string ToString();
 }
 
-public sealed class JsonObject : DynamicObject, IDictionary<string, object?>, IJsonElement
+public sealed class JsonObject :
+#if JSON_DYNAMIC
+	DynamicObject, 
+#endif
+	IDictionary<string, object?>, IJsonElement
 {
 	IDictionary<string, object?> _inner;
 	public JsonObject()
@@ -27,7 +31,7 @@ public sealed class JsonObject : DynamicObject, IDictionary<string, object?>, IJ
 		}
 
 	}
-
+#if JSON_DYNAMIC
 	public override IEnumerable<string> GetDynamicMemberNames()
 	{
 		foreach (var key in _inner.Keys)
@@ -35,6 +39,7 @@ public sealed class JsonObject : DynamicObject, IDictionary<string, object?>, IJ
 			yield return key;
 		}
 	}
+
 	public override bool TryGetMember(GetMemberBinder binder, out object? result)
 	{
 		return _inner.TryGetValue(binder.Name, out result);
@@ -44,7 +49,8 @@ public sealed class JsonObject : DynamicObject, IDictionary<string, object?>, IJ
 		_inner[binder.Name] = JsonUtility.Wrap(value);
 		return true;
 	}
-	public object? this[string key] { get => (_inner)[key]; set => (_inner)[key] = JsonUtility.Wrap(value); }
+#endif
+    public object? this[string key] { get => (_inner)[key]; set => (_inner)[key] = JsonUtility.Wrap(value); }
 
 	public ICollection<string> Keys => (_inner).Keys;
 
@@ -135,7 +141,11 @@ public sealed class JsonObject : DynamicObject, IDictionary<string, object?>, IJ
 		return JsonParser.ReadFrom(value);
 	}
 }
-public sealed class JsonArray : DynamicObject, IList<object?>, IJsonElement
+public sealed class JsonArray :
+#if JSON_DYNAMIC
+	DynamicObject, 
+#endif
+    IList<object?>, IJsonElement
 {
 	IList<object?> _inner;
 	public JsonArray()
@@ -203,6 +213,7 @@ public sealed class JsonArray : DynamicObject, IList<object?>, IJsonElement
 	{
 		return ((IEnumerable)_inner).GetEnumerator();
 	}
+#if JSON_DYNAMIC
 	public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object? result)
 	{
 		result = default;
@@ -232,6 +243,7 @@ public sealed class JsonArray : DynamicObject, IList<object?>, IJsonElement
 		
 		return false;
 	}
+#endif
 	public void WriteTo(TextWriter writer, bool minimized = false)
 	{
 		JsonWriter.WriteTo(_inner, writer, minimized);

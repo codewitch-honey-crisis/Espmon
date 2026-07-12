@@ -32,8 +32,8 @@ public class Program
         {
             options.ServiceName = "Espmon Hardware Monitor Service";
         });
-        LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
-
+        //LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
+        
         builder.Services.AddHostedService<PortControllerService>();
 
         IHost host = builder.Build();

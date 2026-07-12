@@ -36,6 +36,9 @@ You can skip the installer entirely, unzip the files to the desired directory, a
 - you need Visual Studio 2026 (C# and C++)
 - you need a recent copy of python installed and in your path.
 - You need the ESP-IDF 5.x Installed
+
+You need to open the solution in Visual Studio, right click on the installer project, and click publish in order to create a distribution. Sometimes the firmware builds will inexplicably fail. Usually going into the boards folders for each board and deleting the build and managed_components folders manually will work. You can run build_all.ps1 from its location in common-esp32 to initiate the firmware build and packaging process
+
 ![Espmon 4 Application](espmon4app.jpg)
 ![Espmon 4 Firmware](espmon4.jpg)
 

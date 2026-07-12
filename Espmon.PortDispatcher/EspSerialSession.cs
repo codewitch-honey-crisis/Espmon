@@ -1,17 +1,12 @@
 ﻿#pragma warning disable CS0649
 using Microsoft.Win32.SafeHandles;
-#if !ESS_NO_PORT_ENUM
-using Microsoft.Management.Infrastructure;
-#endif
 using System.Buffers.Binary;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Espmon;
-#if !ESS_NO_PORT_ENUM
 public sealed class PortEntry
 {
     public PortEntry(string portName, string serialNumber)
@@ -23,7 +18,6 @@ public sealed class PortEntry
     public string SerialNumber { get; }
 
 }
-#endif
 public sealed class FrameReceivedEventArgs : EventArgs
 {
     public byte Command;
@@ -55,6 +49,11 @@ public sealed class ResendRequestedEventArgs : EventArgs
 [SupportedOSPlatform("windows")]
 internal partial class EspSerialSession : IDisposable
 {
+    // Strong handle to 'this', round-tripped through the native Context token. Holding it
+    // keeps the instance alive while registered; freed on unregister. Not pinned — the
+    // token from ToIntPtr is opaque, not a pointer into the object.
+    GCHandle _powerCallbackHandle;
+
     struct StateMachine
     {
         int state;
@@ -158,7 +157,6 @@ internal partial class EspSerialSession : IDisposable
     bool _awaiting;                             // a sent DATA frame is unacked
     byte[]? _retain;                            // last DATA frame bytes, for resend
                                                 // chunk 2 also adds: _ackTimeoutMs, _maxRetries, _retries, _sendQueue, _ackTimer
-    DeviceNotifyCallbackRoutine? _powerCallback; // kept rooted: native code holds a pointer to it
     static readonly uint[] _crcTable = BuildCrcTable();
     int _ackTimeoutMs;                 // -1 = explicit mode: NACK -> event, no timer, no auto-give-up
     int _maxRetries = 5;
@@ -170,48 +168,109 @@ internal partial class EspSerialSession : IDisposable
     public event EventHandler<EventArgs>? ConnectionError;
     public event EventHandler<FrameReceivedEventArgs>? FrameReceived;
     public event EventHandler<FrameErrorEventArgs>? FrameError;
-#if !ESS_NO_PORT_ENUM
-    public static PortEntry[] GetPorts()
+   
+    /// <summary>
+    /// Enumerates present COM ports via SetupAPI and returns each port's name
+    /// (e.g. "COM3") paired with the trailing segment of its device instance ID,
+    /// which for USB devices is the descriptor serial number reported by the
+    /// device (or a Windows-synthesized instance ID when the device has none).
+    ///
+    /// Replacement for the former Win32_PnPEntity WMI query. AOT/trim clean:
+    /// plain P/Invoke over blittable signatures, no COM, no WMI. Output parity
+    /// with the old implementation is preserved:
+    ///   - PortName is read from the device's hardware key ("PortName" value),
+    ///     which yields the same "COMx" string the old code parsed out of the
+    ///     friendly name's parentheses, without depending on that string format.
+    ///   - SerialNumber is the substring after the final '\' of the instance ID,
+    ///     identical to the old DeviceID.Substring(LastIndexOf('\\') + 1).
+    /// </summary>
+    public static unsafe PortEntry[] GetPorts()
     {
         var result = new List<PortEntry>();
-        using var session = CimSession.Create(null); // null = local machine
-        var instances = session.QueryInstances(@"root\cimv2", "WQL",
-            "SELECT DeviceID, Name FROM Win32_PnPEntity WHERE ClassGuid = '{4d36e978-e325-11ce-bfc1-08002be10318}'");
 
-        foreach (var instance in instances)
+        IntPtr set;
+        fixed (Guid* g = &GUID_DEVCLASS_PORTS)
+            set = SetupDiGetClassDevsW(g, null, IntPtr.Zero, DIGCF_PRESENT);
+
+        if (set == INVALID_HANDLE_VALUE)
+            return Array.Empty<PortEntry>();
+
+        try
         {
-            var deviceId = instance.CimInstanceProperties["DeviceID"]?.Value as string;
-            if (string.IsNullOrEmpty(deviceId))
-                continue;
+            var dev = new SP_DEVINFO_DATA { cbSize = (uint)sizeof(SP_DEVINFO_DATA) };
 
-            // Extract Serial
-            int index = deviceId.LastIndexOf('\\');
-            if (index == -1)
-                continue;
+            // Allocate ONCE and reuse every iteration. stackalloc lifetime is the whole
+            // method frame, not the loop body, so a per-iteration stackalloc accumulates
+            // on the frame and can overflow the stack when many ports are present. Each
+            // native call rewrites (and null-terminates) its buffer, so reuse is safe.
+            const int idCap = 512;
+            const int nameCap = 64;
+            char* idBuf = stackalloc char[idCap];
+            char* nameBuf = stackalloc char[nameCap];
 
-            string serialNo = deviceId.Substring(index + 1);
-
-            // Extract port name from Name property
-            var nameValue = instance.CimInstanceProperties["Name"]?.Value as string;
-            if (string.IsNullOrEmpty(nameValue))
-                continue;
-
-            int idx = nameValue.IndexOf('(');
-            if (idx > -1)
+            for (uint i = 0; ; i++)
             {
-                int lidx = nameValue.IndexOf(')', idx + 2);
-                if (lidx > -1)
+                if (!SetupDiEnumDeviceInfo(set, i, &dev))
                 {
-                    string extractedName = nameValue.Substring(idx + 1, lidx - idx - 1);
-                    result.Add(new PortEntry(extractedName, serialNo));
+                    if (Marshal.GetLastWin32Error() == ERROR_NO_MORE_ITEMS)
+                        break;
+                    continue; // skip a transient failure on this index
+                }
+
+                // --- device instance id -> serial (trailing segment) ---
+                uint required = 0;
+                if (!SetupDiGetDeviceInstanceIdW(set, &dev, idBuf, idCap, &required))
+                    continue;
+
+                var instanceId = new string(idBuf); // read to the id's own NUL terminator
+                int slash = instanceId.LastIndexOf('\\');
+                string serial = slash >= 0 ? instanceId[(slash + 1)..] : instanceId;
+
+                // --- PortName from the device's hardware key (e.g. "COM3") ---
+                IntPtr hKey = SetupDiOpenDevRegKey(
+                    set, &dev, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+                if (hKey == INVALID_HANDLE_VALUE)
+                    continue;
+
+                try
+                {
+                    uint cb = nameCap * sizeof(char); // in/out byte count
+                    uint type = 0;
+
+                    int rc;
+                    fixed (char* name = "PortName")
+                        rc = RegQueryValueExW(hKey, name, IntPtr.Zero, &type, (byte*)nameBuf, &cb);
+
+                    if (rc != ERROR_SUCCESS) // includes ERROR_MORE_DATA if it didn't fit
+                        continue;
+
+                    int chars = (int)(cb / sizeof(char));
+                    if (chars > nameCap) chars = nameCap; // defensive clamp
+                    while (chars > 0 && nameBuf[chars - 1] == '\0') // REG_SZ may count a NUL
+                        chars--;
+
+                    // explicit length -> stale trailing chars from a prior iteration are ignored
+                    var portName = new string(nameBuf, 0, chars);
+
+                    // Class "Ports" also covers LPT; keep COM only (old code did too).
+                    if (!portName.StartsWith("COM", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    result.Add(new PortEntry(portName, serial));
+                }
+                finally
+                {
+                    RegCloseKey(hKey);
                 }
             }
-
         }
-        return result.ToArray();
+        finally
+        {
+            SetupDiDestroyDeviceInfoList(set);
+        }
 
+        return result.ToArray();
     }
-#endif
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
@@ -437,12 +496,13 @@ internal partial class EspSerialSession : IDisposable
     private unsafe Task<int> ReadAsync(byte[] buffer, int offset, int count)
     {
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (_boundHandle != null &&  !_boundHandle.Handle.IsClosed && !_boundHandle.Handle.IsInvalid && _handle != null)
+        var boundHandle = _boundHandle;   // capture once — free on THIS instance, never the field
+        if (boundHandle != null && !boundHandle.Handle.IsClosed && !boundHandle.Handle.IsInvalid && _handle != null)
         {
-            var ov = _boundHandle.AllocateNativeOverlapped(
+            var ov = boundHandle.AllocateNativeOverlapped(
                 (errorCode, numBytes, pOv) =>
                 {
-                    _boundHandle.FreeNativeOverlapped(pOv);
+                    boundHandle.FreeNativeOverlapped(pOv);   // was _boundHandle
                     if (errorCode == 0)
                         tcs.TrySetResult((int)numBytes);
                     else if (errorCode == ERROR_OPERATION_ABORTED)
@@ -451,7 +511,7 @@ internal partial class EspSerialSession : IDisposable
                         tcs.TrySetException(new Win32Exception((int)errorCode));
                 },
                 null,
-                buffer);  // pins buffer until FreeNativeOverlapped
+                buffer);
 
             int read = 0;
             fixed (byte* pBuf = &buffer[offset])
@@ -461,15 +521,13 @@ internal partial class EspSerialSession : IDisposable
                     int err = Marshal.GetLastWin32Error();
                     if (err != ERROR_IO_PENDING)
                     {
-                        _boundHandle.FreeNativeOverlapped(ov);
+                        boundHandle.FreeNativeOverlapped(ov);   // was _boundHandle
                         if (err == ERROR_OPERATION_ABORTED)
                             tcs.TrySetCanceled();
                         else
                             tcs.TrySetException(new Win32Exception(err));
                     }
-                    // else: pending — IOCP callback will fire
                 }
-                // else: completed synchronously — IOCP callback still fires for bound handles
             }
         }
         else throw new InvalidOperationException("The port is not open");
@@ -503,14 +561,15 @@ internal partial class EspSerialSession : IDisposable
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var maskArr = new int[1];
         var maskPin = GCHandle.Alloc(maskArr, GCHandleType.Pinned);
-        if (_boundHandle != null && !_boundHandle.Handle.IsClosed && !_boundHandle.Handle.IsInvalid && _handle != null)
+        var boundHandle = _boundHandle;   // capture once — free on THIS instance, never the field
+        if (boundHandle != null && !boundHandle.Handle.IsClosed && !boundHandle.Handle.IsInvalid && _handle != null)
         {
-            var ov = _boundHandle.AllocateNativeOverlapped(
+            var ov = boundHandle.AllocateNativeOverlapped(
                 (errorCode, numBytes, pOv) =>
                 {
                     int mask = maskArr[0];
                     maskPin.Free();
-                    _boundHandle.FreeNativeOverlapped(pOv);
+                    boundHandle.FreeNativeOverlapped(pOv);
                     if (errorCode == 0)
                         tcs.TrySetResult(mask);
                     else if (errorCode == ERROR_OPERATION_ABORTED)
@@ -525,18 +584,19 @@ internal partial class EspSerialSession : IDisposable
                 if (err != ERROR_IO_PENDING)
                 {
                     maskPin.Free();
-                    _boundHandle.FreeNativeOverlapped(ov);
+                    boundHandle.FreeNativeOverlapped(ov);
                     if (err == ERROR_OPERATION_ABORTED)
                         tcs.TrySetCanceled();
                     else
                         tcs.TrySetException(new Win32Exception(err));
                 }
             }
-
         }
-        else throw new InvalidOperationException("The port is not open");
-
-
+        else
+        {
+            maskPin.Free();   // don't leak the pinned handle on the not-open path
+            throw new InvalidOperationException("The port is not open");
+        }
         return tcs.Task;
     }
     public bool IsOpen
@@ -788,9 +848,8 @@ internal partial class EspSerialSession : IDisposable
         }
         _closing = true;
         Thread.MemoryBarrier();
-        // CancelIoEx unblocks any pending ReadFile / WaitCommEvent.
-        // They will complete with ERROR_OPERATION_ABORTED and the
-        // IOCP callback will fire, resolving the tasks.
+        // CancelIoEx unblocks any pending ReadFile / WaitCommEvent; they complete
+        // with ERROR_OPERATION_ABORTED and their IOCP callbacks free the overlappeds.
         try
         {
             if (_handle != null && !_handle.IsInvalid && !_handle.IsClosed)
@@ -799,84 +858,24 @@ internal partial class EspSerialSession : IDisposable
             }
         }
         catch (Win32Exception) { }
+
+        // Wait for BOTH loops to fully unwind before disposing the bound handle.
+        // This must happen on every close, not just the _connErrorFired path, and
+        // must not gate on TaskStatus (an awaiting async task is not "Running").
+        // Only once the loops have exited is every overlapped guaranteed freed.
         try
         {
-            if (_connErrorFired)
-            {
-                if (_statTask != null && _readTask != null)
-                {
-                    var tasks = new Task[2];
-                    int taskCount = 0;
-                    if (_readTask.Status == TaskStatus.Running)
-                    {
-                        tasks[taskCount++] = _readTask;
-                    }
-                    if (_statTask.Status == TaskStatus.Running)
-                    {
-                        tasks[taskCount++] = _statTask;
-                    }
-                    if (taskCount > 0)
-                    {
-                        Task.WaitAll(tasks[0..taskCount]);
-                    }
-                }
-            }
+            var pending = new List<Task>(2);
+            if (_readTask != null) pending.Add(_readTask);
+            if (_statTask != null) pending.Add(_statTask);
+            if (pending.Count > 0) Task.WaitAll(pending.ToArray());
         }
-        catch (AggregateException)
-        {
+        catch (AggregateException) { }
 
-        }
         _boundHandle?.Dispose();
         _handle?.Dispose();
         _closing = false;
         _connErrorFired = false;
-    }
-
-    private void RegisterPowerNotification()
-    {
-        // Keep the delegate in a field so it stays rooted for the lifetime of
-        // the registration; the OS holds a raw function pointer to it.
-        _powerCallback = PowerCallback;
-        var sub = new DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
-        {
-            Callback = Marshal.GetFunctionPointerForDelegate(_powerCallback),
-            Context = IntPtr.Zero
-        };
-        // Callback-based notification: no window or message pump required, so
-        // this works identically in a WinUI3 app and a headless service.
-        uint rc = PowerRegisterSuspendResumeNotification(
-            DEVICE_NOTIFY_CALLBACK, ref sub, out _powerNotifyHandle);
-        if (rc != 0)
-        {
-            _powerCallback = null;
-            _powerNotifyHandle = IntPtr.Zero;
-            throw new Win32Exception((int)rc);
-        }
-    }
-
-    private void UnregisterPowerNotification()
-    {
-        var h = Interlocked.Exchange(ref _powerNotifyHandle, IntPtr.Zero);
-        if (h != IntPtr.Zero)
-        {
-            // Blocks until any in-progress callback returns, so after this the
-            // delegate is safe to release. Must NOT be called from inside the
-            // callback itself (would deadlock) — see OnSuspend.
-            try { PowerUnregisterSuspendResumeNotification(h); }
-            catch (Win32Exception) { }
-        }
-        _powerCallback = null;
-    }
-
-    private uint PowerCallback(IntPtr context, uint type, IntPtr setting)
-    {
-        // Runs on an OS power-management thread. Must return promptly and must
-        // not block the suspend transition.
-        if (type == PBT_APMSUSPEND)
-        {
-            OnSuspend();
-        }
-        return 0; // ERROR_SUCCESS
     }
 
     private void OnSuspend()
@@ -952,13 +951,43 @@ internal partial class EspSerialSession : IDisposable
         return c ^ 0xFFFFFFFFu;
     }
 
-    #region Unmanaged
+    const int ERROR_IO_PENDING = 0x000003E5;
+    const uint ERROR_OPERATION_ABORTED = 995;
+    const uint GENERIC_READ = 0x80000000;
+    const uint GENERIC_WRITE = 0x40000000;
+    const uint OPEN_EXISTING = 3;
+    const uint FILE_FLAG_OVERLAPPED = 0x40000000;
+    const uint EV_RLSD = 0x0020;
+    const uint DEVICE_NOTIFY_CALLBACK = 0x00000002;
+    const uint PBT_APMSUSPEND = 0x0004;
+    // GUID_DEVCLASS_PORTS {4d36e978-e325-11ce-bfc1-08002be10318}
+    private static readonly Guid GUID_DEVCLASS_PORTS =
+        new(0x4d36e978, 0xe325, 0x11ce, 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18);
+
+    private const uint DIGCF_PRESENT = 0x00000002;
+    private const uint DICS_FLAG_GLOBAL = 0x00000001;
+    private const uint DIREG_DEV = 0x00000001;
+    private const uint KEY_READ = 0x00020019;
+    private const int ERROR_NO_MORE_ITEMS = 259;
+    private const int ERROR_SUCCESS = 0;
+    private static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SP_DEVINFO_DATA
+    {
+        public uint cbSize;
+        public Guid ClassGuid;
+        public uint DevInst;
+        public nuint Reserved;
+    }
+
     private struct COMSTAT
     {
         public uint Flags;
         public uint cbInQue;
         public uint cbOutQue;
     }
+
     private struct DCB
     {
         public uint DCBlength;
@@ -977,53 +1006,7 @@ internal partial class EspSerialSession : IDisposable
         public byte EvtChar;
         public ushort wReserved1;
     }
-    const int ERROR_IO_PENDING = 0x000003E5;
-    const uint ERROR_OPERATION_ABORTED = 995;
-    const uint GENERIC_READ = 0x80000000;
-    const uint GENERIC_WRITE = 0x40000000;
-    const uint OPEN_EXISTING = 3;
-    const uint FILE_FLAG_OVERLAPPED = 0x40000000;
-    const uint EV_RLSD = 0x0020;
-    const uint DEVICE_NOTIFY_CALLBACK = 0x00000002;
-    const uint PBT_APMSUSPEND = 0x0004;
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern SafeFileHandle CreateFile(
-        string lpFileName,
-        uint dwDesiredAccess,
-        uint dwShareMode,
-        IntPtr lpSecurityAttributes,
-        uint dwCreationDisposition,
-        uint dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetCommMask(
-        SafeFileHandle hFile,
-        uint dwEvtMask);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern bool ClearCommError(
-        SafeFileHandle hFile,
-        ref int lpErrors,
-        ref COMSTAT lpStat);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern bool GetCommState(
-        SafeFileHandle hFile,
-        ref DCB lpDCB);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern bool SetCommState(
-        SafeFileHandle hFile,
-        ref DCB lpDCB);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    internal static extern bool SetupComm(
-        SafeFileHandle hFile,     // handle to communications device 
-        int dwInQueue,  // size of input buffer 
-        int dwOutQueue  // size of output buffer
-        );
     [StructLayout(LayoutKind.Sequential)]
     private struct COMMTIMEOUTS
     {
@@ -1034,61 +1017,174 @@ internal partial class EspSerialSession : IDisposable
         public uint WriteTotalTimeoutConstant;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetCommTimeouts(SafeFileHandle hFile, ref COMMTIMEOUTS lpCommTimeouts);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern unsafe bool WaitCommEvent(
-        SafeFileHandle hFile,
-        ref int lpEvtMask,
-        NativeOverlapped* lpOverlapped);
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern unsafe bool GetOverlappedResult(
-        SafeFileHandle hFile,
-        NativeOverlapped* lpOverlapped,
-        ref int lpNumberOfBytesTransferred,
-        bool bWait);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern unsafe bool ReadFile(
-        SafeFileHandle hFile,
-        byte* lpBuffer,
-        int nNumberOfBytesToRead,
-        ref int lpNumberOfBytesRead,
-        NativeOverlapped* lpOverlapped);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern unsafe bool WriteFile(
-        SafeFileHandle hFile,
-        byte* lpBuffer,
-        int nNumberOfBytesToWrite,
-        ref int lpNumberOfBytesWritten,
-        NativeOverlapped* lpOverlapped);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CancelIoEx(
-        SafeFileHandle hFile,
-        IntPtr lpOverlapped);  // IntPtr.Zero = cancel all
-
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate uint DeviceNotifyCallbackRoutine(IntPtr context, uint type, IntPtr setting);
-
     [StructLayout(LayoutKind.Sequential)]
     private struct DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
     {
         public IntPtr Callback; // PDEVICE_NOTIFY_CALLBACK_ROUTINE (function pointer)
         public IntPtr Context;
     }
+    [LibraryImport("setupapi.dll", SetLastError = true)]
+    private static unsafe partial IntPtr SetupDiGetClassDevsW(
+       Guid* classGuid, char* enumerator, IntPtr hwndParent, uint flags);
 
-    [DllImport("powrprof.dll", SetLastError = false)]
-    private static extern uint PowerRegisterSuspendResumeNotification(
-        uint flags,
-        ref DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS recipient,
-        out IntPtr registrationHandle);
+    [LibraryImport("setupapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool SetupDiEnumDeviceInfo(
+        IntPtr deviceInfoSet, uint memberIndex, SP_DEVINFO_DATA* deviceInfoData);
 
-    [DllImport("powrprof.dll", SetLastError = false)]
-    private static extern uint PowerUnregisterSuspendResumeNotification(IntPtr registrationHandle);
+    [LibraryImport("setupapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool SetupDiGetDeviceInstanceIdW(
+        IntPtr deviceInfoSet, SP_DEVINFO_DATA* deviceInfoData,
+        char* deviceInstanceId, uint deviceInstanceIdSize, uint* requiredSize);
+
+    [LibraryImport("setupapi.dll", SetLastError = true)]
+    private static unsafe partial IntPtr SetupDiOpenDevRegKey(
+        IntPtr deviceInfoSet, SP_DEVINFO_DATA* deviceInfoData,
+        uint scope, uint hwProfile, uint keyType, uint samDesired);
+
+    [LibraryImport("setupapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
+
+    [LibraryImport("advapi32.dll", SetLastError = false)]
+    private static unsafe partial int RegQueryValueExW(
+        IntPtr hKey, char* lpValueName, IntPtr lpReserved,
+        uint* lpType, byte* lpData, uint* lpcbData);
+
+    [LibraryImport("advapi32.dll")]
+    private static partial int RegCloseKey(IntPtr hKey);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate uint DeviceNotifyCallbackRoutine(IntPtr context, uint type, IntPtr setting);
+
+    #region kernel32
+    [LibraryImport("kernel32.dll", SetLastError = true, EntryPoint = "CreateFileW",
+        StringMarshalling = StringMarshalling.Utf16)]
+    private static partial SafeFileHandle CreateFile(
+        string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetCommMask(SafeFileHandle hFile, uint dwEvtMask);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ClearCommError(SafeFileHandle hFile, ref int lpErrors, ref COMSTAT lpStat);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetCommState(SafeFileHandle hFile, ref DCB lpDCB);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetCommState(SafeFileHandle hFile, ref DCB lpDCB);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool SetupComm(SafeFileHandle hFile, int dwInQueue, int dwOutQueue);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetCommTimeouts(SafeFileHandle hFile, ref COMMTIMEOUTS lpCommTimeouts);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool WaitCommEvent(
+        SafeFileHandle hFile, ref int lpEvtMask, NativeOverlapped* lpOverlapped);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool GetOverlappedResult(
+        SafeFileHandle hFile, NativeOverlapped* lpOverlapped,
+        ref int lpNumberOfBytesTransferred, [MarshalAs(UnmanagedType.Bool)] bool bWait);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool ReadFile(
+        SafeFileHandle hFile, byte* lpBuffer, int nNumberOfBytesToRead,
+        ref int lpNumberOfBytesRead, NativeOverlapped* lpOverlapped);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool WriteFile(
+        SafeFileHandle hFile, byte* lpBuffer, int nNumberOfBytesToWrite,
+        ref int lpNumberOfBytesWritten, NativeOverlapped* lpOverlapped);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CancelIoEx(SafeFileHandle hFile, IntPtr lpOverlapped);
     #endregion
+
+
+    private unsafe void RegisterPowerNotification()
+    {
+        _powerCallbackHandle = GCHandle.Alloc(this);
+
+        var sub = new DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+        {
+            // Address of a static method — always valid, nothing to keep rooted for the OS.
+            Callback = (IntPtr)(delegate* unmanaged[Stdcall]<IntPtr, uint, IntPtr, uint>)&PowerCallbackNative,
+            Context = GCHandle.ToIntPtr(_powerCallbackHandle)
+        };
+
+        // Callback-based notification: no window or message pump required, so this works
+        // identically in a WinUI3 app and a headless service.
+        uint rc = PowerRegisterSuspendResumeNotification(
+            DEVICE_NOTIFY_CALLBACK, ref sub, out _powerNotifyHandle);
+        if (rc != 0)
+        {
+            _powerCallbackHandle.Free();
+            _powerNotifyHandle = IntPtr.Zero;
+            throw new Win32Exception((int)rc);
+        }
+    }
+
+    private void UnregisterPowerNotification()
+    {
+        var h = Interlocked.Exchange(ref _powerNotifyHandle, IntPtr.Zero);
+        if (h != IntPtr.Zero)
+        {
+            // Blocks until any in-progress callback returns, so after this the GCHandle
+            // is safe to free. Must NOT be called from inside the callback itself
+            // (would deadlock) — see OnSuspend. Only the thread that won the exchange
+            // reaches here, so the handle is freed exactly once.
+            try { PowerUnregisterSuspendResumeNotification(h); }
+            catch (Win32Exception) { }
+
+            if (_powerCallbackHandle.IsAllocated)
+                _powerCallbackHandle.Free();
+        }
+    }
+
+    // Runs on an OS power-management thread. Must return promptly, and must never let a
+    // managed exception escape to native code — under NativeAOT that fastfails the process.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
+    private static uint PowerCallbackNative(IntPtr context, uint type, IntPtr setting)
+    {
+        try
+        {
+            if (type == PBT_APMSUSPEND && context != IntPtr.Zero)
+            {
+                var self = GCHandle.FromIntPtr(context).Target as EspSerialSession;
+                self?.OnSuspend();
+            }
+        }
+        catch
+        {
+            // Never propagate across the native boundary.
+        }
+        return 0; // ERROR_SUCCESS
+    }
+    #region powrprof
+    [LibraryImport("powrprof.dll", SetLastError = false)]
+    private static partial uint PowerRegisterSuspendResumeNotification(
+        uint flags, ref DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS recipient, out IntPtr registrationHandle);
+
+    [LibraryImport("powrprof.dll", SetLastError = false)]
+    private static partial uint PowerUnregisterSuspendResumeNotification(IntPtr registrationHandle);
+    #endregion
+    
+
 }
 #pragma warning restore

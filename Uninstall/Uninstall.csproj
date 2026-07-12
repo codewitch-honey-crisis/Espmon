@@ -3,25 +3,11 @@
   <PropertyGroup Label="Globals">
     <WebView2EnableCsWinRTProjection>False</WebView2EnableCsWinRTProjection>
   </PropertyGroup>
-  <!-- Publish payload + rebuild Espmon.zip BEFORE this project compiles,
-     so the EmbeddedResource picks up fresh contents. Platform is hardcoded
-     to x64 on purpose (this project is AnyCPU; forwarding it would kill AOT). -->
-  <Target Name="PublishPayloadBeforeBuild"
-          BeforeTargets="BeforeBuild"
-          Condition="'$(Configuration)' == 'Release'">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(SolutionDir)publish-payload.ps1&quot; -Configuration $(Configuration) -Platform x64" />
-  </Target>
-
-  <!-- Drop the finished installer next to the solution. -->
-  <Target Name="CopyInstallerToSolutionDir" AfterTargets="Publish">
-    <Copy SourceFiles="$(PublishDir)Installer.exe" DestinationFolder="$(SolutionDir)" SkipUnchangedFiles="false" />
-  </Target>
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>Espmon</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
@@ -42,11 +28,5 @@
     <PublishAot>true</PublishAot>
     <!-- the executable host -->
   </PropertyGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="$(SolutionDir)Espmon.zip">
-      <LogicalName>Espmon.zip</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
 
 </Project>

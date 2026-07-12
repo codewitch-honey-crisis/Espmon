@@ -8,6 +8,18 @@
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
     <SignAssembly>True</SignAssembly>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <!-- the executable host -->
+  </PropertyGroup>
+
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="python.exe &quot;$(SolutionDir)buffers_gen_cs.py&quot; --buffers --namespace Espmon.Service --public --lengths --out . &quot;$(ProjectDir)interface.h&quot;" />
   </Target>

@@ -57,48 +57,56 @@ public sealed class LocalProviderController : ProviderController
                 {
                     if (strObj is string str)
                     {
-                        var sa = str.Split(',');
-                        if (sa.Length < 2)
+                        var idx = str.IndexOf(',');
+                        if(idx>-1)
                         {
-                            throw new ArgumentException($"Entry {str} is not a valid provider descriptor entry", nameof(json));
+                            var asm = str.Substring(idx + 1).Trim();
+                            if(!asm.StartsWith("HWKit.dll",StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new NotSupportedException("The providers cannot be external");
+                            }
+                            str = str.Substring(0, idx).TrimEnd();
                         }
-                        var typeName = sa[0].Trim();
-                        var asmName = Path.Join(basePath, string.Join(", ", sa, 1, sa.Length - 1).Trim()).Trim();
-
-                        if (File.Exists(asmName))
+                        IHardwareInfoProvider? prov = null;
+                        switch(str)
                         {
-                            var loadContext = AssemblyLoadContext.Default;
-
-                            var asm = loadContext.LoadFromAssemblyPath(asmName);
-                            var type = asm.GetType(typeName, true);
-                            if (type == null)
-                            {
-                                throw new ArgumentException("The type could not be loaded");
-                            }
-                            var inner = Activator.CreateInstance(type);
-                            if (inner == null)
-                            {
-                                throw new ArgumentException($"Entry {str} could not be resolved.", nameof(json));
-                            }
-                            var provider = new LocalProviderController(parent, (IHardwareInfoProvider)inner);
-                            bool isStarted = false;
-                            if (obj.TryGetValue("is_started", out var isObj))
-                            {
-                                if (isObj is bool isBool)
-                                {
-                                    isStarted = isBool;
-                                }
-                                else
-                                {
-                                    throw new ArgumentException("Providers contains a provider descriptor entry with an invalid is_started value", nameof(json));
-                                }
-                            }
-                            result[i] = new LocalProviderEntry(provider, isStarted);
+                            case "HWKit.Win32Provider":
+                                prov = new Win32Provider();
+                                break;
+                            case "HWKit.CoreTempCpuProvider":
+                                prov = new CoreTempCpuProvider();
+                                break;
+                            case "HWKit.DxgiProvider":
+                                prov = new DxgiProvider();
+                                break;
+                            case "HWKit.AmdAdlGpuProvider":
+                                prov = new AmdAdlGpuProvider();
+                                break;
+                            case "HWKit.NvidiaNvmlGpuProvider":
+                                prov = new NvidiaNvmlGpuProvider();
+                                break;
+                            default:
+                                throw new NotSupportedException($"The type {str} cannot be dynamically loaded");
                         }
-                        else
+                        if (prov == null)
                         {
-                            throw new ArgumentException("Providers contains a provider descriptor entry with an invalid type value", nameof(json));
+                            throw new ArgumentException($"Entry {str} could not be resolved.", nameof(json));
                         }
+                        var provider = new LocalProviderController(parent, prov);
+                        bool isStarted = false;
+                        if (obj.TryGetValue("is_started", out var isObj))
+                        {
+                            if (isObj is bool isBool)
+                            {
+                                isStarted = isBool;
+                            }
+                            else
+                            {
+                                throw new ArgumentException("Providers contains a provider descriptor entry with an invalid is_started value", nameof(json));
+                            }
+                        }
+                        result[i] = new LocalProviderEntry(provider, isStarted);
+                        
                     }
                     else
                     {

@@ -15,7 +15,7 @@ public static class RealProgram
     [STAThread]
     static void Main(string[] args)
     {
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log("AppDomain", Dump(e.ExceptionObject as Exception));
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log("AppDomain", e.ExceptionObject as Exception);
 
 #if DEBUG
         Bootstrap.Initialize(0x00010008); // Debug = framework-dependent
@@ -36,16 +36,19 @@ public static class RealProgram
 
                 app.UnhandledException += (s, e) =>
                 {
-                    // e.Message carries the DETAILED XAML parser error (missing
-                    // resource key / unresolvable type + line & position). The
-                    // exception's own Message is just "XAML parsing failed."
-                    Log("XAML", $"e.Message: {e.Message}\n{Dump(e.Exception)}");
+                    if (e != null)
+                    {
+                        // e.Message carries the DETAILED XAML parser error (missing
+                        // resource key / unresolvable type + line & position). The
+                        // exception's own Message is just "XAML parsing failed."
+                        Log("XAML",e.Exception);
+                    }
                 };
             });
         }
         catch (Exception ex)
         {
-            Log("Main", Dump(ex));
+            Log("Main", ex);
             throw;
         }
 #if DEBUG
@@ -56,23 +59,18 @@ public static class RealProgram
 #endif
     }
 
-    static string Dump(Exception ex)
-    {
-        var sb = new StringBuilder();
-        for (var cur = ex; cur != null; cur = cur.InnerException)
-            sb.AppendLine($"{cur.GetType().FullName} (HResult 0x{cur.HResult:X8}): {cur.Message}")
-              .AppendLine(cur.StackTrace);
-        return sb.ToString();
-    }
+   
+    static readonly string CrashLogPath = System.IO.Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "Espmon", "crash.log");
 
-    static void Log(string source, string text)
+    static void Log(string source, Exception? ex)
     {
         try
         {
-            File.AppendAllText(
-                Path.Combine(AppContext.BaseDirectory, "espmon-startup-crash.log"),
-                $"{DateTime.Now:o} [{source}]\n{text}\n\n");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CrashLogPath)!);
+            System.IO.File.AppendAllText(CrashLogPath, $"{DateTime.Now} [{source}] {ex}\n\n");
         }
-        catch { }
+        catch { /* last-resort: never let logging throw */ }
     }
 }

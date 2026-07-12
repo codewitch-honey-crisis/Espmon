@@ -127,8 +127,8 @@
                                 <TextBlock Text="Flash firmware to device" HorizontalAlignment="Center"/>
                                 <ComboBox x:Name="flashCombo" ItemsSource="{x:Bind ViewModel.FirmwareEntries, Mode=OneWay}" PlaceholderText="Choose...">
                                     <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding DisplayName}"/>
+                                        <DataTemplate x:DataType="local:FirmwareEntry">
+                                            <TextBlock Text="{x:Bind DisplayName,Mode=OneTime}"/>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>

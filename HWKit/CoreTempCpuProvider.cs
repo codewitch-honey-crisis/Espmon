@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace HWKit
 {
@@ -7,7 +8,7 @@ namespace HWKit
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         static extern IntPtr OpenFileMapping(uint dwDesiredAccess, bool bInheritHandle, string lpName);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        static extern IntPtr MapViewOfFile(IntPtr handle, uint dwDesiredAccess,uint offsetHigh, uint offsetLow,int size );
+        static extern IntPtr MapViewOfFile(IntPtr handle, uint dwDesiredAccess, uint offsetHigh, uint offsetLow, int size);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool UnmapViewOfFile(IntPtr pointer);
@@ -16,37 +17,59 @@ namespace HWKit
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool CloseHandle(IntPtr handle);
         const uint FILE_MAP_READ = 0x04;
-       
-        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Ansi,Pack =1)]
+
+        // Inline (blittable) fixed-size buffers. These replace the previous
+        // [MarshalAs(ByValArray)] managed arrays and the [MarshalAs(ByValTStr)]
+        // string, both of which made the struct NON-blittable and forced
+        // reflection-based marshalling (Marshal.SizeOf / Marshal.PtrToStructure).
+        // NativeAOT mishandles that path for this struct, which is why the
+        // provider silently returned NaN under AOT. With InlineArray the struct
+        // is fully blittable, so it can be read with a plain memory copy.
+        [InlineArray(256)] private struct UInt256 { private uint _e0; }
+        [InlineArray(128)] private struct UInt128 { private uint _e0; }
+        [InlineArray(256)] private struct Float256 { private float _e0; }
+        [InlineArray(128)] private struct Float128 { private float _e0; }
+        [InlineArray(100)] private struct Byte100 { private byte _e0; }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
         private struct CoreTempSharedDataEx
         {
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public uint[] uiLoad;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
-            public uint[] uiTjMax;
+            public UInt256 uiLoad;
+            public UInt128 uiTjMax;
             public uint uiCoreCnt;
             public uint uiCPUCnt;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public float[] fTemp;
+            public Float256 fTemp;
             public float fVID;
             public float fCPUSpeed;
             public float fFSBSpeed;
             public float fMultiplier;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 100)]
-            public string sCPUName;
+            public Byte100 sCPUName;
             public byte ucFahrenheit;
             public byte ucDeltaToTjMax;
             // uiStructVersion = 2
             public byte ucTdpSupported;
             public byte ucPowerSupported;
             public uint uiStructVersion;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
-            public uint[] uiTdp;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
-            public float[] fPower;
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
-            public float[] fMultipliers;
+            public UInt128 uiTdp;
+            public Float128 fPower;
+            public Float256 fMultipliers;
+
+            // The CPU name is not used by any accessor below, but it's decoded
+            // here (safe, AOT-friendly) in case a caller wants it later.
+            public readonly string GetCpuName()
+            {
+                Span<char> chars = stackalloc char[100];
+                int n = 0;
+                for (; n < 100; n++)
+                {
+                    byte b = sCPUName[n];
+                    if (b == 0) break;
+                    chars[n] = (char)b;
+                }
+                return new string(chars[..n]);
+            }
         }
+
         private interface IAccessor
         {
             float Value { get; }
@@ -60,17 +83,19 @@ namespace HWKit
                 _provider = provider;
                 _index = index;
             }
-            public float Value { 
-                get {
+            public float Value
+            {
+                get
+                {
                     if (_provider.Status != HardwareInfoProviderStatus.Started) return float.NaN;
                     try
                     {
                         _provider.EnsureFileMapping();
                     }
                     catch { return float.NaN; }
-                    var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
+                    var data = _provider.ReadData();
                     return data.uiLoad[_index];
-                } 
+                }
             }
         }
         private sealed class CoreTemperatureAccessor : IAccessor
@@ -80,7 +105,7 @@ namespace HWKit
             int _index;
             public CoreTemperatureAccessor(CoreTempCpuProvider provider, int cpu, int index)
             {
-                _provider= provider;
+                _provider = provider;
                 _cpu = cpu;
                 _index = index;
             }
@@ -94,11 +119,11 @@ namespace HWKit
                         _provider.EnsureFileMapping();
                     }
                     catch { return float.NaN; }
-                    var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
+                    var data = _provider.ReadData();
                     float val = data.fTemp[_index];
                     if (0 == data.ucDeltaToTjMax)
                     {
-                        
+
                         val = data.fTemp[_index];
                     }
                     else
@@ -132,7 +157,7 @@ namespace HWKit
                         _provider.EnsureFileMapping();
                     }
                     catch { return float.NaN; }
-                    var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
+                    var data = _provider.ReadData();
                     if (data.ucFahrenheit > 0)
                     {
                         return (float)((data.uiTjMax[_index] - 32) / 1.8);
@@ -160,8 +185,8 @@ namespace HWKit
                         _provider.EnsureFileMapping();
                     }
                     catch { return float.NaN; }
-                    var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
-                    return data.fMultipliers[_index]*data.fFSBSpeed;
+                    var data = _provider.ReadData();
+                    return data.fMultipliers[_index] * data.fFSBSpeed;
                 }
             }
         }
@@ -171,7 +196,7 @@ namespace HWKit
             int _index;
             public CoreMultiplierAccessor(CoreTempCpuProvider provider, int index)
             {
-                _provider= provider;
+                _provider = provider;
                 _index = index;
             }
             public float Value
@@ -184,7 +209,7 @@ namespace HWKit
                         _provider.EnsureFileMapping();
                     }
                     catch { return float.NaN; }
-                    var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_provider._sharedPtr);
+                    var data = _provider.ReadData();
                     return data.fMultipliers[_index];
                 }
             }
@@ -193,6 +218,12 @@ namespace HWKit
         IntPtr _sharedHandle = IntPtr.Zero;
         IntPtr _sharedPtr = IntPtr.Zero;
         List<IAccessor> accessors = new List<IAccessor>();
+
+        private unsafe CoreTempSharedDataEx ReadData()
+        {
+            return Unsafe.Read<CoreTempSharedDataEx>((void*)_sharedPtr);
+        }
+
         protected override HardwareInfoProviderStatus GetState()
         {
             return _sharedHandle != IntPtr.Zero ? HardwareInfoProviderStatus.Started : HardwareInfoProviderStatus.Stopped;
@@ -214,8 +245,15 @@ namespace HWKit
             _sharedHandle = OpenFileMapping(FILE_MAP_READ, true, "CoreTempMappingObjectEx");
             if (_sharedHandle != IntPtr.Zero)
             {
-                System.Diagnostics.Debug.Assert(4740 == Marshal.SizeOf<CoreTempSharedDataEx>(), "Something is wrong with your struct");
-                _sharedPtr = MapViewOfFile(_sharedHandle, FILE_MAP_READ, 0, 0, Marshal.SizeOf<CoreTempSharedDataEx>());
+                int size = Unsafe.SizeOf<CoreTempSharedDataEx>();
+                // Real runtime guard (the old Debug.Assert compiled out under
+                // release/AOT, so a layout regression would have been silent).
+                if (size != 4740)
+                {
+                    throw new InvalidOperationException(
+                        $"CoreTempSharedDataEx is {size} bytes, expected 4740 - struct layout is wrong.");
+                }
+                _sharedPtr = MapViewOfFile(_sharedHandle, FILE_MAP_READ, 0, 0, size);
             }
             if (_sharedPtr == IntPtr.Zero)
             {
@@ -224,20 +262,20 @@ namespace HWKit
                 throw new SystemException("Unable to map view");
 
             }
-            var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
+            var data = ReadData();
             Publish($"/cpu/clock", "MHz", new Func<float>(() => {
                 if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
-                var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
+                var data = ReadData();
                 return data.fCPUSpeed;
             }));
             Publish($"/bus/clock", "MHz", new Func<float>(() => {
                 if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
-                var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
+                var data = ReadData();
                 return data.fFSBSpeed;
             }));
             Publish($"/cpu/multiplier", "x", new Func<float>(() => {
                 if (Status != HardwareInfoProviderStatus.Started) return float.NaN;
-                var data = Marshal.PtrToStructure<CoreTempSharedDataEx>(_sharedPtr);
+                var data = ReadData();
                 return data.fMultiplier;
             }));
 
@@ -283,7 +321,7 @@ namespace HWKit
         protected override void OnStop()
         {
             _started = false;
-            if (_sharedHandle==IntPtr.Zero)
+            if (_sharedHandle == IntPtr.Zero)
             {
                 return;
             }
@@ -300,11 +338,11 @@ namespace HWKit
         private static readonly object _allCoreTempsKey = new object();
         private static readonly object _allCoreLoadsKey = new object();
         private static readonly object _allCoreClocksKey = new object();
-        private static readonly object _maxCpuClockKey = new object(); 
+        private static readonly object _maxCpuClockKey = new object();
         private static readonly object _maxSafeCpuTempsKey = new object();
         public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
         {
-            if (context.Expression==null && context.ParseException==null)
+            if (context.Expression == null && context.ParseException == null)
             {
                 HardwareInfoSuggestion[] result = [
                     new HardwareInfoSuggestion(_allCoreTempsKey,"All core temperatures","Retrieves the temperatures for every core across all CPUs in degrees Celsius"),
@@ -321,7 +359,8 @@ namespace HWKit
         {
             if (context.Expression == null && context.ParseException == null)
             {
-                if(key==_allCoreTempsKey) {
+                if (key == _allCoreTempsKey)
+                {
                     return HardwareInfoExpression.Parse("'^/coretemp/cpu/[0-9]+/core/[0-9]+/temperature$'");
                 }
                 if (key == _allCoreLoadsKey)

@@ -17,12 +17,15 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0">Update Interval</TextBlock>
                     <ComboBox Grid.Column="1"
-          ItemsSource="{x:Bind local:IntervalOptions.All}"
-          DisplayMemberPath="Display"
-          SelectedValuePath="Milliseconds"
-          SelectedValue="{x:Bind Screen.Interval, Mode=TwoWay}" 
-          Loaded="ComboBox_Loaded"
-                              />
+    ItemsSource="{x:Bind local:IntervalOptions.All}"
+    SelectedItem="{x:Bind SelectedInterval, Mode=TwoWay}"
+    Loaded="ComboBox_Loaded">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="local:IntervalOption">
+                                <TextBlock Text="{x:Bind Display}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                 </Grid>
                 <StackPanel x:Name="screenPartPanel" Spacing="16">
                     <ComboBox x:Name="screenPartComboBox" Header="Screen Part:" 

@@ -187,7 +187,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     var res = PipeFrame.ReadFrame(pipe);
                     ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
                     loaded = true;
-                    Thread.Sleep(100);
+                    //Thread.Sleep(100);
                     break;
                     
                 }

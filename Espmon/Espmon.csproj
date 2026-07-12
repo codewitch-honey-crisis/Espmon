@@ -36,6 +36,17 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PublishTrimmed>True</PublishTrimmed>
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>False</PublishAot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <PublishTrimmed>True</PublishTrimmed>
+    <IsAotCompatible>True</IsAotCompatible>
+    <PublishAot>False</PublishAot>
+  </PropertyGroup>
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
@@ -59,12 +70,12 @@
     <ProjectReference Include="..\Espmon.PortDispatcher\Espmon.PortDispatcher.csproj" />
     <ProjectReference Include="..\Espmon.Service.Interface\Espmon.Service.Interface.csproj" />
     <ProjectReference Include="..\HWKit\HWKit.csproj" />
-    <ProjectReference Include="..\Espmon.Service\Espmon.Service.csproj">
+    <!--<ProjectReference Include="..\Espmon.Service\Espmon.Service.csproj">
       <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
     </ProjectReference>
     <ProjectReference Include="..\Espmon.Elevation\Espmon.Elevation.csproj">
       <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-    </ProjectReference>
+    </ProjectReference>-->
   </ItemGroup>
   <ItemGroup>
     <None Update="libespmon.dll">
@@ -76,8 +87,13 @@
     <None Update="vcruntime140_1.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+
+    <TrimmerRootAssembly Include="Microsoft.WinUI" />
+    <TrimmerRootAssembly Include="Microsoft.Windows.SDK.NET" />
+    <TrimmerRootAssembly Include="Espmon" />
+    
   </ItemGroup>
- 
+
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
     Explorer "Package and Publish" context menu entry to be enabled for this project even if
@@ -111,16 +127,16 @@
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-lib.ps1&quot;" />
   </Target>
-  <Target Name="BuildAndCopyHelper" AfterTargets="PostBuildEvent">
+  <!-- Debug-only: copies the helper/service exes next to Espmon for local F5 debugging.
+       Gated to Debug so Release publishes (driven by publish-payload.ps1) stay clean and
+       don't drag non-published build outputs into the payload. -->
+  <Target Name="BuildAndCopyHelper" AfterTargets="PostBuildEvent" Condition="'$(Configuration)'=='Debug'">
     <MSBuild Projects="..\Espmon.Elevation\Espmon.Elevation.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
-  <Target Name="BuildAndCopyService" AfterTargets="Build">
+  <Target Name="BuildAndCopyService" AfterTargets="Build" Condition="'$(Configuration)'=='Debug'">
     <MSBuild Projects="..\Espmon.Service\Espmon.Service.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
-  <Target Name="PackageEspmon" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
-    <PropertyGroup>
-      <_PublishFull>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(PublishDir)'))))</_PublishFull>
-    </PropertyGroup>
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(SolutionDir)package.ps1&quot; -SourceDir &quot;$(_PublishFull.TrimEnd('\'))&quot; -ZipPath &quot;$(SolutionDir)Espmon.zip&quot;" />
-  </Target>
+  <!-- PackageEspmon target removed: publish-payload.ps1 now owns building Espmon.zip
+       from the merged payload (Espmon + Elevation + Service). Leaving it here would
+       overwrite the merged zip with an Espmon-only one on every Release publish. -->
 </Project>

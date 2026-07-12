@@ -22,7 +22,7 @@ namespace HWKit
         private bool _started;
         protected override string GetDisplayName()
         {
-            return "NVidia NVML GPU Provider";
+            return "Nvidia NVML GPU Provider";
         }
         protected override string GetIdentifier()
         {
@@ -69,7 +69,7 @@ namespace HWKit
         }
         protected override string GetDescription()
         {
-            return "Provides various information about installed NVidia GPUs";
+            return "Provides various information about installed Nvidia GPUs";
         }
     }
 }
