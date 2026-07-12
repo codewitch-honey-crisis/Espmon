@@ -35,14 +35,18 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
     {
         if(e.PropertyName =="Status" || e.PropertyName==null)
         {
+            
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOpen)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsClosed)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsReady)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsFlashing)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanFlash)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ScreenMetrics)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Input)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FlashVisibility)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ReadyVisibility)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WaitingVisibility)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OpenVisibility)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RunningVisibility)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TextColor)));
@@ -56,6 +60,7 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
 
     public SessionController Session { get; }
     public bool IsOpen => Session.Status != SessionStatus.Closed;
+    public bool IsReady => !Session.IsWaitingForScreenChange && (Session.Status == SessionStatus.ReadyForData || Session.Status == SessionStatus.NeedScreen || Session.Status == SessionStatus.Busy);
     public bool CanFlash => Session.GetUpgrade() != FirmwareUpgrade.NotRequired;
     public bool IsFlashing => Session.Status == SessionStatus.Flashing;
     public bool IsClosed => Session.Status == SessionStatus.Closed;
@@ -97,6 +102,8 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
     public Color TextColor => IsOpen ? Colors.White : Colors.LightGray;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public Visibility ReadyVisibility => IsReady?Visibility.Visible:Visibility.Collapsed;
+    public Visibility WaitingVisibility => !IsReady ? Visibility.Visible : Visibility.Collapsed;
     public Visibility FlashVisibility => CanFlash||IsFlashing ? Visibility.Visible : Visibility.Collapsed;
     public Visibility OpenVisibility => Session.Status==SessionStatus.Closed ? Visibility.Visible : Visibility.Collapsed;
     public Visibility RunningVisibility =>  (Session.Status==SessionStatus.Busy||Session.Status==SessionStatus.NeedScreen)? Visibility.Visible : Visibility.Collapsed;

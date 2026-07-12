@@ -63,6 +63,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         get => _selectedSession;
         set
         {
+            var changeDpv = _devicePanelIndex == 0 && (_selectedSession==null || value==null);
             if (_selectedSession!=value)
             {
                 if (_selectedSession!= null)
@@ -80,6 +81,11 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SessionFlashVisibility));
                 OnPropertyChanged(nameof(SessionRunningVisibility));
                 OnPropertyChanged(nameof(SessionScreenListVisibility));
+                if(changeDpv)
+                {
+                    OnPropertyChanged(nameof(DevicePanel1Visibility));
+                }
+                
             }
         }
     }

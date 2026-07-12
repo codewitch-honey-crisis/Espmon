@@ -117,10 +117,11 @@
                                 <Button x:Name="openButton" Content="Connect" HorizontalAlignment="Center" Click="openButton_Click" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel2Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
-                                <local:ScreenView x:Name="currentScreenView" ScalingMode="DpiAware" Width="{x:Bind ViewModel.SelectedSession.HorizontalResolution, Mode=OneWay}" Height="{x:Bind ViewModel.SelectedSession.VerticalResolution, Mode=OneWay}" />
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.DeviceName, Mode=OneWay}" HorizontalAlignment="Center"/>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSessionScreenMetrics, Mode=OneWay}" HorizontalAlignment="Center"/>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.Input, Mode=OneWay}" HorizontalAlignment="Center"/>
+                                <local:ScreenView x:Name="currentScreenView" ScalingMode="DpiAware" Width="{x:Bind ViewModel.SelectedSession.HorizontalResolution, Mode=OneWay}" Height="{x:Bind ViewModel.SelectedSession.VerticalResolution, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedSessionEntry.ReadyVisibility, Mode=OneWay}" />
+                                <TextBlock Text="Waiting for device..." HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SelectedSessionEntry.WaitingVisibility, Mode=OneWay}"/>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.DeviceName, Mode=OneWay}" HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SelectedSessionEntry.ReadyVisibility, Mode=OneWay}"/>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedSessionScreenMetrics, Mode=OneWay}" HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SelectedSessionEntry.ReadyVisibility, Mode=OneWay}"/>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedSession.Input, Mode=OneWay}" HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.SelectedSessionEntry.ReadyVisibility, Mode=OneWay}"/>
                                 <local:ScreenSelector x:Name="deviceScreens" Visibility="{x:Bind ViewModel.SessionScreenListVisibility, Mode=OneWay}" Screens="{x:Bind ViewModel.ScreenItems,Mode=OneWay}" DeviceScreens="{x:Bind ViewModel.SelectedSession.Device.Screens, Mode=OneWay}" SelectedScreenIndex="{x:Bind ViewModel.SelectedSession.ScreenIndex, FallbackValue=-1, Mode=TwoWay}" ScreenSelectionChanged="deviceScreens_ScreenSelectionChanged"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel3Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
@@ -143,7 +144,7 @@
                                 </ScrollViewer>
                                 <Button x:Name="flashButton" Content="Flash" HorizontalAlignment="Center" Click="flashButton_Click" />
                                 <Button x:Name="retryConnectButton" Content="Retry Connection" HorizontalAlignment="Center" Click="retryConnectButton_Click"/>
-                                <Button x:Name="manualFlashButton" Content="Manual Flash" HorizontalAlignment="Center" Click="manualFlashButton_Click"/>
+                                <!--<Button x:Name="manualFlashButton" Content="Manual Flash" HorizontalAlignment="Center" Click="manualFlashButton_Click"/>-->
                             </StackPanel>
                         </Grid>
                     </ScrollViewer>
