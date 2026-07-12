@@ -17,7 +17,8 @@ param(
     [string]$SolutionDir   = '',             # empty -> resolved from the script's own location below
     [string]$Configuration = 'Release',
     [string]$Platform      = 'x64',          # keep x64: activates the AOT guards
-    [string]$Rid           = 'win-x64'
+    [string]$Rid           = 'win-x64',
+    [switch]$Force            # rebuild even if Espmon.zip already looks current
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,6 +50,27 @@ $payloadParent = Join-Path $SolutionDir 'bin\payload'       # zipped -> archive 
 $archiveRootName = 'Espmon'
 $payloadDir   = Join-Path $payloadParent $archiveRootName  # merge target = archive root folder
 $zipPath      = Join-Path $SolutionDir 'Espmon.zip'
+
+# --- Skip if the zip is already current -------------------------------------
+# VS "Publish" runs this BeforeBuild step twice (a build pass + a publish pass).
+# The second pass has nothing to do: the zip we just wrote is newer than every
+# source file. Detect that and no-op instead of cleaning + republishing + rezipping.
+if (-not $Force -and (Test-Path $zipPath)) {
+    $zipTime = (Get-Item $zipPath).LastWriteTimeUtc
+    $skipDirs = @('\bin\', '\obj\', '\.vs\', '\.git\')
+    $stale = Get-ChildItem $SolutionDir -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $f = $_.FullName
+            $f -ne $zipPath -and
+            -not ($skipDirs | Where-Object { $f -like "*$_*" }) -and
+            $_.LastWriteTimeUtc -gt $zipTime
+        } | Select-Object -First 1
+    if (-not $stale) {
+        Write-Host "Espmon.zip is up to date; skipping payload rebuild (use -Force to override)." -ForegroundColor Green
+        exit 0
+    }
+    Write-Host "Payload source changed ($($stale.Name)); rebuilding." -ForegroundColor Yellow
+}
 
 # Projects to publish (NOT the Installer). Each entry names the primary exe we
 # expect, so we can hard-fail before producing a bad zip.
