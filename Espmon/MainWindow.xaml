@@ -213,13 +213,14 @@
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}">
                     </Border>
-                    <ScrollViewer Grid.Column="1" VerticalScrollMode="Auto" HorizontalScrollMode="Auto">
+                    <ScrollViewer Grid.Column="1" VerticalScrollMode="Auto" HorizontalScrollMode="Disabled">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" Padding="32" MaxWidth="400">
                             <!-- Start with Windows -->
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <CheckBox Content="Start with Windows" IsChecked="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}"/>
                                 <FontIcon Glyph="&#xE7EF;" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.IsNotElevated, Mode=OneWay}"/>
                             </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.SettingsMessage,Mode=OneWay}" TextWrapping="Wrap"></TextBlock>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

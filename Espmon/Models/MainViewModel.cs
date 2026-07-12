@@ -22,8 +22,15 @@ namespace Espmon;
 [SupportedOSPlatform("windows")]
 public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
+    private enum ExitServiceTask
+    {
+        None,
+        InstallAndStart,
+        Remove
+    }
     private Elevator _elevator;
     private int _devicePanelIndex;
+    private ExitServiceTask _exitServiceTask = ExitServiceTask.None;
     public event PropertyChangedEventHandler? PropertyChanged;
     public PortController PortController { get; }
     private string _selectedPath = string.Empty;
@@ -34,7 +41,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public Visibility DevicePanel1Visibility
     {
-        get => _devicePanelIndex == 0 && SelectedSession!=null ? Visibility.Visible:Visibility.Collapsed;
+        get => _devicePanelIndex == 0 && SelectedSession != null ? Visibility.Visible : Visibility.Collapsed;
     }
     public Visibility DevicePanel2Visibility
     {
@@ -44,10 +51,12 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _devicePanelIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
     }
-    public int DevicePanelIndex { get=> _devicePanelIndex; 
+    public int DevicePanelIndex
+    {
+        get => _devicePanelIndex;
         set
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value,0);
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 0);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 2);
             if (value != _devicePanelIndex)
             {
@@ -63,10 +72,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         get => _selectedSession;
         set
         {
-            var changeDpv = _devicePanelIndex == 0 && (_selectedSession==null || value==null);
-            if (_selectedSession!=value)
+            var changeDpv = _devicePanelIndex == 0 && (_selectedSession == null || value == null);
+            if (_selectedSession != value)
             {
-                if (_selectedSession!= null)
+                if (_selectedSession != null)
                 {
                     _selectedSession.PropertyChanged -= _selectedSession_PropertyChanged;
                 }
@@ -81,11 +90,11 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SessionFlashVisibility));
                 OnPropertyChanged(nameof(SessionRunningVisibility));
                 OnPropertyChanged(nameof(SessionScreenListVisibility));
-                if(changeDpv)
+                if (changeDpv)
                 {
                     OnPropertyChanged(nameof(DevicePanel1Visibility));
                 }
-                
+
             }
         }
     }
@@ -95,7 +104,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         get => _flashRequested;
         set
         {
-            if(_flashRequested!=value)
+            if (_flashRequested != value)
             {
                 _flashRequested = value;
                 OnPropertyChanged(nameof(FlashRequested));
@@ -110,14 +119,14 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            if (SelectedSession==null)
+            if (SelectedSession == null)
             {
                 return null;
             }
             return $"{SelectedSession.HorizontalResolution}x{SelectedSession.VerticalResolution} @ {Math.Round(SelectedSession.Dpi)} dpi";
         }
     }
-    
+
     private void _selectedSession_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         OnPropertyChanged(nameof(SelectedSessionScreenMetrics));
@@ -131,9 +140,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            if(SelectedSession!=null)
+            if (SelectedSession != null)
             {
-                return FlashRequested || SelectedSession.GetUpgrade()!=FirmwareUpgrade.NotRequired||SelectedSession.Status==SessionStatus.Flashing ?Visibility.Visible:Visibility.Collapsed; 
+                return FlashRequested || SelectedSession.GetUpgrade() != FirmwareUpgrade.NotRequired || SelectedSession.Status == SessionStatus.Flashing ? Visibility.Visible : Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
@@ -144,7 +153,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             if (SelectedSession != null)
             {
-                return !SelectedSession.IsWaitingForScreenChange && SelectedSession.Device != null && SelectedSession.Status == SessionStatus.Busy || SelectedSession.Status == SessionStatus.ReadyForData? Visibility.Visible:Visibility.Collapsed;
+                return !SelectedSession.IsWaitingForScreenChange && SelectedSession.Device != null && SelectedSession.Status == SessionStatus.Busy || SelectedSession.Status == SessionStatus.ReadyForData ? Visibility.Visible : Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
@@ -156,7 +165,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             if (FlashRequested) return Visibility.Collapsed;
             if (SelectedSession != null)
             {
-                return SelectedSession.Status==SessionStatus.Closed? Visibility.Visible : Visibility.Collapsed;
+                return SelectedSession.Status == SessionStatus.Closed ? Visibility.Visible : Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
@@ -169,13 +178,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             if (SelectedSession != null)
             {
 
-                return SelectedSession.Device!=null && SelectedSession.Status==SessionStatus.Busy || SelectedSession.Status== SessionStatus.ReadyForData || SelectedSession.Status==SessionStatus.NeedScreen?Visibility.Visible:Visibility.Collapsed;
+                return SelectedSession.Device != null && SelectedSession.Status == SessionStatus.Busy || SelectedSession.Status == SessionStatus.ReadyForData || SelectedSession.Status == SessionStatus.NeedScreen ? Visibility.Visible : Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
     }
     public ObservableCollection<string> ValidationLog { get; } = new();
-    
+
     public void Load()
     {
         if (StartWithWindows)
@@ -232,7 +241,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         return result;
     }
-    IList<ProviderEntry>? _providerEntries= null;
+    IList<ProviderEntry>? _providerEntries = null;
     public IList<ProviderEntry> ProviderEntries
     {
         get
@@ -271,7 +280,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            return _selectedProviderEntry!=null?Visibility.Visible:Visibility.Collapsed;
+            return _selectedProviderEntry != null ? Visibility.Visible : Visibility.Collapsed;
         }
     }
     public void RefreshProviders()
@@ -280,7 +289,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     }
     public void RefreshDevices()
     {
-        if(PortController!=null)
+        if (PortController != null)
         {
             PortController.RefreshSessions();
         }
@@ -291,7 +300,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         var result = new SessionEntry[Sessions.Count];
         for (var i = 0; i < result.Length; i++)
         {
-            result[i]=new SessionEntry(Sessions[i]);
+            result[i] = new SessionEntry(Sessions[i]);
         }
         return result;
     }
@@ -300,7 +309,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            if(_sessionEntries==null || _sessionEntries.Count==0)
+            if (_sessionEntries == null || _sessionEntries.Count == 0)
             {
                 _sessionEntries = new List<SessionEntry>(GetSessionEntries());
             }
@@ -320,7 +329,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             for (var i = 0; i < SessionEntries.Count; i++)
             {
                 var entry = SessionEntries[i];
-                if (object.ReferenceEquals(entry.Session, ses)) {
+                if (object.ReferenceEquals(entry.Session, ses))
+                {
                     return SessionEntries[i];
                 }
             }
@@ -329,11 +339,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set
         {
             var ses = value?.Session;
-            if (ses != null) {
+            if (ses != null)
+            {
                 for (var i = 0; i < SessionEntries.Count; i++)
                 {
                     var entry = SessionEntries[i];
-                    if (object.ReferenceEquals(entry.Session, ses)) {
+                    if (object.ReferenceEquals(entry.Session, ses))
+                    {
                         if (SelectedSession != entry.Session)
                         {
                             SelectedSession = entry.Session;
@@ -355,9 +367,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Directory.CreateDirectory(path);
         }
-        
- 
-        PortController = new LocalPortController(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Espmon"), SynchronizationContext.Current);
+
+
+        PortController = new LocalPortController(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon"), SynchronizationContext.Current);
         PortController.Screens.CollectionChanged += Screens_CollectionChanged;
 
         Load();
@@ -431,9 +443,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     }
     private bool HasScreen(string name)
     {
-        foreach(var scr in PortController.Screens)
+        foreach (var scr in PortController.Screens)
         {
-            if(scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -445,7 +457,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         var baseName = "Screen";
         var newName = baseName;
         var i = 2;
-        while(HasScreen(newName))
+        while (HasScreen(newName))
         {
             newName = $"{baseName} {i++}";
         }
@@ -474,7 +486,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set
         {
             var changed = false;
-            if(value <0)
+            if (value < 0)
             {
                 if (ScreenItems.Count > 0)
                 {
@@ -499,13 +511,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     _selectedScreen = scr;
                 }
             }
-            if(changed)
+            if (changed)
             {
-              
-               PortController.ViewSession.ScreenIndex = value;
-             
+
+                PortController.ViewSession.ScreenIndex = value;
+
                 OnPropertyChanged(nameof(SelectedScreen));
-                OnPropertyChanged(nameof(SelectedScreenIndex));   
+                OnPropertyChanged(nameof(SelectedScreenIndex));
             }
         }
     }
@@ -519,8 +531,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             ValidationLog.RemoveAt(ValidationLog.Count - 1);
         }
     }
-    
-    
+
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -532,13 +544,39 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             if (disposing)
             {
-                if (StartWithWindows)
+                bool serviceRunning = File.Exists(@"\\.\pipe\Espmon.Service");
+                bool portsReleased = false;
+
+                if (_exitServiceTask == ExitServiceTask.InstallAndStart)
                 {
-                    using var pipe = new NamedPipeClientStream(".", "Espmon.Service", PipeDirection.InOut, PipeOptions.Asynchronous);
-                    // retry loop
+                    // Turning ON at exit. The service we're about to start uses the
+                    // same COM ports as the app, so release the app's ports FIRST,
+                    // then install + start so the service can take over cleanly.
+                    if (PortController != null)
+                    {
+                        PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
+                        PortController.Stop();
+                        portsReleased = true;
+                    }
+                    RunExitServiceTask();
+                }
+                else if (_exitServiceTask == ExitServiceTask.Remove)
+                {
+                    // Turning OFF at exit. The service is going away, so no AppEnd
+                    // handoff is needed — just stop and uninstall it.
+                    RunExitServiceTask();
+                }
+                else if (serviceRunning)
+                {
+                    // No change. The running service was put to sleep via AppStart
+                    // when the app launched; AppEnd tells it the app is exiting so
+                    // it can resume operating the COM ports.
                     Exception? lastException = null;
                     for (int i = 0; i < 10; i++)
                     {
+                        // Fresh pipe each attempt — a timed-out / half-read pipe is never reused.
+                        using var pipe = new NamedPipeClientStream(
+                            ".", "Espmon.Service", PipeDirection.InOut, PipeOptions.Asynchronous);
                         try
                         {
                             pipe.Connect(500);
@@ -556,17 +594,20 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     }
                 }
 
-                if (_elevator!=null)
+                if (_elevator != null)
                 {
                     _elevator.Dispose();
                 }
-                if(PortController!=null)
+                if (PortController != null)
                 {
-                    PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
-                    PortController.Stop();
+                    if (!portsReleased)
+                    {
+                        PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
+                        PortController.Stop();
+                    }
                     PortController.Dispose();
                 }
-               
+
             }
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
@@ -632,7 +673,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsRunning));
             }
         }
-        
+
     }
     public bool IsNotElevated
     {
@@ -648,47 +689,95 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             return IsNotElevated && IsServiceRunning;
         }
     }
-    
+
 
     public bool StartWithWindows
     {
-        get => File.Exists(@"\\.\pipe\Espmon.Service");
+        // The effective state is: whatever we intend to leave behind on exit.
+        //   InstallAndStart -> will be on  -> true
+        //   Remove          -> will be off -> false
+        //   None            -> unchanged   -> whatever the service is doing right now
+        get => _exitServiceTask switch
+        {
+            ExitServiceTask.InstallAndStart => true,
+            ExitServiceTask.Remove => false,
+            _ => File.Exists(@"\\.\pipe\Espmon.Service"),
+        };
         set
         {
             try
             {
+                // Launch/connect the elevator now, the first time the toggle is
+                // flipped, so the UAC prompt happens interactively. The actual
+                // install/uninstall is deferred to Dispose via _exitServiceTask.
                 if (!_elevator.IsConnected)
                 {
                     _elevator.Connect();
                     OnPropertyChanged(nameof(IsNotElevated));
                 }
-                if (value)
-                {
-                    if(!StartWithWindows)
-                    {
-                        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
-                        _elevator.InstallService(path);
-                        // TODO: Finish negotiation
-                    }
-                }
-                else
-                {
-                    if (StartWithWindows)
-                    {
-                        _elevator.StopService();
-                        _elevator.UninstallService();
-                    }
-                }
-            }
-            catch
-            {
 
+                // Baseline = is the service actually running right now (named pipe).
+                // Comparing the desired value against the real current state means
+                // toggling back to where you started cancels any pending task,
+                // instead of queueing a bogus install-of-installed / remove-of-absent.
+                bool running = File.Exists(@"\\.\pipe\Espmon.Service");
+                ExitServiceTask newTask =
+                    value == running ? ExitServiceTask.None
+                    : value ? ExitServiceTask.InstallAndStart
+                    : ExitServiceTask.Remove;
+
+                if (newTask != _exitServiceTask)
+                {
+                    _exitServiceTask = newTask;
+                    OnPropertyChanged(nameof(StartWithWindows));
+                }
             }
+            catch(Exception ex)
+            {
+                SettingsMessage = $"Could not alter the setting. The process could not be elevated: {ex.Message}";
+                OnPropertyChanged(nameof(SettingsMessage));
+                OnPropertyChanged(nameof(StartWithWindows));
+                return;
+            }
+            SettingsMessage = StartWithWindows ? "" : "Please reboot to finalize the service removal.";
+            OnPropertyChanged(nameof(SettingsMessage));
+        }
+    }
+    public string SettingsMessage { get; private set; }
+    // Executed on teardown to carry out whatever the StartWithWindows toggle
+    // queued up. Best-effort: swallows failures since we're already exiting.
+    private void RunExitServiceTask()
+    {
+        if (_exitServiceTask == ExitServiceTask.None || _elevator == null)
+        {
+            return;
+        }
+        try
+        {
+            if (!_elevator.IsConnected)
+            {
+                _elevator.Connect();
+            }
+            if (_exitServiceTask == ExitServiceTask.InstallAndStart)
+            {
+                var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
+                _elevator.InstallService(path);
+                _elevator.StartService();
+            }
+            else if (_exitServiceTask == ExitServiceTask.Remove)
+            {
+                _elevator.StopService();
+                _elevator.UninstallService();
+            }
+        }
+        catch
+        {
+            // best-effort during teardown
         }
     }
 
-    
-      public void Dispose()
+
+    public void Dispose()
     {
         Dispose(disposing: true);
     }
