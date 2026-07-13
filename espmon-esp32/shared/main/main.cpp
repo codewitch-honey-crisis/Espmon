@@ -1,3 +1,4 @@
+// #define LOG_HEAP
 // If the CMD_SCREEN response for an input-driven advance never arrives, don't
 // lock out navigation forever — clear the input gate after this.
 #define SCREEN_CHANGE_TIMEOUT_MS 1000
@@ -11,6 +12,7 @@
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_mac.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "gfx.hpp"
 #include "uix.hpp"
@@ -454,6 +456,16 @@ extern "C" void app_main() {
            (uint32_t)(xTaskGetTickCount() - screen_change_ts) >= pdMS_TO_TICKS(SCREEN_CHANGE_TIMEOUT_MS)) {
             screen_change_pending = false;
         }
+#if LOG_HEAP
+        static TickType_t log_ts = 0;
+        if((uint32_t)(xTaskGetTickCount() - log_ts) >= pdMS_TO_TICKS(5000)) {
+            log_ts = xTaskGetTickCount();
+            size_t free = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+            size_t free_min = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+            printf("DEBUG: Free heap: %0.2fKB, Min Free Heap: %0.2fKB   \r\n",((float)free)/1024.f,((float)free_min)/1024.f);
+        }
+#endif
+
 #ifdef HAS_INPUT
         update_input(active);
 #endif

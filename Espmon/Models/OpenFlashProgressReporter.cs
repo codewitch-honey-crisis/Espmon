@@ -17,19 +17,33 @@ internal sealed class OpenFlashProgressReporter : IFlashProgress
         int progress = value.Progress;
         if (progress > -1)
         {
-            if (_log.Count == 0 || !_log[_log.Count - 1].StartsWith(action + " ", StringComparison.Ordinal))
+            if (_log.Count == 0 || !_log[_log.Count - 1].StartsWith(action, StringComparison.Ordinal))
             {
-                _log.Add($"{action} {progress}%");
+                if (progress == 0)
+                {
+                    _log.Add($"{action}");
+                }
+                else
+                {
+                    _log.Add($"{action} {progress}%");
+                }
             }
             else
             {
-                _log[_log.Count - 1] = ($"{action} {progress}%");
+                if (progress == 0)
+                {
+                    _log.Add(action);
+                }
+                else
+                {
+                    _log.Add($"{action} {progress}%");
+                }
             }
         } else
         {
             if (_log.Count == 0 || !_log[_log.Count - 1].StartsWith(action, StringComparison.Ordinal))
             {
-                _log.Add($"{action}");
+                _log.Add(action);
             }
             else
             {

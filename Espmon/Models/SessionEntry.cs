@@ -33,7 +33,12 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
 
     private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if(e.PropertyName =="Status" || e.PropertyName==null)
+        if (e.PropertyName == "Device" || e.PropertyName == null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+            return;
+        }
+        if (e.PropertyName =="Status")
         {
             
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOpen)));
@@ -52,6 +57,7 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TextColor)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
         }
+        
         if(e.PropertyName=="Name")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
@@ -66,8 +72,8 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
     }
     public SessionController Session { get; }
     public bool IsOpen => Session.Status != SessionStatus.Closed;
-    public bool IsReady => !Session.IsWaitingForScreenChange && (Session.Status == SessionStatus.ReadyForData || Session.Status == SessionStatus.NeedScreen || Session.Status == SessionStatus.Busy);
-    public bool CanFlash => Session.GetUpgrade() != FirmwareUpgrade.NotRequired;
+    public bool IsReady => Session.Device!=null && !Session.IsWaitingForScreenChange && (Session.Status == SessionStatus.ReadyForData || Session.Status == SessionStatus.NeedScreen || Session.Status == SessionStatus.Busy);
+    public bool CanFlash => Session.Device==null || Session.GetUpgrade() != FirmwareUpgrade.NotRequired;
     public bool IsFlashing => Session.Status == SessionStatus.Flashing;
     public bool IsClosed => Session.Status == SessionStatus.Closed;
     

@@ -553,19 +553,17 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             if (disposing)
             {
                 bool serviceRunning = File.Exists(@"\\.\pipe\Espmon.Service");
-                bool portsReleased = false;
-
+                if (PortController != null)
+                {
+                    PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
+                    PortController.Stop();
+                    PortController.Dispose();
+                }
                 if (_exitServiceTask == ExitServiceTask.InstallAndStart)
                 {
                     // Turning ON at exit. The service we're about to start uses the
                     // same COM ports as the app, so release the app's ports FIRST,
                     // then install + start so the service can take over cleanly.
-                    if (PortController != null)
-                    {
-                        PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
-                        PortController.Stop();
-                        portsReleased = true;
-                    }
                     RunExitServiceTask();
                 }
                 else if (_exitServiceTask == ExitServiceTask.Remove)
@@ -593,7 +591,6 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                             PipeFrame.WriteFrame(pipe, (byte)ServiceCommand.AppEnd, payload);
                             var res = PipeFrame.ReadFrame(pipe);
                             ServiceAppStartResponse.TryRead(res.Payload, out var resp, out var _);
-                            // TODO: set the screens.
                             Thread.Sleep(100);
                             break;
 
@@ -606,15 +603,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     _elevator.Dispose();
                 }
-                if (PortController != null)
-                {
-                    if (!portsReleased)
-                    {
-                        PortController.SessionStatusChanged -= PortController_SessionStatusChanged;
-                        PortController.Stop();
-                    }
-                    PortController.Dispose();
-                }
+                
 
             }
 
