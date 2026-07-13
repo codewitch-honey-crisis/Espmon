@@ -30,7 +30,6 @@ public sealed partial class MainWindow : Window
     
     public MainWindow()
     {
-
         InitializeComponent();
         var iconPath = Path.Combine(AppContext.BaseDirectory, "espmon.ico");
         var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -39,6 +38,7 @@ public sealed partial class MainWindow : Window
         appWindow.SetIcon(iconPath);
         ViewModel = new MainViewModel();
         HideAllSecondaryPanels();
+        
         
         ViewModel.Log.CollectionChanged += Log_CollectionChanged;
     }
@@ -231,10 +231,13 @@ public sealed partial class MainWindow : Window
     }
     private void screenNameEdit_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.Enter)
+        if (e.Key == VirtualKey.Enter && sender is FileNameTextBox fntb) 
         {
-            e.Handled = true;
-            CommitScreenRename((TextBox)sender);
+            if (fntb.IsFileNameValid)
+            {
+                e.Handled = true;
+                CommitScreenRename((TextBox)sender);
+            }
         }
         else if (e.Key == VirtualKey.Escape)
         {
@@ -245,7 +248,12 @@ public sealed partial class MainWindow : Window
 
     private void screenNameEdit_LostFocus(object sender, RoutedEventArgs e)
     {
-        CommitScreenRename((TextBox)sender);
+        if(sender is FileNameTextBox fntb)
+        {
+           CommitScreenRename(fntb);
+        }
+
+        
     }
 
     private void CommitScreenRename(TextBox textBox)
@@ -257,7 +265,7 @@ public sealed partial class MainWindow : Window
         textBox.Visibility = Visibility.Collapsed;
         ((TextBlock)grid.FindName("screenNameDisplay")).Visibility = Visibility.Visible;
 
-        if (string.IsNullOrEmpty(newName) || newName == entry.Name || entry.Screen==null || ViewModel==null) return;
+        if (string.IsNullOrEmpty(newName) || entry.Screen==null || ViewModel==null) return;
         if(entry.Screen==null)
         {
             throw new InvalidOperationException("The screen has not been established");
@@ -430,8 +438,17 @@ public sealed partial class MainWindow : Window
         {
             ViewModel.SelectedScreenIndex = 0;
         }
+        screenItemList.AddHandler(
+       UIElement.PointerPressedEvent,
+       new PointerEventHandler(CommitFocusBeforeSelect),
+       handledEventsToo: true);
     }
-
+    private void CommitFocusBeforeSelect(object sender, PointerRoutedEventArgs e)
+    {
+        var focused = FocusManager.GetFocusedElement(screenItemList.XamlRoot) as FrameworkElement;
+        if (focused is not null && focused != screenItemList)
+            screenItemList.Focus(FocusState.Pointer);
+    }
     private async void manualFlashButton_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel != null && ViewModel.SelectedSession != null)
@@ -453,6 +470,7 @@ public sealed partial class MainWindow : Window
     private void deviceNameDisplay_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         var grid = (Grid)((TextBlock)sender).Parent;
+        if (ViewModel.SelectedSession == null || ViewModel.SelectedSession.Device == null) return;
         ((TextBlock)grid.FindName("deviceNameDisplay")).Visibility = Visibility.Collapsed;
         var textBox = (TextBox)grid.FindName("deviceNameEdit");
         textBox.Visibility = Visibility.Visible;
@@ -550,6 +568,46 @@ public sealed partial class MainWindow : Window
             using var writer = new StreamWriter(result.Path, false, Encoding.UTF8);
             ViewModel.PortController.ExportScreens(writer);
             writer.Close();
+        }
+    }
+    private void deviceNameEdit_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (ViewModel.SelectedSession==null || ViewModel.SelectedSessionEntry==null) { return; }
+        string name = ((FileNameTextBox)sender).Text;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+        var idx = ViewModel.SessionEntries.IndexOf(ViewModel.SelectedSessionEntry);
+        e.Cancel = false;
+        for (int i = 0; i < ViewModel.ScreenItems.Count; i++)
+        {
+            if (i == idx) continue;
+            if (name.Equals(ViewModel.SessionEntries[i].Name, StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+    }
+    private void screenNameEdit_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (ViewModel.SelectedScreen == null) { return; }
+        string name = ((FileNameTextBox)sender).Text;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+        var idx = ViewModel.SelectedScreenIndex;
+        e.Cancel = false;
+        for (int i = 0; i < ViewModel.ScreenItems.Count; i++)
+        {
+            if (i == idx) continue;
+            if (name.Equals(ViewModel.ScreenItems[i].Name,StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                return;
+            }
         }
     }
 }

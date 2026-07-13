@@ -34,8 +34,8 @@
                       SelectionMode="Single"
                       Margin="0,0,8,0">
                 <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{x:Bind}" />
+                    <DataTemplate x:DataType="local:ScreenController">
+                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" />
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>

@@ -488,6 +488,7 @@ internal class LocalSessionController : SessionController
                     {
                         _identRetries = 3;
                         _transport.Send((byte)Command.CmdIdent, Array.Empty<byte>());
+          
                         //Debug.WriteLine($"Negotiation on {PortName} started.");
                         Status = SessionStatus.Negotiating;
                     }
@@ -503,6 +504,8 @@ internal class LocalSessionController : SessionController
                 {
                     //Console.Error.WriteLine($"Set {PortName} screen index to {_needScreen}");
                     ForceScreenIndex(_needScreen % Device.Screens.Count);
+                    
+                    
                     _needScreen = -1;
                 } else if (_dataReady && ScreenIndex > -1 && _transport != null && _transport.IsOpen)
                 {
@@ -535,6 +538,7 @@ internal class LocalSessionController : SessionController
                     }
                     else if (_gotIdentTicks != 0 && _ident != null)
                     {
+         
                         var device = Parent.GetDeviceByMac(_ident.MacAddress);
 
                         Id = _ident.ID;
@@ -567,14 +571,14 @@ internal class LocalSessionController : SessionController
                                 device.SerialNumbers.CopyTo(sns, 0);
                                 sns[device.SerialNumbers.Length] = SerialNumber;
                                 device.SerialNumbers = sns;
+                                
                             }
                             Device = device;
-
+                            _dataReady = false;
 
                         }
                         _ident = null;
                         Status = SessionStatus.Negotiating;
-                        Status = SessionStatus.Busy;
                         if (GetUpgrade() == FirmwareUpgrade.Required)
                         {
                             //Console.Error.WriteLine($"Negotiation on {PortName} unsuccessful. (Requires flash)");
@@ -584,7 +588,10 @@ internal class LocalSessionController : SessionController
                         else
                         {
                             //Console.Error.WriteLine($"Negotiation on {PortName} successful.");
-                            _needScreen = ScreenIndex;
+                            var si = device.ScreenIndex < 0 ? 0 : device.ScreenIndex % device.Screens.Count;
+                            Debug.WriteLine($"Setting screen request index to {si} on {PortName}");
+                            _needScreen = si;
+                            _dataReady = false;
                             Status = SessionStatus.Busy;
                         }
                     }

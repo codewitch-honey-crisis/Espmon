@@ -45,6 +45,6 @@
     <ItemGroup>
       <ServiceOutput Include="$(OutputPath)**\*.*" />
     </ItemGroup>
-    <Copy SourceFiles="@(ServiceOutput)" DestinationFiles="@(ServiceOutput->'$(SolutionDir)Espmon\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ServiceOutput)" DestinationFiles="@(ServiceOutput->'$(SolutionDir)Espmon\%(RecursiveDir)%(FileName)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>-->
 </Project>

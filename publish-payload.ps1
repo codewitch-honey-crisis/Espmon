@@ -11,6 +11,13 @@
   Platform is forced to x64 on purpose: that is what makes the (fixed) AOT
   guards in the payload csprojs fire. Do NOT forward the Installer's own
   $(Platform) here -- it builds as AnyCPU and would silently disable AOT.
+
+  Publishing is driven by full (Framework) MSBuild rather than `dotnet publish`.
+  `dotnet` runs the Core MSBuild engine, which invokes the WinUI XAML compiler
+  (a net472 tool) OUT-OF-PROCESS; on this project that fails with a silent
+  "XamlCompiler.exe exited with code 1" (MSB3073). Visual Studio succeeds
+  because it uses Framework MSBuild, which hosts the compiler IN-PROCESS. This
+  script does the same, so the CLI publish matches the VS result.
 #>
 [CmdletBinding()]
 param(
@@ -25,6 +32,30 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 function Write-Section($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
+
+# --- Locate full MSBuild.exe -------------------------------------------------
+# We need Framework MSBuild (the engine VS uses), not `dotnet`. Prefer msbuild
+# already on PATH (Developer prompt, or when VS itself launched this as a
+# pre-build step); otherwise fall back to vswhere. Note: Framework MSBuild can
+# still build net10 projects -- it resolves the .NET SDK the same way VS does,
+# provided the SDK is installed.
+function Resolve-MSBuild {
+    $cmd = Get-Command msbuild.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (Test-Path $vswhere) {
+        $found = & $vswhere -latest -prerelease -products * `
+                     -requires Microsoft.Component.MSBuild `
+                     -find 'MSBuild\**\Bin\MSBuild.exe' |
+                 Select-Object -First 1
+        if ($found -and (Test-Path $found)) { return $found }
+    }
+    throw "Could not locate MSBuild.exe. Run from a 'Developer PowerShell for VS', or install the 'MSBuild' / 'Managed Desktop' workload component."
+}
+
+$msbuild = Resolve-MSBuild
+Write-Host "Using MSBuild: $msbuild" -ForegroundColor DarkGray
 
 # --- Resolve paths -----------------------------------------------------------
 # $PSScriptRoot can come through empty depending on the host (e.g. an MSBuild Exec),
@@ -100,17 +131,40 @@ foreach ($p in $projects) {
     $csproj = Join-Path $SolutionDir $p.Csproj
     $outDir = Join-Path $stageRoot   $p.Name
 
-    # -r pins the RID (Espmon / Espmon.Service only declare RuntimeIdentifiers,
-    # the *allowed* set, not a concrete one). -p:Platform=x64 fires the guards.
-    dotnet publish $csproj `
-        -c $Configuration `
-        -r $Rid `
-        --self-contained true `
-        -p:Platform=$Platform `
-        "-p:SolutionDir=$slnDirProp" `
-        -o $outDir
-    if ($LASTEXITCODE -ne 0) { throw "Publish FAILED for $($p.Name) (exit $LASTEXITCODE)" }
+    # Full MSBuild, Publish target, in-process XAML compilation (matches VS).
+    #   -restore            : msbuild -t:Publish does NOT restore implicitly the
+    #                         way `dotnet publish` does, so ask for it explicitly.
+    #   -r pins the RID     : Espmon / Espmon.Service only declare RuntimeIdentifiers
+    #                         (the *allowed* set), not a concrete one.
+    #   -p:Platform=x64     : fires the AOT guards.
+    #   -p:PublishDir       : MSBuild's equivalent of `-o`; wants a trailing '\'.
+    $msbuildArgs = @(
+        $csproj
+        '-restore'
+        '-t:Publish'
+        '-nologo'
+        '-v:minimal'
+        "-p:Configuration=$Configuration"
+        "-p:Platform=$Platform"
+        "-p:RuntimeIdentifier=$Rid"
+        '-p:SelfContained=true'
+        "-p:SolutionDir=$slnDirProp"
+        "-p:PublishDir=$($outDir.TrimEnd('\'))\"
+    )
 
+    & $msbuild @msbuildArgs
+
+    if ($LASTEXITCODE -ne 0) {
+        # Rebuild a copy-pasteable command line from the same args that just ran
+        $quoted = $msbuildArgs | ForEach-Object {
+            if ($_ -match '\s') { '"{0}"' -f $_ } else { $_ }
+        }
+        $cmdLine = '"{0}" {1}' -f $msbuild, ($quoted -join ' ')
+
+        Write-Host 'Command that failed:' -ForegroundColor Yellow
+        Write-Host $cmdLine
+        throw "Publish FAILED for $($p.Name) (exit $LASTEXITCODE)"
+    }
     $exePath = Join-Path $outDir $p.Exe
     if (-not (Test-Path $exePath)) {
         throw "Expected '$($p.Exe)' not found after publishing $($p.Name). Aborting so the installer can't embed a bad zip."

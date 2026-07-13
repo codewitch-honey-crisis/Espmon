@@ -86,7 +86,92 @@ public abstract class PortController : ControllerBase, IDisposable
     {
         return OnGetUnit(expression);
     }
+    protected virtual void OnScreenPropertiesChanged(ScreenController screen)
+    {
+        
+    }
 
+    private void ScreenValue_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is ScreenValueController screenValue && screenValue.Parent != null && screenValue.Parent.Parent != null)
+        {
+            OnScreenPropertiesChanged(screenValue.Parent.Parent);
+        }
+    }
+
+    private void ScreenValues_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is ScreenValuesController screenValues && screenValues.Parent != null)
+        {
+            OnScreenPropertiesChanged(screenValues.Parent);
+        }
+    }
+    private void Screen_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is ScreenController screen)
+        {
+            //if (e.PropertyName != "Name")
+            //{
+                OnScreenPropertiesChanged(screen);
+            //}
+        }
+    }
+    protected void SubscribeToScreenValues(ScreenValuesController? target)
+    {
+        if (target == null) return;
+        if (target.Value1 != null)
+        {
+            target.Value1.PropertyChanged += ScreenValue_PropertyChanged;
+        }
+        if (target.Value2 != null)
+        {
+            target.Value2.PropertyChanged += ScreenValue_PropertyChanged;
+        }
+    }
+    protected void SubscribeToScreen(ScreenController? screen)
+    {
+        if (screen == null) return;
+        screen.PropertyChanged += Screen_PropertyChanged;
+        if (screen.Top != null)
+        {
+            screen.Top.PropertyChanged += ScreenValues_PropertyChanged;
+            SubscribeToScreenValues(screen.Top);
+        }
+        if (screen.Bottom != null)
+        {
+            screen.Bottom.PropertyChanged += ScreenValues_PropertyChanged;
+            SubscribeToScreenValues(screen.Bottom);
+        }
+
+    }
+    protected void UnsubscribeFromScreenValues(ScreenValuesController? target)
+    {
+        if (target == null) return;
+        if (target.Value1 != null)
+        {
+            target.Value1.PropertyChanged -= ScreenValue_PropertyChanged;
+        }
+        if (target.Value2 != null)
+        {
+            target.Value2.PropertyChanged -= ScreenValue_PropertyChanged;
+        }
+    }
+    protected void UnsubscribeFromScreen(ScreenController? screen)
+    {
+        if (screen == null) return;
+        screen.PropertyChanged -= Screen_PropertyChanged;
+        if (screen.Top != null)
+        {
+            screen.Top.PropertyChanged -= ScreenValues_PropertyChanged;
+            UnsubscribeFromScreenValues(screen.Top);
+        }
+        if (screen.Bottom != null)
+        {
+            screen.Bottom.PropertyChanged -= ScreenValues_PropertyChanged;
+            UnsubscribeFromScreenValues(screen.Bottom);
+        }
+
+    }
     private void Screens_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (IsDisposed) return;
@@ -102,7 +187,7 @@ public abstract class PortController : ControllerBase, IDisposable
                         {
                             //if (!scr.Name.Equals("(default)", StringComparison.Ordinal))
                             //{
-                                ViewSession.Device?.Screens.Add(scr.Name);
+                                ViewSession.Device?.Screens.Add(scr);
                                 OnScreenAdded(scr);
                             //}
                         }
@@ -116,7 +201,7 @@ public abstract class PortController : ControllerBase, IDisposable
                     {
                         if (item is ScreenController scr)
                         {
-                            ViewSession.Device?.Screens.Remove(scr.Name);
+                            ViewSession.Device?.Screens.Remove(scr);
                             OnScreenRemoved(scr);
                         }
                     }
@@ -133,7 +218,7 @@ public abstract class PortController : ControllerBase, IDisposable
                             //{
                             //    throw new InvalidOperationException("The default screen cannot be replaced");
                             //}
-                            ViewSession.Device?.Screens.Remove(scr.Name);
+                            ViewSession.Device?.Screens.Remove(scr);
                             OnScreenRemoved(scr);
                         }
                     }
@@ -145,7 +230,7 @@ public abstract class PortController : ControllerBase, IDisposable
                             //{
                             //    throw new InvalidOperationException("The default screen cannot be added");
                             //}
-                            ViewSession.Device?.Screens.Add(scr.Name);
+                            ViewSession.Device?.Screens.Add(scr);
                             OnScreenAdded(scr);
                         }
                     }
@@ -161,7 +246,7 @@ public abstract class PortController : ControllerBase, IDisposable
                         {
                             if (item is ScreenController scr)
                             {
-                                ViewSession.Device?.Screens.Add(scr.Name);
+                                ViewSession.Device?.Screens.Add(scr);
                             }
                         }
                     }
@@ -713,7 +798,7 @@ public abstract class PortController : ControllerBase, IDisposable
             for (var i = 0; i < screens.Length; ++i)
             {
                 Screens.Add(screens[i]);
-                ViewSession.Device?.Screens.Add(screens[i].Name);
+                ViewSession.Device?.Screens.Add(screens[i]);
             }
             var devices = CreateDevices();
             for (var i = 0;i<devices.Length;++i)

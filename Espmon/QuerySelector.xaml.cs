@@ -1,10 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.ApplicationModel.DataTransfer;
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -27,11 +25,8 @@ namespace Espmon
         private string _validationIcon = "\uE946"; // Search icon
         private TextBox? _innerTextBox;
         private DispatcherTimer _timer = new DispatcherTimer();
-        private string _liveSelection = "";   // current selection text while it's non-empty
-        private string _recentlyCleared = "";   // what was selected the instant before it emptied
-        private long _recentlyClearedAt = 0;    // when that emptying happened (ms)
-                                                // Snapshot from the last genuine evaluation. Every read-only surface below serves
-                                                // from this; only RerunQuery() ever calls Run() to refresh it.
+        // Snapshot from the last genuine evaluation. Every read-only surface below serves
+        // from this; only RerunQuery() ever calls Run() to refresh it.
         private IList<HardwareInfoEntry> _results = Array.Empty<HardwareInfoEntry>();
         public QuerySelector()
         {
@@ -55,139 +50,9 @@ namespace Espmon
             }
 
             _innerTextBox.IsSpellCheckEnabled = false;
-            _innerTextBox.ContextFlyout = BuildClipboardFlyout();
-            _innerTextBox.SelectionChanged += (s, e) =>
-            {
-                if (_innerTextBox.SelectionLength > 0)
-                {
-                    _liveSelection = _innerTextBox.SelectedText;
-                }
-                else if (_liveSelection.Length > 0)
-                {
-                    // selection just emptied — remember it briefly, with a timestamp,
-                    // so a native cut that deleted it can still grab it this keystroke
-                    _recentlyCleared = _liveSelection;
-                    _recentlyClearedAt = Environment.TickCount64;
-                    _liveSelection = "";
-                }
-            };
-
-            _innerTextBox.KeyDown += InnerTextBox_KeyDown;       // one subscription, normal bubbling
-          
-        }
-        private MenuFlyout BuildClipboardFlyout()
-        {
-            var flyout = new MenuFlyout();
-
-            var cut = new MenuFlyoutItem { Text = "Cut", Icon = new SymbolIcon(Symbol.Cut) };
-            var copy = new MenuFlyoutItem { Text = "Copy", Icon = new SymbolIcon(Symbol.Copy) };
-            var paste = new MenuFlyoutItem { Text = "Paste", Icon = new SymbolIcon(Symbol.Paste) };
-            var selectAll = new MenuFlyoutItem { Text = "Select All" };
-
-            cut.Click += (s, e) => CutToClipboard();
-            copy.Click += (s, e) => CopyToClipboard();
-            paste.Click += (s, e) => PasteFromClipboard();
-            selectAll.Click += (s, e) => _innerTextBox?.SelectAll();
-
-            flyout.Items.Add(cut);
-            flyout.Items.Add(copy);
-            flyout.Items.Add(paste);
-            flyout.Items.Add(new MenuFlyoutSeparator());
-            flyout.Items.Add(selectAll);
-
-            // Enable/disable based on selection + clipboard contents at open time
-            flyout.Opening += (s, e) =>
-            {
-                bool hasSelection = (_innerTextBox?.SelectionLength ?? 0) > 0;
-                cut.IsEnabled = hasSelection;
-                copy.IsEnabled = hasSelection;
-                paste.IsEnabled = Win32Clipboard.HasText();
-            };
-
-            return flyout;
-        }
-        private void CopyToClipboard()
-        {
-            if (_innerTextBox == null || _innerTextBox.SelectionLength == 0)
-            {
-                //Debug.WriteLine($"[copy] skipped: tb={_innerTextBox != null}, sel={_innerTextBox?.SelectionLength}");
-                return;
-            }
-            bool ok = Win32Clipboard.SetText(_innerTextBox.SelectedText);
-            //Debug.WriteLine($"[copy] SetText('{_innerTextBox.SelectedText}') -> {ok}");
-        }
-        private void CutToClipboard()
-        {
-            if (_innerTextBox == null || _innerTextBox.SelectionLength == 0) return;
-            if (Win32Clipboard.SetText(_innerTextBox.SelectedText))
-                ReplaceSelection(string.Empty);
+            // Cut/Copy/Paste/Select-All come from the TextBox's built-in context menu and shortcuts.
         }
 
-        private void PasteFromClipboard()
-        {
-            if (_innerTextBox == null) return;
-            var text = Win32Clipboard.GetText();
-            if (string.IsNullOrEmpty(text)) return;
-            ReplaceSelection(text);
-        }
-
-        private void ReplaceSelection(string replacement)
-        {
-            if (_innerTextBox == null) return;
-            //Debug.WriteLine($"[replace] '{replacement}' caret={_innerTextBox.SelectionStart}");
-            var current = _innerTextBox.Text ?? string.Empty;
-            int start = _innerTextBox.SelectionStart;
-            int len = _innerTextBox.SelectionLength;
-
-            // clamp defensively in case selection got stale
-            start = Math.Clamp(start, 0, current.Length);
-            len = Math.Clamp(len, 0, current.Length - start);
-
-            _innerTextBox.Text = current.Substring(0, start) + replacement + current.Substring(start + len);
-            _innerTextBox.SelectionStart = start + replacement.Length;
-            _innerTextBox.SelectionLength = 0;
-            _innerTextBox.Focus(FocusState.Programmatic);
-        }
-        private void InnerTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
-        {
-            bool ctrl = Microsoft.UI.Input.InputKeyboardSource
-                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-            if (!ctrl || _innerTextBox == null) return;
-
-            switch (e.Key)
-            {
-                case Windows.System.VirtualKey.C:
-                    //Debug.WriteLine($"[kb] copy sel='{_innerTextBox.SelectedText}'");
-                    if (_innerTextBox.SelectionLength > 0)
-                        Win32Clipboard.SetText(_innerTextBox.SelectedText);
-                    break;
-
-                //case Windows.System.VirtualKey.X:
-                //    // native already deleted the selection by now, so use the cache
-                //    var text = _innerTextBox.SelectionLength > 0
-                //        ? _innerTextBox.SelectedText
-                //        : _lastNonEmptySelection;
-                //    Debug.WriteLine($"[kb] cut text='{text}'");
-                //    if (!string.IsNullOrEmpty(text))
-                //        Win32Clipboard.SetText(text);
-                //    break;
-                case Windows.System.VirtualKey.X:
-                    {
-                        string text;
-                        if (_innerTextBox.SelectionLength > 0)
-                            text = _innerTextBox.SelectedText;                      // live selection (handler beat native)
-                        else if (Environment.TickCount64 - _recentlyClearedAt < 100)
-                            text = _recentlyCleared;                                // native cut emptied it just now
-                        else
-                            text = "";                                              // nothing was really selected — skip
-                        if (!string.IsNullOrEmpty(text))
-                            Win32Clipboard.SetText(text);
-                        break;
-                    }
-                    // V and A intentionally NOT handled — native paste & select-all work fine.
-            }
-        }
         private void _timer_Tick(object? sender, object e)
         {
             try
@@ -204,7 +69,7 @@ namespace Espmon
         nameof(Expression),
         typeof(HardwareInfoExpression),
         typeof(QuerySelector),
-        new PropertyMetadata(_emptyExpr,OnExpressionChanged));
+        new PropertyMetadata(_emptyExpr, OnExpressionChanged));
         // replace: private bool _updatingExpression = false;
         private bool _syncingTextFromExpression = false; // Expression -> Text (external change)
         private bool _settingExpressionFromText = false; // Text -> Expression (user typing)
@@ -248,10 +113,10 @@ namespace Espmon
 
         private static void OnSessionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            
+
             if (d is QuerySelector control && e.NewValue is SessionController ctrl)
             {
-                if(e.OldValue is SessionController oldCtrl)
+                if (e.OldValue is SessionController oldCtrl)
                 {
                     oldCtrl.PropertyChanged -= control.Session_PropertyChanged;
                 }
@@ -263,7 +128,7 @@ namespace Espmon
 
         private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if(e.PropertyName==null||e.PropertyName.Equals("ScreenIndex",StringComparison.Ordinal))
+            if (e.PropertyName == null || e.PropertyName.Equals("ScreenIndex", StringComparison.Ordinal))
             {
                 OnPropertyChanged(nameof(Expression));
             }
@@ -294,7 +159,7 @@ namespace Espmon
         }
 
 
-       
+
         private T? FindDescendant<T>(DependencyObject parent) where T : DependencyObject
         {
             if (parent == null) return null;
@@ -315,7 +180,7 @@ namespace Espmon
             return null;
         }
 
-     
+
         public string PathPattern
         {
             get => _pathPattern;
@@ -331,7 +196,8 @@ namespace Espmon
                 }
             }
         }
-        public bool IsRegexExpression {
+        public bool IsRegexExpression
+        {
             get
             {
                 return Expression is HardwareInfoMatchExpression;
@@ -345,7 +211,7 @@ namespace Espmon
                 return expr == null || (expr is HardwareInfoQueryExpression);
             }
         }
-      
+
         private IEnumerable<HardwareInfoEntry> Run()
         {
             if (Session == null) return Array.Empty<HardwareInfoEntry>();
@@ -379,7 +245,8 @@ namespace Espmon
                 {
                     // TODO: Display the error
                 }
-            } else if(Expression!=null)
+            }
+            else if (Expression != null)
             {
                 return Session.Parent.Evaluate(Expression);
             }
@@ -485,7 +352,7 @@ namespace Espmon
             {
                 try
                 {
-                    return Session != null ? Expression!=null && !Expression.IsEmpty? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
+                    return Session != null ? Expression != null && !Expression.IsEmpty ? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
                 }
                 catch (Exception e)
                 {
@@ -553,7 +420,7 @@ namespace Espmon
             }
 
             ValidatePattern();
-        //    RerunQuery();
+            //    RerunQuery();
         }
 
         private void ValidatePattern()
@@ -605,7 +472,7 @@ namespace Espmon
             if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 //var textBox = FindTextBoxInAutoSuggestBox(sender);
-                
+
             }
         }
 
@@ -621,7 +488,8 @@ namespace Espmon
                 if (SelectedPath.StartsWith("/"))
                 {
                     SelectedPath = chosenPath;
-                } else
+                }
+                else
                 {
                     SelectedPath = "";
                 }
@@ -656,11 +524,11 @@ namespace Espmon
         }
         private void ChevronFlyout_Opening(object sender, object e)
         {
-            var toSnapshot = this.MatchingPaths??[];
-                        
+            var toSnapshot = this.MatchingPaths ?? [];
+
             // Clear existing items and populate from event args
             ChevronFlyout.Items.Clear();
-            if(Session!=null && Matches!=null)
+            if (Session != null && Matches != null)
             {
                 //var providers = Session.Parent.GetProviders();
                 //var context = new HardwareInfoSuggestionContext(Expression, Matches.ToList(), ValidationException as HardwareInfoParseException, providers);
@@ -689,12 +557,12 @@ namespace Espmon
                 //    }
                 //}
             }
-            if (ChevronFlyout.Items.Count== 0)
+            if (ChevronFlyout.Items.Count == 0)
             {
                 var emptyItem = new MenuFlyoutItem { Text = "No suggessions available", IsEnabled = false };
                 ChevronFlyout.Items.Add(emptyItem);
             }
-            
+
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -713,5 +581,5 @@ namespace Espmon
         public string? ErrorMessage { get; set; }
     }
 
-  
+
 }

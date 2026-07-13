@@ -57,7 +57,13 @@ public sealed class SessionEntry : IComparable<SessionEntry>, INotifyPropertyCha
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
         }
     }
-
+    public string AppDataPath
+    {
+        get
+        {
+            return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
+        }
+    }
     public SessionController Session { get; }
     public bool IsOpen => Session.Status != SessionStatus.Closed;
     public bool IsReady => !Session.IsWaitingForScreenChange && (Session.Status == SessionStatus.ReadyForData || Session.Status == SessionStatus.NeedScreen || Session.Status == SessionStatus.Busy);

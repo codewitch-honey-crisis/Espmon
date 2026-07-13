@@ -127,6 +127,9 @@ public sealed partial class ScreenEditor : UserControl
             ? null
             : IntervalOptions.All.FirstOrDefault(o => o.Milliseconds == editor.Screen.Interval);
     }
+
+   
+
     public static readonly DependencyProperty SelectedIntervalProperty =
     DependencyProperty.Register(
         nameof(SelectedInterval),

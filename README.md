@@ -32,6 +32,12 @@ To proceed: click More info, then Run anyway.
 
 You can skip the installer entirely, unzip the files to the desired directory, and run Espmon.exe from there.
 
+### Premade Screens
+
+Included in the root of this repository is a file called `espmon.screens.json`
+This includes 3 screens for monitoring common items. 
+It can be downloadad and then imported via the Open button in the Screens section.
+
 ### To build:
 - you need Visual Studio 2026 (C# and C++)
 - you need a recent copy of python installed and in your path.
@@ -41,12 +47,6 @@ You need to open the solution in Visual Studio, right click on the installer pro
 
 ![Espmon 4 Application](espmon4app.jpg)
 ![Espmon 4 Firmware](espmon4.jpg)
-
-### Premade Screens
-
-Included in the root of this repository is a file called `espmon.screens.json`
-This includes 3 screens for monitoring common items. 
-It can be imported via the Open button in the Screens section.
 
 # Hardware Monitor Query Language — Reference
 

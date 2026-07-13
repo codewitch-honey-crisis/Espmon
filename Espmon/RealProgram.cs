@@ -15,6 +15,7 @@ public static class RealProgram
     [STAThread]
     static void Main(string[] args)
     {
+        WinRT.ComWrappersSupport.InitializeComWrappers();   // (1) must be first
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log("AppDomain", e.ExceptionObject as Exception);
 
 #if DEBUG

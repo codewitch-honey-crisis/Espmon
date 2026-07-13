@@ -50,7 +50,23 @@ public class DeviceController : ControllerBase
             }
         }
     }
-    
+
+    int _screenIndex = -1;
+    public int ScreenIndex
+    {
+        get
+        {
+            return _screenIndex;
+        }
+        set
+        {
+            if (_screenIndex != value)
+            {
+                UpdateProperty(nameof(ScreenIndex), () => _screenIndex = value);
+            }
+        }
+    }
+
     string[] _serialNumbers = [];
     public string[] SerialNumbers
     {
@@ -66,7 +82,7 @@ public class DeviceController : ControllerBase
             }
         }
     }
-    public ObservableCollection<string> Screens { get; } = [];
+    public ObservableCollection<ScreenController> Screens { get; } = [];
 
     internal JsonObject ToJson()
     {
@@ -97,9 +113,13 @@ public class DeviceController : ControllerBase
         var screens = new JsonArray();
         for (var i = 0; i < Screens.Count; ++i)
         {
-            screens.Add(Screens[i]);
+            screens.Add(Screens[i].Name);
         }
         json.Add("screens", screens);
+        if(ScreenIndex>0 && ScreenIndex<screens.Count)
+        {
+            json.Add("screen_index", _screenIndex);
+        }
         return json;
     }
     internal static DeviceController FromJson(PortController parent, string name, JsonObject json)
@@ -155,7 +175,22 @@ public class DeviceController : ControllerBase
                 {
                     if (ascreens[i] is string sscreen)
                     {
-                        result.Screens.Add(sscreen);
+                        // silently discard screens that aren't found so we can still load the device
+                        //var found = false;
+                        foreach(var scr in parent.Screens)
+                        {
+                            if(scr.Name.Equals(sscreen, StringComparison.OrdinalIgnoreCase))
+                            {
+                                //found = true;
+                                result.Screens.Add(scr);
+                                break;
+                            }
+                            
+                        }
+                        //if(!found)
+                        //{
+                            // throw new ScreenParseException("A screen entry does not exist in the list of screens", 0, 0, 0);
+                        //}
                     }
                     else
                     {
@@ -166,6 +201,28 @@ public class DeviceController : ControllerBase
             else
             {
                 throw new ScreenParseException($"Device \"screens\" field must be a string array.", 0, 0, 0);
+            }
+        }
+        if (json.TryGetValue("screen_index", out var screenIndex))
+        {
+            if (screenIndex is double sd)
+            {
+                var i = (int)sd;
+                if (i > -1 && i < result.Screens.Count)
+                {
+                    result.ScreenIndex = i;
+                }
+            }
+            else if (screenIndex is int si)
+            {
+                if (si > -1 && si < result.Screens.Count)
+                {
+                    result.ScreenIndex = si;
+                }
+            }
+            else
+            {
+                throw new ScreenParseException($"Device \"screen_index\" field must be a number.", 0, 0, 0);
             }
         }
         return result;

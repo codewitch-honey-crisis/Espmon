@@ -11,7 +11,7 @@ public sealed partial class ScreenSelector : UserControl
     public static readonly DependencyProperty DeviceScreensProperty =
         DependencyProperty.Register(
             nameof(DeviceScreens),
-            typeof(ObservableCollection<string>),
+            typeof(ObservableCollection<ScreenController>),
             typeof(ScreenSelector),
             new PropertyMetadata(null));
 
@@ -45,9 +45,9 @@ public sealed partial class ScreenSelector : UserControl
             new PropertyMetadata(-1, OnAvailableSelectedIndexChanged));
     public event SelectionChangedEventHandler? ScreenSelectionChanged;
     // Right list properties
-    public ObservableCollection<string> DeviceScreens
+    public ObservableCollection<ScreenController> DeviceScreens
     {
-        get => (ObservableCollection<string>)GetValue(DeviceScreensProperty);
+        get => (ObservableCollection<ScreenController>)GetValue(DeviceScreensProperty);
         set => SetValue(DeviceScreensProperty, value);
     }
     
@@ -126,7 +126,10 @@ public sealed partial class ScreenSelector : UserControl
 
         if (AvailableScreensList.SelectedItem is ScreenListEntry selectedScreen)
         {
-            DeviceScreens.Add(selectedScreen.Name);
+            if (selectedScreen.Screen != null)
+            {
+                DeviceScreens.Add(selectedScreen.Screen);
+            }
         }
     }
 
@@ -134,10 +137,9 @@ public sealed partial class ScreenSelector : UserControl
     {
         if (DeviceScreens == null) return;
 
-        if (SelectedScreensList.SelectedItem is string selectedScreen)
+        if (SelectedScreensList.SelectedItem is ScreenController selectedScreen)
         {
-            var index = SelectedScreensList.SelectedIndex;
-            DeviceScreens.RemoveAt(index);
+            DeviceScreens.Remove(selectedScreen);   
         }
     }
 

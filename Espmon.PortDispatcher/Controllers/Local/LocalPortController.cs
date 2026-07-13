@@ -209,10 +209,16 @@ public class LocalPortController : PortController
     }
     private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_hooksEnabled && sender is DeviceController device) {
+        if (_hooksEnabled && sender is DeviceController device)
+        {
+            var saved = false;
             if (e.PropertyName == null || e.PropertyName.Equals("Name", StringComparison.Ordinal) || e.PropertyName.Equals("SerialNumbers", StringComparison.Ordinal))
             {
-                TrySaveDevice(device);
+                if(TrySaveDevice(device))
+                {
+                    saved = true;
+                }
+                
                 for (var i = 0; i < Sessions.Count; ++i)
                 {
                     var session = Sessions[i];
@@ -224,7 +230,7 @@ public class LocalPortController : PortController
                 }
 
             }
-            if(e.PropertyName==null||e.PropertyName.Equals("MacAddress",StringComparison.Ordinal))
+            if (e.PropertyName == null || e.PropertyName.Equals("MacAddress", StringComparison.Ordinal))
             {
                 var toRemove = new List<string>();
                 foreach (var kvp in _deviceFilesByMac)
@@ -240,9 +246,12 @@ public class LocalPortController : PortController
                 }
                 if (device.MacAddress != null)
                 {
-                    _deviceFilesByMac[Convert.ToHexString(device.MacAddress)]= device;
+                    _deviceFilesByMac[Convert.ToHexString(device.MacAddress)] = device;
                 }
-                TrySaveDevice(device);
+                if(TrySaveDevice(device))
+                {
+                    saved = true;
+                }
                 for (var i = 0; i < Sessions.Count; ++i)
                 {
                     var session = Sessions[i];
@@ -253,10 +262,13 @@ public class LocalPortController : PortController
                     }
                 }
             }
-            
+            if(!saved)
+            {
+
+                TrySaveDevice(device);
+            }
         }
     }
-
     protected override void OnDeviceAdded(DeviceController device)
     {
         var obj = device.ToJson();
@@ -350,7 +362,9 @@ public class LocalPortController : PortController
         {
             for(var i = 0;i<_hookedScreens.Count;++i)
             {
-                UnsubscribeFromScreen(_hookedScreens[i]);
+                var scr = _hookedScreens[i];
+                scr.PropertyChanged -= Screen_PropertyChanged;
+                UnsubscribeFromScreen(scr);
             }
             _hookedScreens.Clear();
             var screenFiles = Directory.GetFiles(Path, "*.screen.json");
@@ -379,98 +393,35 @@ public class LocalPortController : PortController
                 {
                     _screenFiles.Add(scr.Name, scr);
                     SubscribeToScreen(scr);
+                    scr.PropertyChanged += Screen_PropertyChanged;
                     _hookedScreens.Add(scr);
                 }
             }
         }
         return _screenFiles.Values.ToArray();
     }
-    private void SubscribeToScreenValues(ScreenValuesController? target)
-    {
-        if (target == null) return;
-        if (target.Value1 != null)
-        {
-            target.Value1.PropertyChanged += ScreenValue_PropertyChanged;
-        }
-        if (target.Value2 != null)
-        {
-            target.Value2.PropertyChanged += ScreenValue_PropertyChanged;
-        }
-    }
-    private void SubscribeToScreen(ScreenController? screen)
-    {
-        if (screen == null) return;
-        screen.PropertyChanged += Screen_PropertyChanged;
-        if(screen.Top!=null)
-        {
-            screen.Top.PropertyChanged += ScreenValues_PropertyChanged;
-            SubscribeToScreenValues(screen.Top);
-        }
-        if (screen.Bottom != null)
-        {
-            screen.Bottom.PropertyChanged += ScreenValues_PropertyChanged;
-            SubscribeToScreenValues(screen.Bottom);
-        }
 
-    }
-    private void UnsubscribeFromScreenValues(ScreenValuesController? target)
+    protected override void OnScreenPropertiesChanged(ScreenController screen)
     {
-        if (target == null) return;
-        if (target.Value1 != null)
+        if (_hooksEnabled)
         {
-            target.Value1.PropertyChanged -= ScreenValue_PropertyChanged;
-        }
-        if (target.Value2 != null)
-        {
-            target.Value2.PropertyChanged -= ScreenValue_PropertyChanged;
-        }
-    }
-    private void UnsubscribeFromScreen(ScreenController? screen)
-    {
-        if (screen == null) return;
-        screen.PropertyChanged -= Screen_PropertyChanged;
-        if (screen.Top != null)
-        {
-            screen.Top.PropertyChanged -= ScreenValues_PropertyChanged;
-            UnsubscribeFromScreenValues(screen.Top);
-        }
-        if (screen.Bottom != null)
-        {
-            screen.Bottom.PropertyChanged -= ScreenValues_PropertyChanged;
-            UnsubscribeFromScreenValues(screen.Bottom);
-        }
+            if(ViewSession!=null && ViewSession.Screen==screen)
+            {
+                ViewSession.ForceScreenIndex(ViewSession.ScreenIndex);
+            }
 
-    }
-
-    private void ScreenValue_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (_hooksEnabled && sender is ScreenValueController screenValue && screenValue.Parent != null && screenValue.Parent.Parent!=null)
-        {
-            TrySaveScreen(screenValue.Parent.Parent);
+            TrySaveScreen(screen);
             foreach (var session in Sessions)
             {
-                if (session.Screen == screenValue.Parent.Parent)
+                if (session.Screen == screen)
                 {
                     session.ForceScreenIndex(session.ScreenIndex);
                 }
             }
         }
+        base.OnScreenPropertiesChanged(screen);
     }
-
-    private void ScreenValues_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (_hooksEnabled && sender is ScreenValuesController screenValues && screenValues.Parent!=null)
-        {
-            TrySaveScreen(screenValues.Parent);
-            foreach (var session in Sessions)
-            {
-                if (session.Screen == screenValues.Parent)
-                {
-                    session.ForceScreenIndex(session.ScreenIndex);
-                }
-            }
-        }
-    }
+    
     private bool TrySaveDevice(DeviceController device)
     {
         if(device.MacAddress!=null && !string.IsNullOrEmpty(device.Name))
@@ -503,6 +454,16 @@ public class LocalPortController : PortController
                 }
             }
             catch { }
+            // force a view session update
+            for(var i = 0;i<Sessions.Count; ++i)
+            {
+                var session = Sessions[i];
+                if(session.Screen==screen)
+                {
+                    session.Refresh();
+                    break;
+                }
+            }
         }
         return false;
     }
@@ -523,6 +484,14 @@ public class LocalPortController : PortController
                         if (File.Exists(oldFile))
                         {
                             Debug.WriteLine($"{oldName} renamed to {screen.Name}");
+                           try
+                            {
+                                File.Delete(newFile);
+                            }
+                            catch
+                            {
+
+                            }
                             File.Move(oldFile, newFile);
                             if (File.Exists(oldFile))
                             {
@@ -539,9 +508,9 @@ public class LocalPortController : PortController
                         {
                             for (var i = 0; i < dev.Screens.Count; ++i)
                             {
-                                if (dev.Screens[i].Equals(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                                if (dev.Screens[i]==kvp.Value)
                                 {
-                                    dev.Screens[i] = screen.Name;
+                                    dev.Screens[i] = screen;
                                     TrySaveDevice(dev);
                                     break;
                                 }
@@ -556,15 +525,16 @@ public class LocalPortController : PortController
                     _screenFiles[screen.Name] = screen;
                 }
             }
-            TrySaveScreen(screen);
+            // below is handled by OnScreenPropertiesChanged()
+            //TrySaveScreen(screen);
 
-            foreach (var session in Sessions)
-            {
-                if (session.Screen == screen)
-                {
-                    session.ForceScreenIndex(session.ScreenIndex);
-                }
-            }
+            //foreach (var session in Sessions)
+            //{
+            //    if (session.Screen == screen)
+            //    {
+            //        session.ForceScreenIndex(session.ScreenIndex);
+            //    }
+            //}
         }
     }
     protected override void OnScreenAdded(ScreenController screen)
@@ -603,6 +573,7 @@ public class LocalPortController : PortController
         base.OnScreenAdded(screen);
     }
 
+   
 
     protected override void OnScreenRemoved(ScreenController screen)
     {
@@ -626,6 +597,7 @@ public class LocalPortController : PortController
         _screenFiles.Remove(screen.Name);
         if (_hookedScreens.Remove(screen))
         {
+           
             UnsubscribeFromScreen(screen);
         }
         base.OnScreenRemoved(screen);

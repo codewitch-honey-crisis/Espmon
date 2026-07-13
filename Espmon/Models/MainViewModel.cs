@@ -522,6 +522,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
     }
+    public string AppDataPath
+    {
+        get
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
+        }
+    }
     public void AddValidationLog(string message)
     {
         ValidationLog.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {message}");

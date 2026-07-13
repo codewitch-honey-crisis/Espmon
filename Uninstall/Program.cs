@@ -431,7 +431,7 @@ internal static unsafe partial class Program
 
     // ====================== P/Invoke ========================================
     [LibraryImport("kernel32.dll", SetLastError = true)]
-    private static partial uint GetModuleFileNameW(nint hModule, char* lpFilename, uint nSize);
+    private static partial uint GetModuleFileNameW(nint hModule, char* lpFileName, uint nSize);
 
     [LibraryImport("kernel32.dll")]
     private static partial uint GetCurrentProcessId();

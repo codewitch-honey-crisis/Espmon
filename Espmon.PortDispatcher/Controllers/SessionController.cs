@@ -85,13 +85,13 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
             {
                 var si = value % _device.Screens.Count;
                 //Console.Error.WriteLine($"Screen for {PortName} set to {si}");
-                var name = _device.Screens[si];
+                var scrCmp = _device.Screens[si];
                 var found = false;
                 ScreenController? scr = null;
                 for (var i = 0; i < Parent.Screens.Count; ++i)
                 {
                     scr = Parent.Screens[i];
-                    if (scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    if (scr==scrCmp)
                     {
                         found = true;
                         break;
@@ -99,9 +99,9 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
                 }
                 if (!found)
                 {
-                    throw new InvalidOperationException("The device has a screen named that doesn't exist");
-                    //return;
+                    return;
                 }
+                _device.ScreenIndex = si;
                 UpdateProperties(() => { _screenIndex = si; _screen = scr; }, nameof(ScreenIndex), nameof(Screen));
                 //if (!IsWaitingForScreenChange)
                 //{
@@ -112,7 +112,10 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
                 OnScreenChanged();
                 return;
             }
-            throw new InvalidOperationException("The session is not in a valid state to switch screens");
+            //throw new InvalidOperationException("The session is not in a valid state to switch screens");
+        } else if(_device!=null)
+        {
+            _device.ScreenIndex = _screenIndex;
         }
     }
     public int ScreenIndex
@@ -144,7 +147,10 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
     }
     protected virtual void OnScreenIndexChanged()
     {
-
+        if(_device!=null)
+        {
+            _device.ScreenIndex = _screenIndex;
+        }
     }
     private ScreenController? _screen;
     public ScreenController? Screen
@@ -176,11 +182,11 @@ public abstract class SessionController : ControllerBase, INotifyPropertyChanged
                     {
                         for (var i = 0; i < _device.Screens.Count; ++i)
                         {
-                            var name = _device.Screens[i];
+                            var scrCmp = _device.Screens[i];
                             for (var j = 0; j < Parent.Screens.Count; ++j)
                             {
                                 var scr = Parent.Screens[j];
-                                if (scr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                                if (scr==scrCmp)
                                 {
                                     if (_screenIndex != i)
                                     {

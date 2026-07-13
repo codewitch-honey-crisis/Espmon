@@ -35,7 +35,13 @@ public sealed class ScreenListEntry : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
         }
     }
-
+    public string AppDataPath
+    {
+        get
+        {
+            return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
+        }
+    }
     public bool IsDefault { 
         get { return false; }
     }
@@ -45,9 +51,9 @@ public sealed class ScreenListEntry : INotifyPropertyChanged
         get { return _name; }
         set
         {
-            
-            _name = value;
             _screen?.Name = value;
+            _name = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
         }
     }
     public override string ToString()

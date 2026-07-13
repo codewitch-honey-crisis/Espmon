@@ -4,6 +4,7 @@ namespace Espmon
 {
     public sealed class ViewSessionController : SessionController
     {
+ 
         public ViewSessionController(PortController parent) : base(parent, "<local>", "00000")
         {
             Device = new DeviceController(parent, "<view>");
@@ -17,7 +18,6 @@ namespace Espmon
         {
             Status = SessionStatus.Closed;
         }
-
         protected override Task OnFlashAsync(FirmwareEntry firmwareEntry, IFlashProgress? progress, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
@@ -29,9 +29,10 @@ namespace Espmon
             var changeArgs = new ScreenChangedEventArgs(ScreenIndex);
             OnScreenChanged(changeArgs);
         }
+        
         protected override void OnRefresh()
         {
-
+            
             if ( ScreenIndex > -1 && Device!=null && Device.Screens.Count>0)
             {
                 var scr = Screen;

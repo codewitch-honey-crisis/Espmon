@@ -427,7 +427,7 @@ extern "C" void app_main() {
         if(xTaskGetTickCount()>send_ts+pdMS_TO_TICKS(100)) {
             send_ts = xTaskGetTickCount();
             if(screen_index==-1) {
-                write_screen_req(active,0);
+                write_nop(active);
             } else {
                 if(res!=CMD_REFRESH_SCREEN) {
                     if(connected) {
