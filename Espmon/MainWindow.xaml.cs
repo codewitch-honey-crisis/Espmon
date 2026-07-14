@@ -13,6 +13,7 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Text;
 
+using Windows.ApplicationModel.Appointments;
 using Windows.Storage;
 using Windows.System;
 
@@ -361,6 +362,7 @@ public sealed partial class MainWindow : Window
         if(ViewModel!=null && ViewModel.SelectedSession!=null)
         {
             _flashInProgress = true;
+            ViewModel.SetFlashError(null);
             var session = ViewModel.SelectedSession;
             var idx = flashCombo.SelectedIndex;
             if (idx>-1)
@@ -379,7 +381,18 @@ public sealed partial class MainWindow : Window
                     }
                     catch
                     {
-                        await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                        try
+                        {
+                            await session.FlashAsync(FirmwareEntry.GetFirmwareEntries()[idx], reporter);
+                        }
+                        catch(Exception ex)
+                        {
+                            ViewModel.SetFlashError(ex);
+                            ViewModel.Log.Clear();
+                            _flashInProgress = false;
+                            flashCombo.SelectedIndex = -1;
+                            return;
+                        }
                     }
                 }
                 ViewModel.Log.Clear();
@@ -399,9 +412,18 @@ public sealed partial class MainWindow : Window
     {
         if (ViewModel != null && ViewModel.SelectedSession != null)
         {
+            ViewModel.SetConnectError(null);
             var session = ViewModel.SelectedSession;
-            session.Connect();
-            ViewModel.DevicePanelIndex = 1;
+            try
+            {
+                session.Connect();
+                ViewModel.DevicePanelIndex = 1;
+            }
+            catch(Exception ex)
+            {
+                ViewModel.SetConnectError(ex);
+            }
+            
         }
     }
 
@@ -421,6 +443,7 @@ public sealed partial class MainWindow : Window
     {
         if (ViewModel != null && ViewModel.SelectedSession != null)
         {
+            ViewModel.SetFlashError(null);
             var session = ViewModel.SelectedSession;
             session.Disconnect();
             session.Refresh();
@@ -428,7 +451,14 @@ public sealed partial class MainWindow : Window
             var reporter = new OpenFlashProgressReporter(ViewModel.Log);
             await session.ResetAsync(reporter);
             ViewModel.Log.Clear();
-            session.Connect();
+            try
+            {
+                session.Connect();
+            }
+            catch(Exception ex)
+            {
+                ViewModel.SetFlashError(ex);
+            }
         }
     }
 

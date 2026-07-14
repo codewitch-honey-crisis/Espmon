@@ -84,6 +84,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     _selectedSession.PropertyChanged += _selectedSession_PropertyChanged;
                 }
+                OnPropertyChanged(nameof(ConnectVisibility));
                 OnPropertyChanged(nameof(SelectedSession));
                 OnPropertyChanged(nameof(SelectedSessionScreenMetrics));
                 OnPropertyChanged(nameof(SessionOpenVisibility));
@@ -362,6 +363,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     public MainViewModel()
     {
         SettingsMessage = "";
+        FlashMessage = "";
+        ConnectMessage = "";
         _elevator = new Elevator();
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Espmon");
         if (!Directory.Exists(path))
@@ -740,6 +743,39 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(SettingsMessage));
         }
     }
+    public Visibility ConnectVisibility
+    {
+        get
+        {
+            return SelectedSession != null && SelectedSession.Status == SessionStatus.Closed?Visibility.Visible:Visibility.Collapsed;
+        }
+    }
+    public void SetFlashError(Exception? ex)
+    {
+        if (ex == null)
+        {
+            FlashMessage= "";
+        }
+        else
+        {
+            FlashMessage= $"Could not flash device. {ex.Message}";
+        }
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FlashMessage)));
+    }
+    public string FlashMessage { get; private set; }
+    public void SetConnectError(Exception? ex)
+    {
+        if (ex == null)
+        {
+            ConnectMessage = "";
+        }
+        else
+        {
+            ConnectMessage = $"Could not connect. {ex.Message}";
+        }
+        PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(nameof(ConnectMessage)));
+    }
+    public string ConnectMessage { get; private set; }
     public string SettingsMessage { get; private set; }
     // Executed on teardown to carry out whatever the StartWithWindows toggle
     // queued up. Best-effort: swallows failures since we're already exiting.

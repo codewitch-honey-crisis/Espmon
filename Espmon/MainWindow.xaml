@@ -148,7 +148,8 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </ScrollViewer>
-                                <Button x:Name="openButton" Content="Connect" HorizontalAlignment="Center" Click="openButton_Click" />
+                                <TextBlock Text="{x:Bind ViewModel.ConnectMessage,Mode=OneWay}" TextWrapping="Wrap" />
+                                <Button x:Name="openButton" Content="Connect" HorizontalAlignment="Center" Click="openButton_Click" Visibility="{x:Bind ViewModel.ConnectVisibility,Mode=OneWay}" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" Visibility="{x:Bind ViewModel.DevicePanel2Visibility, Mode=OneWay}" VerticalAlignment="Center" Spacing="12">
                                 <local:ScreenView x:Name="currentScreenView" ScalingMode="DpiAware" Width="{x:Bind ViewModel.SelectedSession.HorizontalResolution, Mode=OneWay}" Height="{x:Bind ViewModel.SelectedSession.VerticalResolution, Mode=OneWay}" Visibility="{x:Bind ViewModel.SelectedSessionEntry.ReadyVisibility, Mode=OneWay}" />
@@ -176,6 +177,7 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </ScrollViewer>
+                                <TextBlock Text="{x:Bind ViewModel.FlashMessage,Mode=OneWay}" TextWrapping="Wrap" />
                                 <Button x:Name="flashButton" Content="Flash" HorizontalAlignment="Center" Click="flashButton_Click" />
                                 <Button x:Name="retryConnectButton" Content="Retry Connection" HorizontalAlignment="Center" Click="retryConnectButton_Click"/>
                                 <!--<Button x:Name="manualFlashButton" Content="Manual Flash" HorizontalAlignment="Center" Click="manualFlashButton_Click"/>-->
