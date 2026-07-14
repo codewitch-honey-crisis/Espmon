@@ -18,6 +18,7 @@ public class ProviderEntry : INotifyPropertyChanged
         if(e.PropertyName==null || e.PropertyName==nameof(IsStarted))
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Paths)));
         }
     }
 
@@ -41,7 +42,8 @@ public class ProviderEntry : INotifyPropertyChanged
                     try
                     {
                         Provider.Start();
-                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                        //PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                        //PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Paths)));
                     }
                     catch
                     {
@@ -52,7 +54,8 @@ public class ProviderEntry : INotifyPropertyChanged
                     try
                     {
                         Provider.Stop();
-                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                        //PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsStarted)));
+                        //PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Paths)));
                     }
                     catch
                     {

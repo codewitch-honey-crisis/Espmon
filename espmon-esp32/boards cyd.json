@@ -1,0 +1,44 @@
+{
+    "dependencies": [
+        {
+            "id": "codewitch-honey-crisis/htcw_uix",
+            "version": "1.10.1"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_esp_panel",
+            "version": "^0.8.5"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_frame_arq",
+            "version": "^0.1.1"
+        }
+    ],
+    "boards": [
+        {
+            "name": "Cheap Yellow Display 2432S028",
+            "id": 4,
+            "slug": "cyd-2432S028",
+            "diagonal_inches": 2.8,
+            "target": "esp32",
+            "defines": [
+                "CYD_2432S028",
+                "LCD_DIVISOR=12"
+            ],
+            "dependencies": [
+                {
+                    "id": "codewitch-honey-crisis/esp_lcd_touch_xpt2046",
+                    "version": "^0.2.0"
+                },
+                {
+                    "id": "espressif/esp_lcd_ili9341",
+                    "version": "^2.0.2"
+                }
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        }
+    ]
+}

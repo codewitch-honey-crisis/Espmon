@@ -3,7 +3,7 @@
 #include <math.h>
 #include <memory.h>
 #include <stdint.h>
-
+#include <string.h>
 #include <gfx.hpp>
 #include <monoxbold.hpp>
 #include <uix.hpp>
@@ -401,15 +401,19 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_is_gradient;
     }
     void is_gradient(bool value) {
-        m_is_gradient = value;
-        this->invalidate();
+        if(value!=m_is_gradient) {
+            m_is_gradient = value;
+            this->invalidate();
+        }
     }
     bool is_dark_mode() const {
         return m_dark_mode;
     }
     void is_dark_mode(bool value) {
-        m_dark_mode = value;
-        this->invalidate();
+        if(m_dark_mode!=value) {
+            m_dark_mode = value;
+            this->invalidate();
+        }
     }
     const data::circular_buffer<uint8_t, 100>* graph_buffer() const {
         return m_buffer;
@@ -424,15 +428,19 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_color;
     }
     void color(uix::uix_pixel value) {
-        m_color = value;
-        this->invalidate();
+        if(value!=m_color) {
+            m_color = value;
+            this->invalidate();
+        }
     }
     uix::uix_pixel back_color() const {
         return m_back_color;
     }
     void back_color(uix::uix_pixel value) {
-        m_back_color = value;
-        this->invalidate();
+        if(m_back_color!=value) {
+            m_back_color = value;
+            this->invalidate();
+        }
     }
 
    protected:
@@ -867,11 +875,16 @@ class espmon {
         m_bottom.value2.bar.is_gradient((rscr.header.flags & (1 << 3)));
     }
     void set_screen_entry(screen_entry_t& entry, const response_screen_entry_t& rentry) {
-        strncpy(entry.text, rentry.label, sizeof(entry.text) - 1);
-        entry.label.text(entry.text);
-        entry.hlabel.text(entry.text);
-        entry.label.color(to_color(rentry.color));
-        entry.hlabel.color(entry.label.color());
+        if(0!=strcmp(entry.text,rentry.label)) {
+            strncpy(entry.text, rentry.label, sizeof(entry.text) - 1);
+            entry.label.text(entry.text);
+            entry.hlabel.text(entry.text);
+        }
+        uix::uix_pixel col = to_color(rentry.color);
+        if(col!=entry.label.color()) {
+            entry.label.color(col);
+            entry.hlabel.color(col);
+        }    
     }
 
    public:

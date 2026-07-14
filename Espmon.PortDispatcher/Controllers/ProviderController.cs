@@ -31,7 +31,6 @@ public abstract class ProviderController : ControllerBase
             return result.ToArray();
         } 
     }
-
     protected abstract void OnStart();
     protected abstract void OnStop();
 

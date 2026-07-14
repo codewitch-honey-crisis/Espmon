@@ -1,0 +1,165 @@
+{
+    "dependencies": [
+        {
+            "id": "codewitch-honey-crisis/htcw_uix",
+            "version": "1.10.1"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_esp_panel",
+            "version": "^0.8.5"
+        },
+        {
+            "id": "codewitch-honey-crisis/htcw_frame_arq",
+            "version": "^0.1.1"
+        }
+    ],
+    "boards": [
+        {
+            "name": "Matouch ESP32-S3 Parallel 3.5\"",
+            "id": 1,
+            "slug": "matouch-parallel-35",
+            "diagonal_inches": 3.5,
+            "target": "esp32s3",
+            "defines": [
+                "HTCW_GFX_NO_SWAP",
+                "MATOUCH_ESP_DISPLAY_PARALLEL_35",
+                "LCD_DIVISOR=20"
+            ],
+            "dependencies": [
+                {
+                    "id": "cfscn/esp_lcd_touch_ft6x36",
+                    "version": "^1.0.8"
+                },
+                {
+                    "id": "codewitch-honey-crisis/esp_lcd_panel_ili9488",
+                    "version": "^0.1.1"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Matouch ESP32-S3 Parallel 4\"",
+            "id": 2,
+            "slug": "matouch-parallel-4",
+            "diagonal_inches": 4,
+            "target": "esp32s3",
+            "defines": [
+                "MATOUCH_ESP_DISPLAY_PARALLEL_4"
+            ],
+            "dependencies": [
+                {
+                    "id": "espressif/esp_lcd_touch_gt911",
+                    "version": "^1.2.0~1"
+                },
+                {
+                    "id": "espressif/esp_lcd_panel_io_additions",
+                    "version": "^1.0.1"
+                },
+                {
+                    "id": "espressif/esp_lcd_st7701",
+                    "version": "^2.0.2"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Matouch ESP32-S3 Parallel 4.3\"",
+            "id": 3,
+            "slug": "matouch-parallel-43",
+            "diagonal_inches": 4.3,
+            "target": "esp32s3",
+            "defines": [
+                "MATOUCH_ESP_DISPLAY_PARALLEL_43"
+            ],
+            "dependencies": [
+                {
+                    "id": "espressif/esp_lcd_touch_gt911",
+                    "version": "^1.2.0~1"
+                }
+            ],
+            "offsets": {
+                "bootloader": 0,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Cheap Yellow Display 2432S028",
+            "id": 4,
+            "slug": "cyd-2432S028",
+            "diagonal_inches": 2.8,
+            "target": "esp32",
+            "defines": [
+                "CYD_2432S028",
+                "LCD_DIVISOR=12"
+            ],
+            "dependencies": [
+                {
+                    "id": "codewitch-honey-crisis/esp_lcd_touch_xpt2046",
+                    "version": "^0.2.0"
+                },
+                {
+                    "id": "espressif/esp_lcd_ili9341",
+                    "version": "^2.0.2"
+                }
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "Lilygo TTGO T1 Display",
+            "id": 5,
+            "slug": "ttgo-t1",
+            "diagonal_inches": 1.14,
+            "target": "esp32",
+            "defines": [
+                "TTGO_T1"
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        },
+        {
+            "name": "M5 Stack Core2",
+            "id": 6,
+            "slug": "m5stack-core2",
+            "diagonal_inches": 2.0,
+            "target": "esp32",
+            "defines": [
+                "M5STACK_CORE2"
+            ],
+            "dependencies": [
+                 {
+                    "id": "codewitch-honey-crisis/htcw_m5_stack_core2_power",
+                    "version": "^0.1.4"
+                 },
+                 {
+                    "id": "codewitch-honey-crisis/htcw_esp_lcd_touch_ft6x36",
+                    "version": "^0.1.2"
+                },
+                {
+                    "id": "codewitch-honey-crisis/htcw_esp_lcd_panel_ili9342",
+                    "version": "^0.2.5"
+                }
+            ],
+            "offsets": {
+                "bootloader": 4096,
+                "partitions": 32768,
+                "firmware": 65536
+            }
+        }       
+    ]
+}

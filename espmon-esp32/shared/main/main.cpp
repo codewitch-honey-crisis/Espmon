@@ -1,4 +1,4 @@
-// #define LOG_HEAP
+//#define LOG_HEAP
 // If the CMD_SCREEN response for an input-driven advance never arrives, don't
 // lock out navigation forever — clear the input gate after this.
 #define SCREEN_CHANGE_TIMEOUT_MS 1000
@@ -327,9 +327,20 @@ static void get_pixel_metrics(uint16_t res_x, uint16_t res_y, float diagonal_mm,
         *out_ppi = 25.4f/pixel_size_mm;
     }
 }
-
+#ifdef LOG_HEAP
+static void log_heap(const char* tag) {
+    size_t free = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+    size_t free_max_alloc = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    printf("%s: Free heap: %0.2fKB, Max Heap Alloc: %0.2fKB   \r\n",tag,((float)free)/1024.f,((float)free_max_alloc)/1024.f);
+}
+#else
+static void log_heap(const char* tag) {
+    (void)tag;
+    return;
+}
+#endif
 extern "C" void app_main() {
-    
+    log_heap("On boot");
 #ifdef POWER
     panel_power_init();
 #endif
@@ -340,9 +351,11 @@ extern "C" void app_main() {
     panel_expander_init();
 #endif
     panel_lcd_init();
+    log_heap("After LCD");
 #ifdef TOUCH_BUS
     panel_touch_init();
 #endif
+    log_heap("After touch");
     esp_read_mac(mac_address, ESP_MAC_EFUSE_FACTORY);
     get_pixel_metrics(LCD_WIDTH,LCD_HEIGHT,INCHES_TO_MM(LCD_INCHES),&pixel_size,&dpi);
     if(!serial_init(INTERFACE_MAX_SIZE)) {
@@ -371,6 +384,7 @@ extern "C" void app_main() {
     port2.priority = false;
     port2.last_send = 0;
 #endif
+    log_heap("After serial init");
     active = &port1;
     active_pinned = false;
     app.dimensions({LCD_WIDTH,LCD_HEIGHT});
@@ -379,9 +393,9 @@ extern "C" void app_main() {
     app.has_graph(LCD_HEIGHT>64);
     app.is_monochrome(LCD_BIT_DEPTH==1);
     app.initialize();
+    log_heap("After app init");
     TickType_t send_ts = 0;
     bool connected = false;
-    ESP_LOGE(TAG,"Booted");
     void* p;
     size_t len;
     while(1) {
@@ -456,13 +470,11 @@ extern "C" void app_main() {
            (uint32_t)(xTaskGetTickCount() - screen_change_ts) >= pdMS_TO_TICKS(SCREEN_CHANGE_TIMEOUT_MS)) {
             screen_change_pending = false;
         }
-#if LOG_HEAP
+#ifdef LOG_HEAP
         static TickType_t log_ts = 0;
         if((uint32_t)(xTaskGetTickCount() - log_ts) >= pdMS_TO_TICKS(5000)) {
             log_ts = xTaskGetTickCount();
-            size_t free = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-            size_t free_min = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-            printf("DEBUG: Free heap: %0.2fKB, Min Free Heap: %0.2fKB   \r\n",((float)free)/1024.f,((float)free_min)/1024.f);
+            log_heap("Running");
         }
 #endif
 

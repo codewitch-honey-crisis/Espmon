@@ -19,6 +19,7 @@ public class LocalPortController : PortController
     Dictionary<string, DeviceController> _deviceFilesBySerial = new();
     Dictionary<string, DeviceController> _deviceFilesByMac = new();
     Dictionary<string, ScreenController> _screenFiles = new();
+    HashSet<ProviderController> _startedProviders = new();
     List<DeviceController> _hookedDevices = new();
     List<ScreenController> _hookedScreens = new();
     private bool _hooksEnabled = true;
@@ -34,6 +35,7 @@ public class LocalPortController : PortController
     }
     protected override ProviderController[] CreateProviders()
     {
+        _startedProviders.Clear();
         EnsureDefaultProviders();
         var filePath = System.IO.Path.Join(Path, "providers.json");
         JsonArray? arr;
@@ -47,31 +49,49 @@ public class LocalPortController : PortController
         for(var i = 0;i<result.Length;++i)
         {
             result[i] = entries[i].Provider;
+            if (entries[i].IsStarted)
+            {
+                _startedProviders.Add(result[i]);
+            }
         }
         return result;
     }
-    private void StartProviders()
+
+    private void Provider_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        EnsureDefaultProviders();
-        var filePath = System.IO.Path.Join(Path, "providers.json");
-        JsonArray? arr;
-        using (var reader = new StreamReader(filePath, Encoding.UTF8))
+        if (IsDisposed || !_hooksEnabled) return;
+        if(!(sender is ProviderController prov))
         {
-            arr = (JsonArray?)JsonArray.ReadFrom(reader);
+            return;
         }
-        if (arr == null) throw new NullReferenceException(); // shouldn't happen
-        var entries = LocalProviderController.FromJson(this, arr);
-        for (var i = 0; i < entries.Length; ++i)
+        if(e.PropertyName==null || e.PropertyName.Equals("IsStarted",StringComparison.Ordinal))
         {
-            if (entries[i].IsStarted)
+            if (prov.IsStarted)
             {
-                try { 
-                    Providers[i].Start();
-                }
-                catch { }
+                _startedProviders.Add(prov);
+            } else
+            {
+                _startedProviders.Remove(prov);
             }
         }
+        try
+        {
+            var json = LocalProviderController.ToJson(Providers);
+            var path = System.IO.Path.Combine(Path, "providers.json");
+            using(var writer = new StreamWriter(path,false,Encoding.UTF8))
+            {
+                json.WriteTo(writer);
+                writer.Close();
+            }
+        }
+        catch
+        {
+            return;
+        }
+
     }
+
+    
     public void EnsureDefaultProviders()
     {
         var filePath = System.IO.Path.Join(Path, "providers.json");
@@ -630,11 +650,23 @@ public class LocalPortController : PortController
         {
             _hardwareInfo.Providers.Add(((LocalProviderController)provider).Provider);
         }
-        StartProviders();
+        foreach (var provider in _startedProviders)
+        {
+            provider.Start();
+        }
+        foreach (var provider in Providers)
+        {
+
+            provider.PropertyChanged += Provider_PropertyChanged;
+        }
     }
 
     protected override void OnStop()
     {
+        for(var i = 0;i<Providers.Count;++i)
+        {
+            Providers[i].PropertyChanged-= Provider_PropertyChanged;
+        }
         _hardwareInfo.StopAll();
         foreach (var session in Sessions)
         {
@@ -647,6 +679,7 @@ public class LocalPortController : PortController
 
             }
         }
+
         for (var i = 0; i < _hookedDevices.Count; ++i)
         {
             _hookedDevices[i].PropertyChanging -= Device_PropertyChanging;

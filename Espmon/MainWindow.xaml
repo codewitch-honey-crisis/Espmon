@@ -225,8 +225,8 @@
                    Text="{x:Bind ViewModel.SelectedProviderEntry.Description, Mode=OneWay}"
                    HorizontalAlignment="Center"
                    TextWrapping="Wrap"/>
-
-                        <ScrollViewer Grid.Row="2"
+                        <CheckBox x:Name="providerEnabledCheckBox" Content="Enabled" IsChecked="{x:Bind ViewModel.SelectedProviderEntry.IsStarted, Mode=TwoWay}" />
+                            <ScrollViewer Grid.Row="2"
                       x:Name="providerPathScroller"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">

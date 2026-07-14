@@ -43,6 +43,19 @@ public sealed class LocalProviderController : ProviderController
     {
         Provider.Stop();
     }
+    public static JsonArray ToJson(IList<ProviderController> providers) {
+        var result = new JsonArray();
+        for(var i = 0;i<providers.Count;++i) { 
+            var provider = providers[i] as LocalProviderController;
+            if (provider == null) continue;
+            var obj = new JsonObject();
+            var entry = $"{provider.Provider.GetType().FullName}, HWKit.dll";
+            obj.Add("type", entry);
+            obj.Add("is_started", provider.IsStarted);
+            result.Add(obj);
+        }
+        return result;
+    }
 
     public static LocalProviderEntry[] FromJson(LocalPortController parent, JsonArray json)
     {
