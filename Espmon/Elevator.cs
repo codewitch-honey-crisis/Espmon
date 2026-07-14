@@ -240,9 +240,8 @@ sealed class Elevator : IAsyncDisposable, IDisposable
             throw new InvalidOperationException(resp.Message);
         }
     }
-    public bool IsStarted => WindowsServiceManager.IsStarted;
     
-    public bool IsInstalled => WindowsServiceManager.IsInstalled;
+
     public async Task UninstallServiceAsync()
     {
         var req = new UninstallRequest();

@@ -622,59 +622,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             return File.Exists(@"\\.\pipe\Espmon.Service");
         }
     }
-    public bool IsRunning
-    {
-        get
-        {
-            if (PortController != null && PortController.IsStarted)
-            {
-                return true;
-            }
-            else
-            {
-                return IsServiceRunning;
-            }
-        }
-        set
-        {
-            if (IsRunning != value)
-            {
-                if (!WindowsServiceManager.IsInstalled)
-                {
-                    if (PortController != null)
-                    {
-                        if (value)
-                        {
-                            PortController.Start();
-                        }
-                        else
-                        {
-                            PortController.Stop();
-                        }
-                    }
-                }
-                else
-                {
-                    if (!_elevator.IsConnected)
-                    {
-                        _elevator.Connect();
-                        OnPropertyChanged(nameof(IsNotElevated));
-                        OnPropertyChanged(nameof(IsServiceRunning));
-                    }
-                    if (value)
-                    {
-                        _elevator.StartService();
-                    }
-                    else
-                    {
-                        _elevator.StopService();
-                    }
-                }
-                OnPropertyChanged(nameof(IsRunning));
-            }
-        }
-
-    }
+    
     public bool IsNotElevated
     {
         get
