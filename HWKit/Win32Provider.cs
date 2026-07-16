@@ -1,4 +1,5 @@
 using Microsoft.Win32.SafeHandles;
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -45,7 +46,8 @@ namespace HWKit
         int _procCount;
         CpuEntry[]? _cpuEntries;
         CpuCoreEntry[]? _coreEntries;
-        long[]? _prevIdle, _prevKernel, _prevUser;
+        SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[]? _prevPerf;
+        int[]? _procToPackage;   // logical processor -> package index (group 0 only)
 
         // Disk state
         PhysicalDiskInfo[]? _disks;
@@ -73,10 +75,24 @@ namespace HWKit
         // ========================================================================
         // CPU
         // ========================================================================
+        // Per-package. MaxFrequency is static; the rest are aggregates over the
+        // package's threads, recomputed each sample. All times are percentages of
+        // that package's total elapsed CPU time.
         private struct CpuEntry
         {
             public float MaxFrequency;
-            public CpuEntry(float maxFrequency) { MaxFrequency = maxFrequency; }
+            public float Load;             // busy % == Privileged + User
+            public float Idle;
+            public float Privileged;      // kernel time with idle removed
+            public float User;
+            public float Dpc;              // subset of Privileged
+            public float Interrupt;        // subset of Privileged
+            public float InterruptRate;    // interrupts/sec
+            public CpuEntry(float maxFrequency)
+            {
+                MaxFrequency = maxFrequency;
+                Load = Idle = Privileged = User = Dpc = Interrupt = InterruptRate = float.NaN;
+            }
         }
 
         private struct CpuCoreEntry
@@ -84,14 +100,13 @@ namespace HWKit
             public int CpuIndex;
             public int ThreadIndex;
             public float Frequency;
-            public float Load;
-            public CpuCoreEntry(int cpuIndex, int threadIndex, float frequency, float load)
-            {
-                CpuIndex = cpuIndex;
-                ThreadIndex = threadIndex;
-                Frequency = frequency;
-                Load = load;
-            }
+            public float Load;             // busy % == Privileged + User
+            public float Idle;
+            public float Privileged;      // kernel time with idle removed
+            public float User;
+            public float Dpc;              // subset of Privileged
+            public float Interrupt;        // subset of Privileged
+            public float InterruptRate;    // interrupts/sec
         }
 
         sealed class CoreEntryAccessor
@@ -117,6 +132,12 @@ namespace HWKit
             }
             public float Frequency => Read(e => e.Frequency);
             public float Load => Read(e => e.Load);
+            public float Idle => Read(e => e.Idle);
+            public float Privileged => Read(e => e.Privileged);
+            public float User => Read(e => e.User);
+            public float Dpc => Read(e => e.Dpc);
+            public float Interrupt => Read(e => e.Interrupt);
+            public float InterruptRate => Read(e => e.InterruptRate);
         }
 
         sealed class CpuEntryAccessor
@@ -141,6 +162,13 @@ namespace HWKit
                 }
             }
             public float MaxFrequency => Read(e => e.MaxFrequency);
+            public float Load => Read(e => e.Load);
+            public float Idle => Read(e => e.Idle);
+            public float Privileged => Read(e => e.Privileged);
+            public float User => Read(e => e.User);
+            public float Dpc => Read(e => e.Dpc);
+            public float Interrupt => Read(e => e.Interrupt);
+            public float InterruptRate => Read(e => e.InterruptRate);
         }
 
         const int ProcessorInformation = 11;                   // POWER_INFORMATION_LEVEL
@@ -191,28 +219,31 @@ namespace HWKit
             return arr;
         }
 
-        static unsafe int ReadPerf(int n, long[] idle, long[] kernel, long[] user)
+        // Fills dst[0..n) with per-logical-processor perf records; returns the count
+        // actually reported, or 0 on failure. dst is deliberately oversized by the
+        // caller so an unexpected stride can't produce STATUS_INFO_LENGTH_MISMATCH.
+        static unsafe int ReadPerf(int n, SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[] dst)
         {
-            if (n <= 0) return 0;
+            if (n <= 0 || dst.Length == 0) return 0;
             int stride = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
-            var raw = new byte[n * stride];
-            fixed (byte* b = raw)
+            fixed (SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION* p = dst)
             {
                 uint ret = 0;
                 int status = NtQuerySystemInformation(
-                    SystemProcessorPerformanceInformation, b, (uint)raw.Length, &ret);
+                    SystemProcessorPerformanceInformation, p, (uint)(dst.Length * stride), &ret);
                 if (status != 0) return 0;
-                int count = (int)(ret / (uint)stride);
-                var sp = (SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION*)b;
-                int m = Math.Min(n, count);
-                for (int i = 0; i < m; i++)
-                {
-                    idle[i] = sp[i].IdleTime;
-                    kernel[i] = sp[i].KernelTime;
-                    user[i] = sp[i].UserTime;
-                }
-                return m;
+                return Math.Min(n, (int)(ret / (uint)stride));
             }
+        }
+
+        // Percent of an interval. NaN when the interval is empty -- there is no data,
+        // and 0 would be a lie indistinguishable from a genuinely idle thread.
+        static float Pct(long part, long total)
+        {
+            if (total <= 0) return float.NaN;
+            if (part < 0) part = 0;
+            double v = 100.0 * part / total;
+            return (float)(v > 100.0 ? 100.0 : v);
         }
 
         static int FirstProcessorOf(CpuTopology.Package pkg)
@@ -243,10 +274,19 @@ namespace HWKit
                 cpuEntries[pi] = new CpuEntry(maxMhz);
             }
 
-            _prevIdle = new long[_procCount];
-            _prevKernel = new long[_procCount];
-            _prevUser = new long[_procCount];
-            ReadPerf(_procCount, _prevIdle, _prevKernel, _prevUser);
+            // Map each logical processor to its package. Group 0 only, matching the
+            // scope of both FirstProcessorOf and SystemProcessorPerformanceInformation.
+            var map = new int[_procCount];
+            for (int p = 0; p < _procCount; p++)
+            {
+                map[p] = 0;
+                for (int pi = 0; pi < packages.Count; pi++)
+                    if (packages[pi].Contains(0, p)) { map[p] = pi; break; }
+            }
+            _procToPackage = map;
+
+            _prevPerf = new SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[_procCount * 2];
+            ReadPerf(_procCount, _prevPerf);
 
             lock (_gate) { _cpuEntries = cpuEntries; }
         }
@@ -255,49 +295,109 @@ namespace HWKit
         {
             int n = _procCount;
             var power = ReadPowerInfo(n);
+            var prev = _prevPerf;
+            var map = _procToPackage;
 
-            var idle = new long[n];
-            var kernel = new long[n];
-            var user = new long[n];
-            int reported = ReadPerf(n, idle, kernel, user);
+            var cur = new SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION[n * 2];
+            int reported = ReadPerf(n, cur);
 
-            var list = new CpuCoreEntry[Math.Min(n, reported == 0 ? n : reported)];
-            for (int p = 0; p < list.Length; p++)
+            int count = reported > 0 ? reported : n;
+            var list = new CpuCoreEntry[count];
+
+            // Package accumulators, in raw 100ns ticks. Percentages are derived from
+            // these sums so a package's threads are weighted by their actual interval.
+            int pkgCount = _cpuEntries?.Length ?? 1;
+            var aIdle = new long[pkgCount];
+            var aKern = new long[pkgCount];   // privileged, idle removed
+            var aUser = new long[pkgCount];
+            var aDpc = new long[pkgCount];
+            var aIntr = new long[pkgCount];
+            var aCount = new long[pkgCount];
+            var aTotal = new long[pkgCount];
+
+            for (int p = 0; p < count; p++)
             {
-                float freq = (p < power.Length) ? power[p].CurrentMhz : float.NaN;
-
-                float load = float.NaN;
-                if (_prevIdle != null && _prevKernel != null && _prevUser != null &&
-                    p < _prevIdle.Length && reported > 0)
+                var e = new CpuCoreEntry
                 {
-                    long dIdle = idle[p] - _prevIdle[p];
-                    long dKernel = kernel[p] - _prevKernel[p];
-                    long dUser = user[p] - _prevUser[p];
-                    long total = dKernel + dUser;   // KernelTime includes idle
-                    if (total > 0)
+                    CpuIndex = (map != null && p < map.Length) ? map[p] : 0,
+                    ThreadIndex = p,
+                    Frequency = (p < power.Length) ? power[p].CurrentMhz : float.NaN,
+                    Load = float.NaN,
+                    Idle = float.NaN,
+                    Privileged = float.NaN,
+                    User = float.NaN,
+                    Dpc = float.NaN,
+                    Interrupt = float.NaN,
+                    InterruptRate = float.NaN,
+                };
+
+                if (prev != null && p < prev.Length && reported > 0)
+                {
+                    long dIdle = cur[p].IdleTime - prev[p].IdleTime;
+                    long dKernel = cur[p].KernelTime - prev[p].KernelTime;  // includes idle
+                    long dUser = cur[p].UserTime - prev[p].UserTime;
+                    long dDpc = cur[p].DpcTime - prev[p].DpcTime;
+                    long dIntr = cur[p].InterruptTime - prev[p].InterruptTime;
+                    uint dCount = unchecked(cur[p].InterruptCount - prev[p].InterruptCount);
+
+                    long total = dKernel + dUser;
+                    long priv = dKernel - dIdle;    // kernel with idle taken out
+                    if (priv < 0) priv = 0;
+
+                    e.Idle = Pct(dIdle, total);
+                    e.Privileged = Pct(priv, total);
+                    e.User = Pct(dUser, total);
+                    e.Dpc = Pct(dDpc, total);
+                    e.Interrupt = Pct(dIntr, total);
+                    e.Load = Pct(priv + dUser, total);   // == total - dIdle
+
+                    // total ticks are wall time for this thread, so seconds fall out of it
+                    // and we need no separate clock.
+                    e.InterruptRate = total > 0
+                        ? (float)(dCount / (total / 10_000_000.0))
+                        : float.NaN;
+
+                    int k = e.CpuIndex;
+                    if (k >= 0 && k < pkgCount && total > 0)
                     {
-                        long busy = total - dIdle;
-                        if (busy < 0) busy = 0;
-                        load = 100f * busy / total;
+                        aIdle[k] += dIdle;
+                        aKern[k] += priv;
+                        aUser[k] += dUser;
+                        aDpc[k] += dDpc;
+                        aIntr[k] += dIntr;
+                        aCount[k] += dCount;
+                        aTotal[k] += total;
                     }
-                    else load = 0f;
                 }
 
-                list[p] = new CpuCoreEntry(0, p, freq, load); // group 0 keying
+                list[p] = e;
             }
 
-            if (reported > 0)
-            {
-                _prevIdle = idle;
-                _prevKernel = kernel;
-                _prevUser = user;
-            }
+            if (reported > 0) _prevPerf = cur;
 
             lock (_gate)
             {
                 if (_coreEntries == null || _coreEntries.Length != list.Length)
                     _coreEntries = new CpuCoreEntry[list.Length];
                 Array.Copy(list, _coreEntries, list.Length);
+
+                var cpus = _cpuEntries;
+                if (cpus != null)
+                {
+                    for (int k = 0; k < cpus.Length && k < pkgCount; k++)
+                    {
+                        long t = aTotal[k];
+                        cpus[k].Idle = Pct(aIdle[k], t);
+                        cpus[k].Privileged = Pct(aKern[k], t);
+                        cpus[k].User = Pct(aUser[k], t);
+                        cpus[k].Dpc = Pct(aDpc[k], t);
+                        cpus[k].Interrupt = Pct(aIntr[k], t);
+                        cpus[k].Load = Pct(aKern[k] + aUser[k], t);
+                        cpus[k].InterruptRate = t > 0
+                            ? (float)(aCount[k] / (t / 10_000_000.0))
+                            : float.NaN;
+                    }
+                }
             }
         }
 
@@ -791,6 +891,13 @@ namespace HWKit
                 {
                     var acc = new CpuEntryAccessor(this, i);
                     Publish($"/cpu/{i}/maxclock", "MHz", new Func<float>(() => acc.MaxFrequency));
+                    Publish($"/cpu/{i}/load", "%", new Func<float>(() => acc.Load));
+                    Publish($"/cpu/{i}/idle", "%", new Func<float>(() => acc.Idle));
+                    Publish($"/cpu/{i}/privileged", "%", new Func<float>(() => acc.Privileged));
+                    Publish($"/cpu/{i}/user", "%", new Func<float>(() => acc.User));
+                    Publish($"/cpu/{i}/dpc", "%", new Func<float>(() => acc.Dpc));
+                    Publish($"/cpu/{i}/interrupt", "%", new Func<float>(() => acc.Interrupt));
+                    Publish($"/cpu/{i}/interrupts", "/s", new Func<float>(() => acc.InterruptRate));
                 }
             }
             var coreSnapshot = _coreEntries;
@@ -800,10 +907,15 @@ namespace HWKit
                 {
                     CpuCoreEntry entry = coreSnapshot[i];
                     var acc = new CoreEntryAccessor(this, i);
-                    Publish($"/cpu/{entry.CpuIndex}/thread/{entry.ThreadIndex}/clock", "MHz",
-                        new Func<float>(() => acc.Frequency));
-                    Publish($"/cpu/{entry.CpuIndex}/thread/{entry.ThreadIndex}/load", "%",
-                        new Func<float>(() => acc.Load));
+                    string b = $"/cpu/{entry.CpuIndex}/thread/{entry.ThreadIndex}";
+                    Publish($"{b}/clock", "MHz", new Func<float>(() => acc.Frequency));
+                    Publish($"{b}/load", "%", new Func<float>(() => acc.Load));
+                    Publish($"{b}/idle", "%", new Func<float>(() => acc.Idle));
+                    Publish($"{b}/privileged", "%", new Func<float>(() => acc.Privileged));
+                    Publish($"{b}/user", "%", new Func<float>(() => acc.User));
+                    Publish($"{b}/dpc", "%", new Func<float>(() => acc.Dpc));
+                    Publish($"{b}/interrupt", "%", new Func<float>(() => acc.Interrupt));
+                    Publish($"{b}/interrupts", "/s", new Func<float>(() => acc.InterruptRate));
                 }
             }
 
@@ -825,8 +937,8 @@ namespace HWKit
                     Publish($"/disk/{i}/type", "", new Func<float>(() => acc.Type));
                     Publish($"/disk/{i}/load", "%", new Func<float>(() => acc.Load));
                     Publish($"/disk/{i}/total", "MB", new Func<float>(() => acc.Size));
-                    Publish($"/disk/{i}/sector_size", "MB", new Func<float>(() => acc.PhysicalSectorSize));
-                    Publish($"/disk/{i}/logical_sector_size", "MB", new Func<float>(() => acc.LogicalSectorSize));
+                    Publish($"/disk/{i}/sector_size", "bytes", new Func<float>(() => acc.PhysicalSectorSize));
+                    Publish($"/disk/{i}/logical_sector_size", "bytes", new Func<float>(() => acc.LogicalSectorSize));
 
                     var vols = disks[i].Volumes;
                     for (int j = 0; j < vols.Length; j++)
@@ -857,11 +969,170 @@ namespace HWKit
             {
                 _cpuEntries = null;
                 _coreEntries = null;
+                _prevPerf = null;
+                _procToPackage = null;
                 _disks = null;
             }
         }
-    }
 
+        private static readonly object _allThreadClocksKey = new object();
+        // Suggestion table. Each row gets a fresh identity object as its key; the
+        // expression is looked up by that identity in ApplySuggestion. Add a row here
+        // and both overrides pick it up -- there is no second place to edit.
+        sealed record SuggestionDef(object Key, string Title, string Description, string Expression, string? Category);
+
+        static readonly SuggestionDef[] _suggestionDefs = BuildSuggestions();
+        static readonly HardwareInfoSuggestion[] _suggestionList =
+            Array.ConvertAll(_suggestionDefs, d => new HardwareInfoSuggestion(d.Key, d.Title, d.Description,d.Category));
+
+        static SuggestionDef[] BuildSuggestions()
+        {
+            static SuggestionDef D(string? cat, string title, string desc, string expr)
+                => new(new object(), title, desc, expr, cat);
+
+            return
+            [
+                // ---- CPU: per-package ----
+                D("CPU","CPU loads",
+                  "Retrieves the overall load for each CPU as a percentage, aggregated across its threads",
+                  "'^/win32/cpu/[0-9]+/load$'"),
+                D("CPU","CPU idle time",
+                  "Retrieves the proportion of time each CPU spent idle as a percentage",
+                  "'^/win32/cpu/[0-9]+/idle$'"),
+                D("CPU","CPU privileged time",
+                  "Retrieves the proportion of time each CPU spent in kernel mode as a percentage",
+                  "'^/win32/cpu/[0-9]+/privileged$'"),
+                D("CPU","CPU user time",
+                  "Retrieves the proportion of time each CPU spent in user mode as a percentage",
+                  "'^/win32/cpu/[0-9]+/user$'"),
+                D("CPU","CPU DPC time",
+                  "Retrieves the proportion of time each CPU spent servicing deferred procedure calls as a percentage, a subset of privileged time",
+                  "'^/win32/cpu/[0-9]+/dpc$'"),
+                D("CPU","CPU interrupt time",
+                  "Retrieves the proportion of time each CPU spent servicing hardware interrupts as a percentage, a subset of privileged time",
+                  "'^/win32/cpu/[0-9]+/interrupt$'"),
+                D("CPU","CPU interrupt rates",
+                  "Retrieves the hardware interrupts serviced per second by each CPU",
+                  "'^/win32/cpu/[0-9]+/interrupts$'"),
+                D("CPU","Maximum CPU frequency",
+                  "Retrieves the highest of the CPUs' rated maximum frequencies in MHz, not including turbo frequencies",
+                  "max('^/win32/cpu/[0-9]+/maxclock$')"),
+                D("CPU","Busiest CPU",
+                  "Retrieves the load of the most heavily loaded CPU as a percentage",
+                  "max('^/win32/cpu/[0-9]+/load$')"),
+                D("CPU","Average CPU load",
+                  "Retrieves the mean load across all CPUs as a whole-number percentage",
+                  "round(avg('^/win32/cpu/[0-9]+/load$'))"),
+
+                // ---- CPU: per-thread ----
+                D("Thread","All thread loads",
+                  "Retrieves the load for every thread across all CPUs as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/load$'"),
+                D("Thread","All thread frequencies",
+                  "Retrieves the active frequency for every thread across all CPUs in MHz",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/clock$'"),
+                D("Thread","Busiest thread",
+                  "Retrieves the load of the most heavily loaded thread across all CPUs as a percentage",
+                  "max('^/win32/cpu/[0-9]+/thread/[0-9]+/load$')"),
+                D("Thread","Fastest thread frequency",
+                  "Retrieves the highest active frequency across all threads in MHz",
+                  "max('^/win32/cpu/[0-9]+/thread/[0-9]+/clock$')"),
+                D("Thread","Thread idle time",
+                  "Retrieves the proportion of time every thread spent idle as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/idle$'"),
+                D("Thread","Thread privileged time",
+                  "Retrieves the proportion of time every thread spent in kernel mode as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/privileged$'"),
+                D("Thread","Thread user time",
+                  "Retrieves the proportion of time every thread spent in user mode as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/user$'"),
+                D("Thread","Thread DPC time",
+                  "Retrieves the proportion of time every thread spent servicing deferred procedure calls as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/dpc$'"),
+                D("Thread","Thread interrupt time",
+                  "Retrieves the proportion of time every thread spent servicing hardware interrupts as percentages",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/interrupt$'"),
+                D("Thread","Thread interrupt rates",
+                  "Retrieves the hardware interrupts serviced per second by every thread",
+                  "'^/win32/cpu/[0-9]+/thread/[0-9]+/interrupts$'"),
+
+                // ---- RAM ----
+                D("RAM","Total physical memory",
+                  "Retrieves the installed physical memory in MB",
+                  "/win32/ram/total"),
+                D("RAM","Used physical memory",
+                  "Retrieves the physical memory currently in use in MB",
+                  "/win32/ram/used"),
+                D("RAM","Free physical memory",
+                  "Retrieves the unused physical memory in MB",
+                  "/win32/ram/free"),
+                D("RAM","Memory load",
+                  "Retrieves the proportion of physical memory in use as a percentage",
+                  "/win32/ram/load"),
+                D("RAM","Free virtual memory",
+                  "Retrieves the unused page file memory in MB",
+                  "/win32/ram/free/virtual"),
+
+                // ---- DISK: physical ----
+                D("Disk","Disk loads",
+                  "Retrieves the proportion of capacity in use on each physical disk as a percentage",
+                  "'^/win32/disk/[0-9]+/load$'"),
+                D("Disk","Disk health",
+                  "Retrieves the reported health status of each physical disk",
+                  "'^/win32/disk/[0-9]+/health$'"),
+                D("Disk","Disk capacities",
+                  "Retrieves the total capacity of each physical disk in MB",
+                  "'^/win32/disk/[0-9]+/total$'"),
+                D("Disk","Disk media types",
+                  "Retrieves the media type of each physical disk",
+                  "'^/win32/disk/[0-9]+/type$'"),
+                D("Disk","Disk physical sector sizes",
+                  "Retrieves the physical sector size of each disk",
+                  "'^/win32/disk/[0-9]+/sector_size$'"),
+                D("Disk","Disk logical sector sizes",
+                  "Retrieves the logical sector size of each disk",
+                  "'^/win32/disk/[0-9]+/logical_sector_size$'"),
+                D("Disk","Fullest disk",
+                  "Retrieves the load of the most heavily used physical disk as a percentage",
+                  "max('^/win32/disk/[0-9]+/load$')"),
+
+                // ---- DISK: volumes ----
+                D("Volume","Volume capacities",
+                  "Retrieves the total size of every volume in MB",
+                  "'^/win32/disk/[0-9]+/volume/[0-9]+/total$'"),
+                D("Volume","Used space per volume",
+                  "Retrieves the space in use on every volume in MB",
+                  "'^/win32/disk/[0-9]+/volume/[0-9]+/used$'"),
+                D("Volume","Free space per volume",
+                  "Retrieves the unused space on every volume in MB",
+                  "'^/win32/disk/[0-9]+/volume/[0-9]+/free$'"),
+                D("Volume","Volume loads",
+                  "Retrieves the proportion of capacity in use on every volume as a percentage",
+                  "'^/win32/disk/[0-9]+/volume/[0-9]+/load$'"),
+                D("Volume","Fullest volume",
+                  "Retrieves the load of the most heavily used volume as a percentage",
+                  "max('^/win32/disk/[0-9]+/volume/[0-9]+/load$')"),
+            ];
+        }
+
+        public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
+        {
+            if (context.Expression == null && context.ParseException == null)
+                return _suggestionList;
+            return base.GetSuggestions(context);
+        }
+
+        public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
+        {
+            if (context.Expression == null && context.ParseException == null)
+            {
+                foreach (var d in _suggestionDefs)
+                    if (ReferenceEquals(d.Key, key))
+                        return HardwareInfoExpression.Parse(d.Expression);
+            }
+            return base.ApplySuggestion(context, key);
+        }
+    }
     static class CpuTopology
     {
         private const int RelationProcessorPackage = 3;

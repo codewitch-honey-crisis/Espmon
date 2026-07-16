@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Text;
-using System.Xml.Linq;
 
 namespace Espmon;
 
@@ -23,6 +22,20 @@ public class LocalPortController : PortController
     List<DeviceController> _hookedDevices = new();
     List<ScreenController> _hookedScreens = new();
     private bool _hooksEnabled = true;
+
+    public IHardwareInfoProvider[] GetHardwareProviders()
+    {
+        IList<IHardwareInfoProvider> result = [];
+        for(var i = 0;i<Providers.Count;++i)
+        {
+            var prov = (LocalProviderController)Providers[i];
+            if (prov.IsStarted)
+            {
+                result.Add(prov.Provider);
+            }
+        }
+        return result.ToArray();
+    }
     public LocalPortController(string path, SynchronizationContext? syncContext = null) : base(syncContext)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

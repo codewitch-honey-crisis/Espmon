@@ -34,6 +34,7 @@
   <Project Path="Installer/Installer.csproj">
     <Platform Project="x64" />
   </Project>
+  <Project Path="Scratch/Scratch.csproj" Id="3e7f66c2-4553-4f50-b913-45bd2cfe8788" />
   <Project Path="Uninstall/Uninstall.csproj">
     <Platform Project="x64" />
   </Project>

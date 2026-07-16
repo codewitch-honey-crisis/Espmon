@@ -345,11 +345,11 @@ namespace HWKit
             if (context.Expression == null && context.ParseException == null)
             {
                 HardwareInfoSuggestion[] result = [
-                    new HardwareInfoSuggestion(_allCoreTempsKey,"All core temperatures","Retrieves the temperatures for every core across all CPUs in degrees Celsius"),
-                    new HardwareInfoSuggestion(_allCoreLoadsKey,"All core loads","Retrieves the load percentage for every core across all CPUs as percentages"),
-                    new HardwareInfoSuggestion(_allCoreClocksKey,"All core frequencies","Retrieves the clock frequencies for every core across all CPUs in MHz"),
-                    new HardwareInfoSuggestion(_maxCpuClockKey,"Maximum CPU frequency","Retrieves the maximum frequency for the CPUs in MHz"),
-                    new HardwareInfoSuggestion(_maxSafeCpuTempsKey,"Maximum safe CPU temperatures","Retrieves the maximum safe temperature across all CPUs in degrees Celsius"),
+                    new HardwareInfoSuggestion(_allCoreTempsKey,"All core temperatures","Retrieves the temperatures for every core across all CPUs in degrees Celsius","Core"),
+                    new HardwareInfoSuggestion(_allCoreLoadsKey,"All core loads","Retrieves the load percentage for every core across all CPUs as percentages","Core"),
+                    new HardwareInfoSuggestion(_allCoreClocksKey,"All core frequencies","Retrieves the clock frequencies for every core across all CPUs in MHz","Core"),
+                    new HardwareInfoSuggestion(_maxCpuClockKey,"Maximum CPU frequency","Retrieves the maximum frequency for the CPUs in MHz",null),
+                    new HardwareInfoSuggestion(_maxSafeCpuTempsKey,"Maximum safe CPU temperatures","Retrieves the maximum safe temperature across all CPUs in degrees Celsius",null),
                 ];
                 return result;
             }
@@ -373,7 +373,7 @@ namespace HWKit
                 }
                 if (key == _maxCpuClockKey)
                 {
-                    return HardwareInfoExpression.Parse("'^/coretemp/cpu/clock$'");
+                    return HardwareInfoExpression.Parse("/coretemp/cpu/clock");
                 }
                 if (key == _maxSafeCpuTempsKey)
                 {

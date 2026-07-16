@@ -4,11 +4,32 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:Espmon"
     mc:Ignorable="d">
 
     <UserControl.Resources>
         <SolidColorBrush x:Key="ValidationErrorBrush" Color="#C42B1C"/>
         <SolidColorBrush x:Key="ValidationSuccessBrush" Color="#107C10"/>
+
+        <!-- Explicitly keyed, NOT implicit: the flyout lives in a popup outside this
+             control's visual tree, so an implicit style here would never be found.
+             QuerySelector.MakeHeader assigns this by key instead. -->
+        <Style x:Key="MenuFlyoutHeaderStyle" TargetType="local:MenuFlyoutHeader">
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="local:MenuFlyoutHeader">
+                        <TextBlock
+                            Text="{TemplateBinding Text}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextTrimming="CharacterEllipsis"
+                            Margin="12,8,12,4"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid ColumnSpacing="4">
@@ -70,11 +91,11 @@
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8" Grid.Row="1">
-                    <TextBlock 
+                        <TextBlock 
                         Text="Evaluated to"
                         FontSize="11"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock 
+                        <TextBlock 
                         Text="{x:Bind EvaluatedText, Mode=OneWay}"
                         FontSize="11"
                         FontWeight="SemiBold"
@@ -92,7 +113,13 @@
             Padding="8,0">
             <FontIcon Glyph="&#xE76C;" FontSize="12" Width="20"/>
             <Button.Flyout>
-                <MenuFlyout x:Name="ChevronFlyout" Opening="ChevronFlyout_Opening"/>
+                <MenuFlyout x:Name="ChevronFlyout" Opening="ChevronFlyout_Opening">
+                    <MenuFlyout.MenuFlyoutPresenterStyle>
+                        <Style TargetType="MenuFlyoutPresenter">
+                            <Setter Property="MaxHeight" Value="480"/>
+                        </Style>
+                    </MenuFlyout.MenuFlyoutPresenterStyle>
+                </MenuFlyout>
             </Button.Flyout>
         </Button>
         <TextBlock 

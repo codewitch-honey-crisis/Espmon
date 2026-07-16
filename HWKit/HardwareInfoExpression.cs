@@ -51,15 +51,18 @@ namespace HWKit
     }
     public struct HardwareInfoFunction : IEquatable<HardwareInfoFunction>
     {
+        
         public string Name { get; }
         public int ParameterCount { get; }
+        public bool IsReducer { get; }
         public Func<IEnumerable<IEnumerable<HardwareInfoEntry>>, IEnumerable<HardwareInfoEntry>> Evaluator { get; }
 
-        public HardwareInfoFunction(string name, int parameterCount, Func<IEnumerable<IEnumerable<HardwareInfoEntry>>, IEnumerable<HardwareInfoEntry>> evaluator)
+        public HardwareInfoFunction(string name, int parameterCount, Func<IEnumerable<IEnumerable<HardwareInfoEntry>>, IEnumerable<HardwareInfoEntry>> evaluator, bool isReducer)
         {
             Name = name;
             ParameterCount = parameterCount;
             Evaluator = evaluator;
+            IsReducer = isReducer;
         }
         private static IEnumerable<HardwareInfoEntry> FnRound(IEnumerable<IEnumerable<HardwareInfoEntry>> input)
         {
@@ -143,21 +146,21 @@ namespace HWKit
         var (op, n) = Resolve(input);
         if (n >= 2) return [];
         return [new HardwareInfoEntry(() => op.Count, "", null)];
-    });
+    },true);
 
         public static readonly HardwareInfoFunction First = new("first", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
             {
                 var (op, n) = Resolve(input);
                 return n >= 2 || op.Count == 0 ? [] : [op[0]];
-            });
+            },true);
 
         public static readonly HardwareInfoFunction Last = new("last", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
             {
                 var (op, n) = Resolve(input);
                 return n >= 2 || op.Count == 0 ? [] : [op[^1]];
-            });
+            },true);
 
         public static readonly HardwareInfoFunction Avg = new("avg", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
@@ -165,7 +168,7 @@ namespace HWKit
                 var (op, n) = Resolve(input);
                 if (n != 1 || op.Count == 0) return [];
                 return [new HardwareInfoEntry(() => op.Average(p => p.Value), CommonUnit(op), null)];
-            });
+            },true);
 
         public static readonly HardwareInfoFunction Sum = new("sum", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
@@ -173,7 +176,7 @@ namespace HWKit
                 var (op, n) = Resolve(input);
                 if (n != 1) return [];
                 return [new HardwareInfoEntry(() => op.Sum(p => p.Value), CommonUnit(op), null)];
-            });
+            }, true);
 
         public static readonly HardwareInfoFunction Min = new("min", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
@@ -181,7 +184,7 @@ namespace HWKit
                 var (op, n) = Resolve(input);
                 if (n != 1 || op.Count == 0) return [];
                 return [new HardwareInfoEntry(() => op.Min(p => p.Value), CommonUnit(op), null)];
-            });
+            }, true);
 
         public static readonly HardwareInfoFunction Max = new("max", 1,
             (IEnumerable<IEnumerable<HardwareInfoEntry>> input) =>
@@ -189,11 +192,11 @@ namespace HWKit
                 var (op, n) = Resolve(input);
                 if (n != 1 || op.Count == 0) return [];
                 return [new HardwareInfoEntry(() => op.Max(p => p.Value), CommonUnit(op), null)];
-            });
-        public static readonly HardwareInfoFunction Round = new("round", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input));
-        public static readonly HardwareInfoFunction Round1 = new("round1", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input));
-        public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input));
-        public static readonly HardwareInfoFunction Alt = new("alt", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnAlt(input));
+            }, true);
+        public static readonly HardwareInfoFunction Round = new("round", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound(input),false);
+        public static readonly HardwareInfoFunction Round1 = new("round1", 1, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnRound1(input),false);
+        public static readonly HardwareInfoFunction Past = new("past", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnPast(input),false);
+        public static readonly HardwareInfoFunction Alt = new("alt", 2, (IEnumerable<IEnumerable<HardwareInfoEntry>> input) => FnAlt(input),false);
 
     }
 
@@ -321,6 +324,8 @@ namespace HWKit
             }
         }
         #endregion // Cursors
+
+        public virtual bool IsReduced { get; } = false;
         public virtual bool IsEmpty => false;
         public HardwareInfoExpression()
         {
@@ -1035,6 +1040,7 @@ namespace HWKit
     }
     public partial class HardwareInfoLiteralExpression : HardwareInfoTerminalExpression
     {
+        public override bool IsReduced => true;
         public HardwareInfoLiteralExpression() { }
         public HardwareInfoLiteralExpression(float value) { Value = value; }
         public float Value { get; set; }
@@ -1074,6 +1080,7 @@ namespace HWKit
     }
     public partial class HardwareInfoUnitExpression : HardwareInfoUnaryExpression
     {
+        public override bool IsReduced => Expression.IsReduced;
         public HardwareInfoUnitExpression() { }
         public HardwareInfoUnitExpression(HardwareInfoExpression expression, string unit) : base(expression)
         {
@@ -1127,6 +1134,7 @@ namespace HWKit
     }
     public partial class HardwareInfoPathExpression : HardwareInfoQueryExpression
     {
+        public override bool IsReduced => true;
         public HardwareInfoPathExpression() : this("") { }
         public HardwareInfoPathExpression(string path)
         {
@@ -1441,6 +1449,18 @@ namespace HWKit
     }
     public partial class HardwareInfoInvokeExpression : HardwareInfoNAryExpression
     {
+        public override bool IsReduced
+        {
+            get
+            {
+                if (Function.IsReducer) return true;
+                if (Children.Count>=Function.ParameterCount)
+                {
+                    return Children[Function.ParameterCount - 1].IsReduced;
+                }
+                return false;
+            }
+        }
         public HardwareInfoInvokeExpression() { }
         public HardwareInfoInvokeExpression(HardwareInfoFunction function, params HardwareInfoExpression[] expressions) : base(expressions) { Function = function; }
 

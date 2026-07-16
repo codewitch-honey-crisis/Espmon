@@ -25,7 +25,7 @@ internal class LocalSessionController : SessionController
     int _needScreen;
     bool _dataReady = false;
     bool _needsFlash = false;
-    RequestIdent? _ident = null;
+    RequestIdent _ident = default;
     public LocalSessionController(PortController parent, string portName, string serialNumber,DeviceController? device) : base(parent, portName, serialNumber)
     {
         Device = device;
@@ -536,7 +536,7 @@ internal class LocalSessionController : SessionController
                     {
                         Status = SessionStatus.RequiresFlash;
                     }
-                    else if (_gotIdentTicks != 0 && _ident != null)
+                    else if (_gotIdentTicks != 0 && !string.IsNullOrEmpty(_ident.Slug))
                     {
          
                         var device = Parent.GetDeviceByMac(_ident.MacAddress);
@@ -577,7 +577,7 @@ internal class LocalSessionController : SessionController
                             _dataReady = false;
 
                         }
-                        _ident = null;
+                        _ident.Slug = "";
                         Status = SessionStatus.Negotiating;
                         if (GetUpgrade() == FirmwareUpgrade.Required)
                         {
@@ -606,6 +606,24 @@ internal class LocalSessionController : SessionController
                         {
                             _needsFlash = true;
                             Status = SessionStatus.RequiresFlash;
+                            if (!Environment.UserInteractive)
+                            {
+                                // this is in a service, so let's disconnect causing it to try again.
+                                try
+                                {
+                                    _needsFlash = false;
+                                    Disconnect();
+                                }
+                                catch
+                                {
+                                    if (Status != SessionStatus.Closed)
+                                    {
+                                        _needsFlash = true;
+                                        Status = SessionStatus.RequiresFlash;
+                                    }
+
+                                }
+                            }
                         }
                         //Debug.WriteLine($"Requires flash");
                     }

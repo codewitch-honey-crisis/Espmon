@@ -25,18 +25,30 @@ namespace Espmon
         private string _validationIcon = "\uE946"; // Search icon
         private TextBox? _innerTextBox;
         private DispatcherTimer _timer = new DispatcherTimer();
-        // Snapshot from the last genuine evaluation. Every read-only surface below serves
-        // from this; only RerunQuery() ever calls Run() to refresh it.
-        private IList<HardwareInfoEntry> _results = Array.Empty<HardwareInfoEntry>();
+
+        // Snapshot from the last evaluation. Every read-only surface below serves from this;
+        // only Refresh() ever calls Run() to update it.
+        private List<HardwareInfoEntry> _results = new List<HardwareInfoEntry>();
+        private bool _hasMoreResults;
+
+        // Stable instance. SuggestBox.ItemsSource is x:Bind'd to MatchingPaths, so handing it a
+        // brand-new collection on every poll tears down the open dropdown mid-typing. We mutate
+        // this one in place instead, which means MatchingPaths never needs a change notification.
+        private readonly ObservableCollection<string> _matchingPaths = new ObservableCollection<string>();
+
         public QuerySelector()
         {
             this.InitializeComponent();
+
+            // Read the DP rather than hardcoding: XAML-set values are already applied by the time
+            // InitializeComponent returns, and the old Loaded handler clobbered them with 1000.
+            _timer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, Interval));
             _timer.Tick += _timer_Tick;
-            //AvailablePaths = new ObservableCollection<string>();
+
             _validationBrush = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-            ;
-            // in the constructor, alongside this.Loaded:
-            this.Loaded += (s, e) => { EnsureInnerTextBox(); _timer.Interval = TimeSpan.FromMilliseconds(1000); };
+
+            this.Loaded += (s, e) => { EnsureInnerTextBox(); UpdatePolling(); };
+            this.Unloaded += (s, e) => _timer.Stop();
             SuggestBox.GotFocus += (s, e) => EnsureInnerTextBox();   // fallback if Loaded was too early
         }
         private void EnsureInnerTextBox()
@@ -53,15 +65,8 @@ namespace Espmon
             // Cut/Copy/Paste/Select-All come from the TextBox's built-in context menu and shortcuts.
         }
 
-        private void _timer_Tick(object? sender, object e)
-        {
-            try
-            {
-                RerunQuery();
-            }
-            catch { }
-            OnPropertyChanged(nameof(EvaluatedText));
-        }
+        // The poll. Refresh() handles its own failures, so no swallowing wrapper here.
+        private void _timer_Tick(object? sender, object e) => Refresh();
         public Exception? ValidationException => _validationException;
         private static HardwareInfoEmptyExpression _emptyExpr = new HardwareInfoEmptyExpression();
         public static readonly DependencyProperty ExpressionProperty =
@@ -73,6 +78,7 @@ namespace Espmon
         // replace: private bool _updatingExpression = false;
         private bool _syncingTextFromExpression = false; // Expression -> Text (external change)
         private bool _settingExpressionFromText = false; // Text -> Expression (user typing)
+        private bool _settingSelectedPathFromText = false; // Text -> SelectedPath (user picking a suggestion)
         public HardwareInfoExpression? Expression
         {
             get => (HardwareInfoExpression)GetValue(ExpressionProperty);
@@ -80,23 +86,24 @@ namespace Espmon
         }
         private static void OnExpressionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is QuerySelector control)
-            {
-                //control.RerunQuery();
+            if (d is not QuerySelector control) return;
 
-                // Push canonical text into the box ONLY on external changes (screen/session
-                // switch). Never while the user is typing — that's what blanked the box.
-                if (!control._settingExpressionFromText)
+            // Push canonical text into the box ONLY on external changes (screen/session
+            // switch). Never while the user is typing — that's what blanked the box.
+            if (!control._settingExpressionFromText)
+            {
+                var newText = (e.NewValue as HardwareInfoExpression)?.ToString() ?? "";
+                if (control._pathPattern != newText)
                 {
-                    var newText = (e.NewValue as HardwareInfoExpression)?.ToString() ?? "";
-                    if (control._pathPattern != newText)
-                    {
-                        control._syncingTextFromExpression = true;
-                        control.PathPattern = newText;
-                        control._syncingTextFromExpression = false;
-                    }
+                    control._syncingTextFromExpression = true;
+                    control.PathPattern = newText;
+                    control._syncingTextFromExpression = false;
                 }
             }
+
+            // What we poll just changed. No-op while ValidatePattern is mid-parse; it calls
+            // UpdatePolling itself once the expression has settled.
+            control.UpdatePolling();
         }
         public static readonly DependencyProperty SessionProperty =
             DependencyProperty.Register(
@@ -114,16 +121,20 @@ namespace Espmon
         private static void OnSessionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
 
-            if (d is QuerySelector control && e.NewValue is SessionController ctrl)
-            {
-                if (e.OldValue is SessionController oldCtrl)
-                {
-                    oldCtrl.PropertyChanged -= control.Session_PropertyChanged;
-                }
-                ctrl.PropertyChanged += control.Session_PropertyChanged;
-                //control.RerunQuery();
+            if (d is not QuerySelector control) return;
 
+            // Unsubscribe unconditionally: the old code only ran when the NEW value was a
+            // SessionController, so clearing Session to null leaked the handler.
+            if (e.OldValue is SessionController oldCtrl)
+            {
+                oldCtrl.PropertyChanged -= control.Session_PropertyChanged;
             }
+            if (e.NewValue is SessionController newCtrl)
+            {
+                newCtrl.PropertyChanged += control.Session_PropertyChanged;
+            }
+
+            control.UpdatePolling();
         }
 
         private void Session_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -131,6 +142,9 @@ namespace Espmon
             if (e.PropertyName == null || e.PropertyName.Equals("ScreenIndex", StringComparison.Ordinal))
             {
                 OnPropertyChanged(nameof(Expression));
+                // The screen changed underneath us, so the cached snapshot describes the old one.
+                // Don't wait up to a full Interval to correct it.
+                Refresh();
             }
         }
 
@@ -149,12 +163,15 @@ namespace Espmon
 
         private static void OnSelectedPathChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is QuerySelector control && e.NewValue is string newPath)
+            if (d is not QuerySelector control) return;
+
+            // We originated this from a suggestion pick; the text is already right. Without this,
+            // AcceptSuggestion's SelectedPath = "" pushed empty back and blanked the box.
+            if (control._settingSelectedPathFromText) return;
+
+            if (e.NewValue is string newPath && control._pathPattern != newPath)
             {
-                if (control._pathPattern != newPath)
-                {
-                    control.PathPattern = newPath;
-                }
+                control.PathPattern = newPath;
             }
         }
 
@@ -188,10 +205,12 @@ namespace Espmon
             {
                 if (_pathPattern != value)
                 {
-
+                    Debug.WriteLine($"New path pattern is {value}");
                     _pathPattern = value;
                     OnPropertyChanged(nameof(PathPattern));
                     ValidateAndUpdateMatches();
+
+
 
                 }
             }
@@ -212,80 +231,159 @@ namespace Espmon
             }
         }
 
+        /// <summary>
+        /// A path as typed is an exact address. As a SUGGESTION SOURCE it's a prefix — someone
+        /// typing /cpu/te wants /cpu/temp offered, and a half-typed path addresses nothing on its
+        /// own. So the dropdown, and only the dropdown, evaluates path + ".*" as a match.
+        /// The preview deliberately does not go through here: it shows what you actually typed.
+        /// </summary>
+        private static HardwareInfoExpression ToPrefixMatch(HardwareInfoPathExpression path)
+        {
+            var text = path.Path;
+            if (string.IsNullOrEmpty(text))
+                return HardwareInfoMatchExpression.MatchAll;
+
+            // Unescaped and unanchored, as the original was. A path carrying regex syntax throws
+            // here; RefreshSuggestions' catch degrades that to an empty dropdown, not a crash.
+            return new HardwareInfoMatchExpression(
+                new Regex(text + ".*", RegexOptions.Singleline | RegexOptions.CultureInvariant));
+        }
+
+        /// <summary>The realtime preview: the expression exactly as typed.</summary>
         private IEnumerable<HardwareInfoEntry> Run()
         {
             if (Session == null) return Array.Empty<HardwareInfoEntry>();
-            HardwareInfoExpression? expr = null;
-            if (Expression == null)
-            {
-                expr = HardwareInfoMatchExpression.MatchAll;
-            }
-            if (Expression is HardwareInfoPathExpression path)
-            {
-                try
-                {
-                    expr = new HardwareInfoMatchExpression(new Regex(path.Path ?? "/", RegexOptions.Singleline | RegexOptions.CultureInvariant));
-                }
-                catch
-                {
-                    // TODO: Display the error
-                }
-            }
-            else if (Expression is HardwareInfoQueryExpression query)
-            {
-                expr = query;
-            }
-            if (expr != null)
-            {
-                try
-                {
-                    return Session.Parent.Evaluate(expr);
-                }
-                catch
-                {
-                    // TODO: Display the error
-                }
-            }
-            else if (Expression != null)
-            {
-                return Session.Parent.Evaluate(Expression);
-            }
-            return Array.Empty<HardwareInfoEntry>();
+            return Session.Parent.Evaluate(Expression ?? new HardwareInfoEmptyExpression());
         }
-        public IList<HardwareInfoEntry>? Matches => _results.ToObservableList();
 
-        //public IList<string>? MatchingPaths
-        //{
-        //    get
-        //    {
-        //        try
-        //        {
-        //            return _results
-        //        .Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}")
-        //        .ToLazyList()
-        //        .ToObservableList();
-        //        }
-        //        catch
-        //        {
-        //            return Array.Empty<string>().ToObservableList();
-        //        }
-        //    }
-        //}
-        public IList<string>? MatchingPaths
+        /// <summary>The dropdown candidates: the prefix match. Empty unless a path is being typed.</summary>
+        private IEnumerable<HardwareInfoEntry> RunSuggestions()
         {
-            get
+            if (Session == null || Expression is not HardwareInfoPathExpression path)
+                return Array.Empty<HardwareInfoEntry>();
+
+            return Session.Parent.Evaluate(ToPrefixMatch(path));
+        }
+
+        /// <summary>The live snapshot. Not a copy — callers must not mutate it.</summary>
+        public IList<HardwareInfoEntry> Matches => _results;
+
+        /// <summary>
+        /// Stable collection instance, mutated in place by SyncProjections. Never reassigned,
+        /// so it needs no PropertyChanged and the suggestion dropdown survives a poll.
+        /// </summary>
+        public IList<string> MatchingPaths => _matchingPaths;
+
+        private static string Describe(HardwareInfoEntry entry)
+            => $"{entry.Path ?? "(n/a)"} => {FloatToString(entry.Value)}{entry.Unit}";
+
+        private void SyncProjections(IList<HardwareInfoEntry> source)
+        {
+            // Touch only what actually changed. On a steady-state poll the paths are identical
+            // and only the values move, so this rewrites strings in place rather than issuing a
+            // Reset that would collapse the open dropdown once per Interval.
+            for (int i = 0; i < source.Count; i++)
             {
-                try
+                var text = Describe(source[i]);
+                if (i < _matchingPaths.Count)
                 {
-                    return new ObservableCollection<string>(
-                        _results.Select(p => $"{p.Path ?? "(n/a)"} => {FloatToString(p.Value)}{p.Unit}"));
+                    if (!string.Equals(_matchingPaths[i], text, StringComparison.Ordinal))
+                        _matchingPaths[i] = text;
                 }
-                catch
+                else
                 {
-                    return new ObservableCollection<string>();
+                    _matchingPaths.Add(text);
                 }
             }
+            while (_matchingPaths.Count > source.Count)
+                _matchingPaths.RemoveAt(_matchingPaths.Count - 1);
         }
+
+        /// <summary>
+        /// The only place evaluation happens: refresh the preview snapshot and the dropdown
+        /// candidates, then notify. The getters never evaluate, so binding re-reads are free.
+        /// </summary>
+        private void Refresh()
+        {
+            List<HardwareInfoEntry> fresh;
+            try
+            {
+                // 51, so we can tell "exactly 50" from "50 and then some".
+                fresh = Run().Take(51).ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Evaluate failed: {ex.Message}");
+                fresh = new List<HardwareInfoEntry>();
+            }
+
+            _hasMoreResults = fresh.Count > 50;
+            if (_hasMoreResults) fresh.RemoveAt(50);
+
+            _results = fresh;
+            RefreshSuggestions();
+
+            OnPropertyChanged(nameof(MatchCountText));
+            OnPropertyChanged(nameof(EvaluatedText));
+        }
+
+        /// <summary>
+        /// A second evaluation, separate from the preview because it asks a different question.
+        /// Runs on the poll too, so an open dropdown keeps showing live values rather than the
+        /// numbers from whenever the user last pressed a key.
+        /// </summary>
+        private void RefreshSuggestions()
+        {
+            List<HardwareInfoEntry> candidates;
+            try
+            {
+                candidates = RunSuggestions().Take(50).ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Suggestion evaluate failed: {ex.Message}");
+                candidates = new List<HardwareInfoEntry>();
+            }
+
+            SyncProjections(candidates);
+        }
+
+        /// <summary>
+        /// Starts or stops the poll, and clears the preview when there's nothing to poll.
+        /// Called from every place that can change the session, the expression, or validity.
+        /// </summary>
+        private void UpdatePolling()
+        {
+            // ValidatePattern reassigns Expression while parsing; let it settle and call this
+            // itself when it's done, rather than thrashing the timer on an interim value.
+            if (_settingExpressionFromText) return;
+
+            var shouldPoll = Session != null
+                && Expression != null
+                && !Expression.IsEmpty
+                && _validationException == null;
+
+            if (shouldPoll)
+            {
+                // Guard the Start: DispatcherTimer.Start on a running timer restarts the
+                // interval, so calling it per keystroke would starve the poll while typing.
+                if (!_timer.IsEnabled) _timer.Start();
+                Refresh();   // paint immediately; don't make the user wait a full Interval
+            }
+            else
+            {
+                _timer.Stop();
+                if (_results.Count > 0)
+                {
+                    _results = new List<HardwareInfoEntry>();
+                    _hasMoreResults = false;
+                }
+                SyncProjections(Array.Empty<HardwareInfoEntry>());
+                OnPropertyChanged(nameof(MatchCountText));
+                OnPropertyChanged(nameof(EvaluatedText));
+            }
+        }
+
         public Brush ValidationBrush
         {
             get => _validationBrush;
@@ -314,7 +412,8 @@ namespace Espmon
         {
             if (d is QuerySelector control)
             {
-                control._timer.Interval = TimeSpan.FromMilliseconds((int)e.NewValue);
+                // A zero interval would spin the dispatcher evaluating hardware queries.
+                control._timer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, (int)e.NewValue));
             }
         }
         public string? ValidationErrorMessage
@@ -339,64 +438,38 @@ namespace Espmon
                 }
             }
         }
-
-        public string MatchCountText => _results.Count >= 50 ? "50+" : _results.Count.ToString();
+        public string MatchCountText
+        {
+            get
+            {
+                if (Session == null || Expression == null || Expression.IsEmpty) return "(no result)";
+                // Min(50, Count) reported a truncated 200-match query as a flat "50". _hasMoreResults
+                // comes from taking 51 and is the only thing that knows the difference.
+                return _hasMoreResults ? "50+" : _results.Count.ToString();
+            }
+        }
         private static string FloatToString(float value)
         {
             if (float.IsNaN(value)) return "NaN";
             return Math.Round(value, 2).ToString("G");
         }
+        // Reads the snapshot only; Refresh() already absorbed any evaluation failure.
         public string EvaluatedText
-        {
-            get
-            {
-                try
-                {
-                    return Session != null ? Expression != null && !Expression.IsEmpty ? string.Join(", ", Session.Parent.Evaluate(Expression).Select(p => $"{FloatToString(p.Value)}{p.Unit}")) : "(no result)" : "(no result)";
-                }
-                catch (Exception e)
-                {
-                    return e.Message;
-                }
-            }
-        }
+            => _results.Count > 0
+                ? string.Join(", ", _results.Select(p => $"{FloatToString(p.Value)}{p.Unit}"))
+                : "(no result)";
         public Visibility MatchVisibility
         {
             get
             {
-                return IsQueryExpression ? Visibility.Visible : Visibility.Collapsed;
+                // Was IsQueryExpression only, from when a path resolved to a single sensor and a
+                // count was meaningless. Paths produce real counts now, so they get the header.
+                return (IsQueryExpression || IsRegexExpression || Expression is HardwareInfoPathExpression)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
         }
 
-        void RerunQuery()
-        {
-            // The one and only place Run() genuinely executes. Evaluate + cap + materialize
-            // once, cache the snapshot, then notify. The getters above never call Run(),
-            // so binding re-reads are free.
-            try
-            {
-                _results = Run().Take(50).ToList();
-            }
-            catch
-            {
-                return;
-            }
-            try
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Matches)));
-            }
-            catch { }
-            try
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchingPaths)));
-            }
-            catch { }
-            try
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchCountText)));
-            }
-            catch { }
-        }
         #region Validation and Matching
 
         private void ValidateAndUpdateMatches()
@@ -411,16 +484,19 @@ namespace Espmon
                 }
                 ValidationBrush = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
                 ValidationIcon = "\uE946"; // Search
+                ValidationErrorMessage = null;   // was left showing the previous error after a clear
                 _validationException = null;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsQueryExpression)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRegexExpression)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MatchVisibility)));
-                //RerunQuery();
+                OnPropertyChanged(nameof(IsQueryExpression));
+                OnPropertyChanged(nameof(IsRegexExpression));
+                OnPropertyChanged(nameof(MatchVisibility));
+
+                // The expression is gone: stop the poll and wipe the preview. The old early return
+                // did neither, so the timer kept evaluating and the last result stayed on screen.
+                UpdatePolling();
                 return;
             }
 
             ValidatePattern();
-            //    RerunQuery();
         }
 
         private void ValidatePattern()
@@ -430,16 +506,26 @@ namespace Espmon
             _settingExpressionFromText = true;   // suppress Expression -> Text while parsing user input
             try
             {
-                if (!_syncingTextFromExpression) Expression = new HardwareInfoEmptyExpression();
+                // Removed: an interim `Expression = new HardwareInfoEmptyExpression()` here. It
+                // fired a spurious DP change on every keystroke, which now means a stop/clear
+                // followed immediately by a start/re-evaluate — visible flicker for no gain.
 
-                HardwareInfoExpression? expr = new HardwareInfoEmptyExpression();
+                HardwareInfoExpression? expr = null;
                 _validationException = null;
+
                 try
                 {
                     expr = HardwareInfoExpression.Parse(_pathPattern);
-                    if (!(expr is HardwareInfoQueryExpression)) _timer.Start(); else _timer.Stop();
                 }
-                catch { /* ...unchanged... */ }
+                catch (Exception ex)
+                {
+                    // Rebuilt; the original body was lost. Nothing else in this method ever set
+                    // IsValid to false, so a parse failure used to fall through to the SUCCESS
+                    // branch with a checkmark and a silently-emptied Expression.
+                    _validationException = ex;
+                    args.IsValid = false;
+                    args.ErrorMessage = ex.Message;
+                }
 
                 if (args.IsValid)
                 {
@@ -451,16 +537,20 @@ namespace Espmon
                 else
                 {
                     ValidationErrorMessage = args.ErrorMessage;
-                    if (!_syncingTextFromExpression) Expression = new HardwareInfoEmptyExpression(); ;
                     ValidationBrush = (Brush)Resources["ValidationErrorBrush"];
                     ValidationIcon = "\uE783";
+                    if (!_syncingTextFromExpression) Expression = new HardwareInfoEmptyExpression();
                 }
             }
             finally { _settingExpressionFromText = false; }
 
             OnPropertyChanged(nameof(IsRegexExpression));
             OnPropertyChanged(nameof(IsQueryExpression));
-            OnPropertyChanged(nameof(EvaluatedText));
+            OnPropertyChanged(nameof(MatchVisibility));   // was never notified; the header got stuck
+
+            // Expression has settled. Start or stop the poll to match, and paint the first
+            // preview now. Every expression type is live, so the type no longer gates the timer.
+            UpdatePolling();
         }
 
         #endregion
@@ -469,46 +559,56 @@ namespace Espmon
 
         private void SuggestBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         {
-            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
-            {
-                //var textBox = FindTextBoxInAutoSuggestBox(sender);
+            // Only user typing should pop the list open. Programmatic text changes (canonicalizing
+            // on LostFocus, an external Expression push) must stay silent.
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
 
+            // Drive the update from the box's own text rather than trusting that the TwoWay x:Bind
+            // on Text has already pushed into PathPattern — the ordering between that binding and
+            // this event isn't guaranteed, and we need _matchingPaths current on the next line.
+            // The setter no-ops if the binding did already run.
+            PathPattern = sender.Text;
+
+            // MatchingPaths is one stable instance now, so ItemsSource never changes identity and
+            // AutoSuggestBox never decides on its own to open. Say so explicitly. This is the
+            // trade for not tearing the dropdown down on every poll.
+            sender.IsSuggestionListOpen = _matchingPaths.Count > 0;
+        }
+
+        /// <summary>
+        /// Shared by SuggestionChosen and QuerySubmitted: strip the " => value" display suffix,
+        /// put the bare path in the box, and mirror it to SelectedPath when it really is a path.
+        /// </summary>
+        private void AcceptSuggestion(string chosenPath)
+        {
+            var idx = chosenPath.IndexOf(" => ", StringComparison.Ordinal);
+            if (idx > -1) { chosenPath = chosenPath.Substring(0, idx); }
+
+            PathPattern = chosenPath;
+
+            _settingSelectedPathFromText = true;
+            try
+            {
+                // Was SelectedPath.StartsWith(...) — testing the value being REPLACED rather than
+                // the one just picked, so the first pick from an empty SelectedPath always missed.
+                SelectedPath = chosenPath.StartsWith("/", StringComparison.Ordinal) ? chosenPath : "";
             }
+            finally { _settingSelectedPathFromText = false; }
         }
 
         private void SuggestBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
         {
             if (args.SelectedItem is string chosenPath)
             {
-                var idx = chosenPath.IndexOf(" => ");
-                if (idx > -1) { chosenPath = chosenPath.Substring(0, idx); }
-
-                PathPattern = chosenPath;
-                // For plain paths, accept the selection
-                if (SelectedPath.StartsWith("/"))
-                {
-                    SelectedPath = chosenPath;
-                }
-                else
-                {
-                    SelectedPath = "";
-                }
+                AcceptSuggestion(chosenPath);
             }
-            // For other patterns, keep the query in the textbox
         }
 
         private void SuggestBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
         {
             if (args.ChosenSuggestion is string chosenPath)
             {
-                var idx = chosenPath.IndexOf(" => ");
-                if (idx > -1) { chosenPath = chosenPath.Substring(0, idx); }
-
-                PathPattern = chosenPath;
-                if (SelectedPath.StartsWith("/"))
-                {
-                    SelectedPath = chosenPath;
-                }
+                AcceptSuggestion(chosenPath);
             }
         }
         private void SuggestBox_LostFocus(object sender, RoutedEventArgs e)
@@ -522,47 +622,117 @@ namespace Espmon
             PathPattern = canonical;
             _syncingTextFromExpression = false;
         }
+        private MenuFlyoutHeader MakeHeader(string text)
+        {
+            return new MenuFlyoutHeader
+            {
+                Text = text,
+                // Assigned explicitly by key, not implicitly: the flyout renders in a popup
+                // outside this control's visual tree and would never resolve an implicit style.
+                Style = (Style)Resources["MenuFlyoutHeaderStyle"]
+            };
+        }
+
+
+        private MenuFlyoutItem MakeSuggestionItem(
+    IHardwareInfoProvider? provider,
+    HardwareInfoSuggestionContext context,
+    HardwareInfoSuggestion suggestion)   // whatever your suggestion type is
+        {
+            var item = new MenuFlyoutItem
+            {
+                Tag = suggestion.Key,
+                Text = suggestion.Action
+            };
+
+            item.Click += (s, clickArgs) =>
+            {
+                if (provider != null)
+                {
+                    var expr = provider.ApplySuggestion(context, item.Tag);
+                    SuggestBox.Text = expr?.ToString() ?? "";
+                    SuggestBox.Focus(FocusState.Programmatic);
+                } else
+                {
+                    var expr = HardwareInfoSuggestion.ApplySuggestion(context, item.Tag);
+                    SuggestBox.Text = expr?.ToString() ?? "";
+                    SuggestBox.Focus(FocusState.Programmatic);
+                }
+            };
+
+            return item;
+        }
+
         private void ChevronFlyout_Opening(object sender, object e)
         {
-            var toSnapshot = this.MatchingPaths ?? [];
-
-            // Clear existing items and populate from event args
             ChevronFlyout.Items.Clear();
-            if (Session != null && Matches != null)
+
+            // Matches is the snapshot itself now and is never null, so the old null check went away.
+            if (Session != null && Session.Parent is LocalPortController controller)
             {
-                //var providers = Session.Parent.GetProviders();
-                //var context = new HardwareInfoSuggestionContext(Expression, Matches.ToList(), ValidationException as HardwareInfoParseException, providers);
-                //foreach (var provider in providers)
-                //{
-                //    foreach(var suggestion in provider.GetSuggestions(context))
-                //    {
-                //        var item = new MenuFlyoutItem();
-                //        item.Tag = suggestion.Key;
-                //        item.Text = suggestion.Action;
-                //        ChevronFlyout.Items.Add(item);
-                //        item.Click += (s, clickArgs) =>
-                //        {
-                //            var expr = provider.ApplySuggestion(context, item.Tag);
-                //            if(expr!=null)
-                //            {
-                //                SuggestBox.Text = expr.ToString();
-                //            } else
-                //            {
-                //                SuggestBox.Text = "";
-                //            }
-                //            SuggestBox.Focus(FocusState.Programmatic);
+                var providers = controller.GetHardwareProviders();
+                var context = new HardwareInfoSuggestionContext(
+                    Expression,
+                    Matches.ToList(),
+                    ValidationException as HardwareInfoParseException,
+                    providers);
+                var suggestions = HardwareInfoSuggestion.GetSuggestions(context);
+                foreach(var suggestion in suggestions)
+                {
+                    ChevronFlyout.Items.Add(MakeSuggestionItem(null, context, suggestion));
+                }
+                foreach (var provider in providers)
+                {
+                    // Buffer first: a provider that yields nothing must not leave a dangling header.
+                    var groupItems = new List<MenuFlyoutItemBase>();
 
-                //        };
+                    suggestions = provider.GetSuggestions(context);
 
-                //    }
-                //}
+                    // Uncategorized go straight to the group root, in provider order.
+                    foreach (var suggestion in suggestions.Where(s => string.IsNullOrWhiteSpace(s.Category)))
+                    {
+                        groupItems.Add(MakeSuggestionItem(provider, context, suggestion));
+                    }
+
+                    // Then one submenu per category, alphabetical, case-insensitive grouping.
+                    var categorized = suggestions
+                        .Where(s => !string.IsNullOrWhiteSpace(s.Category))
+                        .GroupBy(s => s.Category!.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase);
+
+                    foreach (var categoryGroup in categorized)
+                    {
+                        // g.Key is the first spelling encountered; that's the display name.
+                        var subMenu = new MenuFlyoutSubItem { Text = categoryGroup.Key };
+
+                        foreach (var suggestion in categoryGroup)
+                        {
+                            subMenu.Items.Add(MakeSuggestionItem(provider, context, suggestion));
+                        }
+
+                        groupItems.Add(subMenu);
+                    }
+
+                    if (groupItems.Count == 0) continue;
+
+                    // Rule between groups, but never above the first one.
+                    if (ChevronFlyout.Items.Count > 0)
+                    {
+                        ChevronFlyout.Items.Add(new MenuFlyoutSeparator());
+                    }
+
+                    ChevronFlyout.Items.Add(MakeHeader(provider.DisplayName));
+                    foreach (var item in groupItems)
+                    {
+                        ChevronFlyout.Items.Add(item);
+                    }
+                }
             }
+
             if (ChevronFlyout.Items.Count == 0)
             {
-                var emptyItem = new MenuFlyoutItem { Text = "No suggessions available", IsEnabled = false };
-                ChevronFlyout.Items.Add(emptyItem);
+                ChevronFlyout.Items.Add(new MenuFlyoutItem { Text = "No suggestions available", IsEnabled = false });
             }
-
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

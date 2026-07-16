@@ -221,7 +221,7 @@ public sealed class PortControllerService : BackgroundService
                         //Console.Error.WriteLine("Dispatch app start");
                         ServiceAppStartRequest.TryRead(payload, out var req, out var _);
                         var resp = new ServiceAppStartResponse();
-                        resp.Entries = [];
+                        var entries = new List<ServiceDeviceEntry>();
                         for (var i = 0; i < controller.Sessions.Count; ++i)
                         {
                             var session = controller.Sessions[i];
@@ -230,9 +230,10 @@ public sealed class PortControllerService : BackgroundService
                                 var entry = new ServiceDeviceEntry();
                                 entry.SerialNumber = session.SerialNumber;
                                 entry.ScreenIndex = session.ScreenIndex;
-                                resp.Entries.Add(entry);
+                                entries.Add(entry);
                             }
                         }
+                        resp.Entries = entries.ToArray();
                         payload = new byte[resp.SizeOfStruct];
                         resp.TryWrite(payload, out var _);
                         //Console.Error.Write("Stopping port controller");

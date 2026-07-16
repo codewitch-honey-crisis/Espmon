@@ -563,5 +563,53 @@ namespace HWKit
         {
             return "Provides frame rate and refresh rate for the active app using DXGI + DxgKrnl (ETW).";
         }
+        private static readonly object _frameRateKey = new object();
+        private static readonly object _1PctLowsKey = new object();
+        private static readonly object _refreshRateKey = new object();
+        private static readonly object _minRenderKey = new object();
+        private static readonly object _maxRenderKey = new object();
+        public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
+        {
+            if (context.Expression == null && context.ParseException == null)
+            {
+                HardwareInfoSuggestion[] result = [
+                    new HardwareInfoSuggestion(_frameRateKey,"Frame rate", "Gets the active frame rate in frames per second",null),
+                    new HardwareInfoSuggestion(_1PctLowsKey,"1% lows","Gets the active 1% lows in frames per second",null),
+                    new HardwareInfoSuggestion(_refreshRateKey,"Refresh rate","Gets the active refresh rate in Hz",null),
+                    new HardwareInfoSuggestion(_minRenderKey,"Minimum render time", "Gets the minimum render time in milliseconds",null),
+                    new HardwareInfoSuggestion(_maxRenderKey,"Maximum render time", "Gets the maximum render time in milliseconds",null),
+                ];
+                return result;
+            }
+            return base.GetSuggestions(context);
+        }
+        public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
+        {
+            if (context.Expression == null && context.ParseException == null)
+            {
+                if (key == _frameRateKey)
+                {
+                    return HardwareInfoExpression.Parse("/dxgi/framerate");
+                }
+                if (key == _1PctLowsKey)
+                {
+                    return HardwareInfoExpression.Parse("/dxgi/1pctlows");
+                }
+                if (key == _refreshRateKey)
+                {
+                    return HardwareInfoExpression.Parse("/dxgi/refreshrate");
+                }
+                if (key == _minRenderKey)
+                {
+                    return HardwareInfoExpression.Parse("/dxgi/minrender");
+                }
+                if (key == _maxRenderKey)
+                {
+                    return HardwareInfoExpression.Parse("/dxgi/maxrender");
+                }
+
+            }
+            return base.ApplySuggestion(context, key);
+        }
     }
 }

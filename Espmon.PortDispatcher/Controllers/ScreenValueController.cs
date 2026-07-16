@@ -47,7 +47,7 @@ public sealed class ScreenValueController : ControllerBase
         {
             try
             {
-                return _valueExpression != null ? Parent.Parent.Parent.Evaluate(_valueExpression).First() : HardwareInfoEntry.Empty;
+                return _valueExpression != null ? Parent.Parent.Parent.Evaluate(_valueExpression).FirstOrDefault(HardwareInfoEntry.Empty) : HardwareInfoEntry.Empty;
             }
             catch
             {
