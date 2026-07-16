@@ -4,6 +4,8 @@ public sealed class HardwareInfoSuggestion
 {
     private static readonly object _averageKey = new object();
     private static readonly object _sumKey = new object();
+    private static readonly object _minKey = new object();
+    private static readonly object _maxKey = new object();
     private static readonly object _firstKey = new object();
     private static readonly object _lastKey = new object();
     private static readonly object _roundKey = new object();
@@ -61,6 +63,14 @@ public sealed class HardwareInfoSuggestion
                 if (fn == null || !fn.Equals("last", StringComparison.Ordinal))
                 {
                     result.Add(new HardwareInfoSuggestion(_lastKey, "Take the last item", "Gets the last result of the expression", null));
+                }
+                if (fn == null || !fn.Equals("min", StringComparison.Ordinal))
+                {
+                    result.Add(new HardwareInfoSuggestion(_minKey, "Take the minimum value", "Gets the minimum value result of the expression", null));
+                }
+                if (fn == null || !fn.Equals("max", StringComparison.Ordinal))
+                {
+                    result.Add(new HardwareInfoSuggestion(_maxKey, "Take the maximum value", "Gets the maximum value result of the expression", null));
                 }
             }
             else
@@ -135,6 +145,24 @@ public sealed class HardwareInfoSuggestion
                 var fn = new HardwareInfoInvokeExpression()
                 {
                     Function = HardwareInfoFunction.Last
+                };
+                fn.Children.Add(context.Expression);
+                return fn;
+            }
+            if (key == _minKey)
+            {
+                var fn = new HardwareInfoInvokeExpression()
+                {
+                    Function = HardwareInfoFunction.Min
+                };
+                fn.Children.Add(context.Expression);
+                return fn;
+            }
+            if (key == _maxKey)
+            {
+                var fn = new HardwareInfoInvokeExpression()
+                {
+                    Function = HardwareInfoFunction.Max
                 };
                 fn.Children.Add(context.Expression);
                 return fn;

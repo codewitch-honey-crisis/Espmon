@@ -1456,6 +1456,10 @@ namespace HWKit
                 if (Function.IsReducer) return true;
                 if (Children.Count>=Function.ParameterCount)
                 {
+                    if(Function.Name=="past")
+                    {
+                        return false;
+                    }
                     return Children[Function.ParameterCount - 1].IsReduced;
                 }
                 return false;
