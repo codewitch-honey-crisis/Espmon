@@ -446,3 +446,4 @@ FodyWeavers.xsd
 /espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/CMakeLists.txt
 /espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/README.md
 /Installer.exe
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/src/source/plutovg-canvas.cpp
