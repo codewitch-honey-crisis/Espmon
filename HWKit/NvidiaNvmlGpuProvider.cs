@@ -34,22 +34,29 @@ namespace HWKit
             {
                 return;
             }
-            NvGpu.NvmlInitV2();
-            var deviceCount = (int)NvGpu.NvmlDeviceGetCountV2();
-
-            for (var i = 0; i < deviceCount; i++)
+            try
             {
-                var handle = NvGpu.NvmlDeviceGetHandleByIndex((uint)i);
-                var accessor = new DeviceAccessor(handle);
-                Publish($"/gpu/{i}/temperature", "°", () => _started?accessor.Temperature:float.NaN);
-                Publish($"/gpu/{i}/load","%", () => _started?accessor.Load:float.NaN);
-                Publish($"/gpu/{i}/clock","MHz", () => _started? accessor.Frequency : float.NaN);
-                Publish($"/gpu/{i}/vram/load/","%", () => _started ? accessor.VramLoad : float.NaN);
-                Publish($"/gpu/{i}/vram/clock","MHz", () => _started ? accessor.VramFrequency : float.NaN);
-                Publish($"/gpu/{i}/sm/clock", "MHz", () => _started ? accessor.SMFrequency : float.NaN);
-                Publish($"/gpu/{i}/fan/load", "%",() => _started ? accessor.FanLoad : float.NaN);
-                
+                NvGpu.NvmlInitV2();
+                var deviceCount = (int)NvGpu.NvmlDeviceGetCountV2();
+
+                for (var i = 0; i < deviceCount; i++)
+                {
+                    var handle = NvGpu.NvmlDeviceGetHandleByIndex((uint)i);
+                    var accessor = new DeviceAccessor(handle);
+                    Publish($"/gpu/{i}/temperature", "°", () => _started ? accessor.Temperature : float.NaN);
+                    Publish($"/gpu/{i}/load", "%", () => _started ? accessor.Load : float.NaN);
+                    Publish($"/gpu/{i}/clock", "MHz", () => _started ? accessor.Frequency : float.NaN);
+                    Publish($"/gpu/{i}/vram/load/", "%", () => _started ? accessor.VramLoad : float.NaN);
+                    Publish($"/gpu/{i}/vram/clock", "MHz", () => _started ? accessor.VramFrequency : float.NaN);
+                    Publish($"/gpu/{i}/sm/clock", "MHz", () => _started ? accessor.SMFrequency : float.NaN);
+                    Publish($"/gpu/{i}/fan/load", "%", () => _started ? accessor.FanLoad : float.NaN);
+
+                }
             }
+            catch
+            {
+            }
+            
             _started = true;
         }
         protected override HardwareInfoProviderStatus GetState()
@@ -64,7 +71,14 @@ namespace HWKit
                 return;
             }
             _started = false; // even on error this should go false.
-            NvGpu.NvmlShutdown();
+            try
+            {
+                NvGpu.NvmlShutdown();
+            }
+            catch
+            {
+
+            }
             
         }
         protected override string GetDescription()
