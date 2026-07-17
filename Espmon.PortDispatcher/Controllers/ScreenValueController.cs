@@ -185,8 +185,6 @@ public sealed class ScreenValueController : ControllerBase
     internal JsonObject ToJson()
     {
         var json = new JsonObject();
-        if (ValueExpression == null) throw new System.InvalidOperationException("Trying to serialize when ValueExpression is null");
-        if (MaxExpression == null) throw new System.InvalidOperationException("Trying to serialize when MaxExpression is null");
         _AddExprOrLit(json, "value", ValueExpression);
         _AddExprOrLit(json, "max", MaxExpression);
         _AddExprOrLit(json, "min", MinExpression);
@@ -233,18 +231,18 @@ public sealed class ScreenValueController : ControllerBase
             {
                 result.ValueExpression = new HardwareInfoLiteralExpression((float)d);
             }
-            else if (value is string)
+            else if (value is string svalue && !string.IsNullOrWhiteSpace(svalue))
             {
                 result.ValueExpression = HardwareInfoExpression.Parse((string)value);
             }
             else
             {
-                throw new ScreenParseException($"Screen value entry \"value\" field must be numeric or an expression.", 0, 0, 0);
+                result.ValueExpression = new HardwareInfoEmptyExpression();
             }
         }
         else
         {
-            throw new ScreenParseException($"Screen value entry must have a \"value\" field.", 0, 0, 0);
+            result.ValueExpression = new HardwareInfoEmptyExpression();
         }
         if (json.TryGetValue("max", out var max))
         {
@@ -252,18 +250,18 @@ public sealed class ScreenValueController : ControllerBase
             {
                 result.MaxExpression = new HardwareInfoLiteralExpression((float)d);
             }
-            else if (max is string)
+            else if (max is string smax && !string.IsNullOrWhiteSpace(smax))
             {
                 result.MaxExpression = HardwareInfoExpression.Parse((string)max);
             }
             else
             {
-                throw new ScreenParseException($"Screen value entry \"max\" field must be numeric or an expression.", 0, 0, 0);
+                result.MaxExpression = new HardwareInfoEmptyExpression();
             }
         }
         else
         {
-            throw new ScreenParseException($"Screen value entry must have a \"max\" field.", 0, 0, 0);
+            result.MaxExpression = new HardwareInfoEmptyExpression();
         }
         if (json.TryGetValue("min", out var min))
         {
@@ -271,13 +269,13 @@ public sealed class ScreenValueController : ControllerBase
             {
                 result.MinExpression = new HardwareInfoLiteralExpression((float)d);
             }
-            else if (min is string)
+            else if (min is string smin && !string.IsNullOrWhiteSpace(smin))
             {
                 result.MinExpression = HardwareInfoExpression.Parse((string)min);
             }
             else
             {
-                throw new ScreenParseException($"Screen value entry \"min\" field must be numeric or an expression.", 0, 0, 0);
+                result.MinExpression = new HardwareInfoEmptyExpression();
             }
         }
         else

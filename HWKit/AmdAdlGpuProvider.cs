@@ -68,6 +68,9 @@ namespace HWKit
                 }
                 ++i;
             }
+            // Sticky across adapters: one APU anywhere in the machine is enough to
+            // make the CPU rows meaningful and to switch suggestions to categorized.
+            _isApu |= isApu;
             i = 0;
             while (support.usSensors[i] != 0)
             {
@@ -87,31 +90,31 @@ namespace HWKit
                         Publish($"/soc/{index}/clock", "MHz", () => accessor.SocClock);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_MEM:
-                        Publish($"/gpu/{index}/temperature/ram", "°", () => accessor.RamTemperature);
+                        Publish($"/gpu/{index}/vram/temperature", "°", () => accessor.RamTemperature);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/temperature/ram", "°", () => accessor.RamTemperature);
+                            Publish($"/cpu/{index}/ram/temperature", "°", () => accessor.RamTemperature);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_RPM:
-                        Publish($"/gpu/{index}/speed/fan", "RPM", () => accessor.FanSpeed);
+                        Publish($"/gpu/{index}/fan/speed", "RPM", () => accessor.FanSpeed);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/speed/fan", "RPM", () => accessor.FanSpeed);
+                            Publish($"/cpu/{index}/fan/speed", "RPM", () => accessor.FanSpeed);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_FAN_PERCENTAGE:
-                        Publish($"/gpu/{index}/load/fan", "%", () => accessor.FanLoad);
+                        Publish($"/gpu/{index}/fan/load", "%", () => accessor.FanLoad);
                         if (isApu)
                         {
-                            Publish($"/cpu/{index}/load/fan", "%", () => accessor.FanLoad);
+                            Publish($"/cpu/{index}/fan/load", "%", () => accessor.FanLoad);
                         }
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_GFX:
                         Publish($"/gpu/{index}/load", "%", () => accessor.Load);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_INFO_ACTIVITY_MEM:
-                        Publish($"/gpu/{index}/load/ram", "%", () => accessor.RamLoad);
+                        Publish($"/gpu/{index}/vram/load", "%", () => accessor.RamLoad);
                         break;
                     case ADL_PMLOG_SENSORS.ADL_PMLOG_TEMPERATURE_GFX:
                         Publish($"/gpu/{index}/temperature", "°", () => accessor.Temperature);
@@ -131,12 +134,15 @@ namespace HWKit
             }
         }
         private bool _started;
+        private bool _hasAmd = false;
+        private volatile bool _isApu;
         private List<(int, uint)> _devices = new List<(int, uint)>();
         private bool DoStart()
         {
             int ADLRet = -1;
             int NumberOfAdapters = 0;
             _devices.Clear();
+            _isApu = false;
             if (null != ADL.ADL_Main_Control_Create)
             {
                 // Second parameter is 1: Get only the present adapters
@@ -253,7 +259,7 @@ namespace HWKit
             {
                 return;
             }
-            DoStart();
+            _hasAmd = DoStart();
             _started = true;
         }
         protected override void OnStop()
@@ -275,6 +281,7 @@ namespace HWKit
                 }
             }
             _devices.Clear();
+            _isApu = false;
             _started = false; // even on error this should go false.
             if (null != ADL.ADL_Main_Control_Destroy)
             {
@@ -285,6 +292,125 @@ namespace HWKit
         protected override string GetDescription()
         {
             return "Provides information for AMD APUs or installed AMD GPUs";
+        }
+
+        // Suggestion table. Each row gets a fresh identity object as its key; the
+        // expression is looked up by that identity in ApplySuggestion. Add a row here
+        // and both overrides pick it up -- there is no second place to edit.
+        //
+        // Category is authored here but is *advisory*: it only survives on an APU
+        // system, where GPU/CPU/SOC is a meaningful split. On a discrete-only board
+        // every row is presented uncategorized (null), matching the Nvidia provider.
+        // Rows tagged "CPU" describe paths that only exist behind an APU's
+        // ADL_PMLOG_CLK_CPUCLK / TEMPERATURE_CPU sensors, so they are dropped
+        // entirely when no APU is present. GPU and SOC rows are always offered.
+        sealed record SuggestionDef(object Key, string Title, string Description, string Expression, string? Category);
+
+        static readonly SuggestionDef[] _suggestionDefs = BuildSuggestions();
+
+        // Two prebuilt public views over the same defs; the only difference is whether
+        // Category is carried through and whether the CPU rows survive the filter.
+        static readonly HardwareInfoSuggestion[] _apuSuggestionList =
+            Array.ConvertAll(_suggestionDefs, d => new HardwareInfoSuggestion(d.Key, d.Title, d.Description, d.Category));
+        static readonly HardwareInfoSuggestion[] _gpuOnlySuggestionList =
+            Array.ConvertAll(
+                Array.FindAll(_suggestionDefs, d => d.Category != "CPU"),
+                d => new HardwareInfoSuggestion(d.Key, d.Title, d.Description, null));
+
+        static SuggestionDef[] BuildSuggestions()
+        {
+            static SuggestionDef D(string? cat, string title, string desc, string expr)
+                => new(new object(), title, desc, expr, cat);
+            return
+            [
+                // ---- GPU ----
+                D("GPU","All GPU temperatures",
+                  "Retrieves the temperatures for every AMD GPU in degrees Celsius",
+                  "'^/amd_adl/gpu/[0-9]+/temperature$'"),
+                D("GPU","All GPU loads",
+                  "Retrieves the load for every AMD GPU as percentages",
+                  "'^/amd_adl/gpu/[0-9]+/load$'"),
+                D("GPU","All GPU frequencies",
+                  "Retrieves the graphics clock frequencies for every AMD GPU in MHz",
+                  "'^/amd_adl/gpu/[0-9]+/clock$'"),
+                D("GPU","All VRAM loads",
+                  "Retrieves the load on the VRAM for all AMD GPUs as percentages",
+                  "'^/amd_adl/gpu/[0-9]+/vram/load$'"),
+                D("GPU","All VRAM clocks",
+                  "Retrieves the VRAM clocks for all AMD GPUs in MHz",
+                  "'^/amd_adl/gpu/[0-9]+/clock/ram$'"),
+                D("GPU","All VRAM temperatures",
+                  "Retrieves the VRAM temperatures for all AMD GPUs in degrees Celsius",
+                  "'^/amd_adl/gpu/[0-9]+/vram/temperature$'"),
+                D("GPU","All fan loads",
+                  "Retrieves the fan load for every AMD GPU as percentages",
+                  "'^/amd_adl/gpu/[0-9]+/fan/load$'"),
+                D("GPU","All fan speeds",
+                  "Retrieves the fan speed for every AMD GPU in RPM",
+                  "'^/amd_adl/gpu/[0-9]+/fan/speed$'"),
+                D("GPU","Hottest GPU",
+                  "Retrieves the temperature of the hottest AMD GPU in degrees Celsius",
+                  "max('^/amd_adl/gpu/[0-9]+/temperature$')"),
+                D("GPU","Busiest GPU",
+                  "Retrieves the load of the most heavily loaded AMD GPU as a percentage",
+                  "max('^/amd_adl/gpu/[0-9]+/load$')"),
+
+                // ---- SOC ----
+                // Published on discrete boards as well as APUs, so never filtered out.
+                D("SOC","All SOC clocks",
+                  "Retrieves the SOC clocks for all AMD devices in MHz",
+                  "'^/amd_adl/soc/[0-9]+/clock$'"),
+                D("SOC","SOC temperature",
+                  "Retrieves the temperature of the SOC in degrees Celsius",
+                  "/amd_adl/soc/temperature"),
+
+                // ---- CPU (APU only) ----
+                D("CPU","CPU temperature",
+                  "Retrieves the temperature of the APU's CPU in degrees Celsius",
+                  "/amd_adl/cpu/temperature"),
+                D("CPU","All CPU frequencies",
+                  "Retrieves the core clock frequencies for every AMD APU in MHz",
+                  "'^/amd_adl/cpu/[0-9]+/clock$'"),
+                D("CPU","All CPU memory clocks",
+                  "Retrieves the memory clocks for every AMD APU in MHz",
+                  "'^/amd_adl/cpu/[0-9]+/clock/ram$'"),
+                D("CPU","All CPU memory temperatures",
+                  "Retrieves the memory temperatures for every AMD APU in degrees Celsius",
+                  "'^/amd_adl/cpu/[0-9]+/ram/temperature$'"),
+                D("CPU","All CPU fan loads",
+                  "Retrieves the fan load for every AMD APU as percentages",
+                  "'^/amd_adl/cpu/[0-9]+/fan/load$'"),
+                D("CPU","All CPU fan speeds",
+                  "Retrieves the fan speed for every AMD APU in RPM",
+                  "'^/amd_adl/cpu/[0-9]+/fan/speed$'"),
+            ];
+        }
+
+        public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
+        {
+
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
+            {
+                if (_hasAmd)
+                {
+                    return _isApu ? _apuSuggestionList : _gpuOnlySuggestionList;
+                }
+            }
+            return base.GetSuggestions(context);
+        }
+
+        public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
+        {
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
+            {
+                if (_hasAmd)
+                {
+                    foreach (var d in _suggestionDefs)
+                        if (ReferenceEquals(d.Key, key))
+                            return HardwareInfoExpression.Parse(d.Expression);
+                }
+            }
+            return base.ApplySuggestion(context, key);
         }
     }
 }

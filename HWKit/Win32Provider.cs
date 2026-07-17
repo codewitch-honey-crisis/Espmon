@@ -1117,14 +1117,14 @@ namespace HWKit
 
         public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
                 return _suggestionList;
             return base.GetSuggestions(context);
         }
 
         public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
             {
                 foreach (var d in _suggestionDefs)
                     if (ReferenceEquals(d.Key, key))

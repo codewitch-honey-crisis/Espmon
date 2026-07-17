@@ -44,10 +44,10 @@ namespace HWKit
                 Publish($"/gpu/{i}/temperature", "°", () => _started?accessor.Temperature:float.NaN);
                 Publish($"/gpu/{i}/load","%", () => _started?accessor.Load:float.NaN);
                 Publish($"/gpu/{i}/clock","MHz", () => _started? accessor.Frequency : float.NaN);
-                Publish($"/gpu/{i}/load/vram","%", () => _started ? accessor.VramLoad : float.NaN);
-                Publish($"/gpu/{i}/clock/vram","MHz", () => _started ? accessor.VramFrequency : float.NaN);
-                Publish($"/gpu/{i}/clock/sm", "MHz", () => _started ? accessor.SMFrequency : float.NaN);
-                Publish($"/gpu/{i}/load/fan", "%",() => _started ? accessor.FanLoad : float.NaN);
+                Publish($"/gpu/{i}/vram/load/","%", () => _started ? accessor.VramLoad : float.NaN);
+                Publish($"/gpu/{i}/vram/clock","MHz", () => _started ? accessor.VramFrequency : float.NaN);
+                Publish($"/gpu/{i}/sm/clock", "MHz", () => _started ? accessor.SMFrequency : float.NaN);
+                Publish($"/gpu/{i}/fan/load", "%",() => _started ? accessor.FanLoad : float.NaN);
                 
             }
             _started = true;
@@ -70,6 +70,66 @@ namespace HWKit
         protected override string GetDescription()
         {
             return "Provides various information about installed Nvidia GPUs";
+        }
+        private static readonly object _allGpuTempsKey = new object();
+        private static readonly object _allGpuLoadsKey = new object();
+        private static readonly object _allGpuClocksKey = new object();
+        private static readonly object _allVramLoadsKey = new object();
+        private static readonly object _allVramClocksKey = new object();
+        private static readonly object _allGpuSMClocksKey = new object();
+        private static readonly object _allGpuFanLoadsKey = new object();
+        public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
+        {
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
+            {
+                HardwareInfoSuggestion[] result = [
+                    new HardwareInfoSuggestion(_allGpuTempsKey,"All GPU temperatures","Retrieves the temperatures for every Nvidia GPU in degrees Celsius",null),
+                    new HardwareInfoSuggestion(_allGpuLoadsKey,"All GPU loads","Retrieves the load for every Nvidia GPU as percentages",null),
+                    new HardwareInfoSuggestion(_allGpuClocksKey,"All GPU frequencies","Retrieves the clock frequencies for every Nvidia GPU in MHz",null),
+                    new HardwareInfoSuggestion(_allVramLoadsKey,"All VRAM loads","Retrieves the load on the VRAM for all Nvidia GPUs as percentages",null),
+                    new HardwareInfoSuggestion(_allVramClocksKey,"All VRAM clocks","Retrieves the VRAM clocks for all Nvidia GPUs in MHz",null),
+                    new HardwareInfoSuggestion(_allGpuSMClocksKey,"All SM clocks","Retrieves the SM clocks for all Nvidia GPUs in MHz",null),
+                    new HardwareInfoSuggestion(_allGpuFanLoadsKey,"All fan loads","Retrieves the fan load for every Nvidia GPU as percentages",null)
+                ];
+                return result;
+            }
+            return base.GetSuggestions(context);
+        }
+        public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
+        {
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
+            {
+                if (key == _allGpuTempsKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/temperature$'");
+                }
+                if (key == _allGpuLoadsKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/load$'");
+                }
+                if (key == _allGpuClocksKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/clock$'");
+                }
+                if (key == _allVramLoadsKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/vram/load$'");
+                }
+                if (key == _allVramClocksKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/vram/clock$'");
+                }
+                if (key == _allGpuSMClocksKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/sm/clock$'");
+                }
+                if (key == _allGpuFanLoadsKey)
+                {
+                    return HardwareInfoExpression.Parse("'^/nvidia_nvml/gpu/[0-9]+/fan/load$'");
+                }
+
+            }
+            return base.ApplySuggestion(context, key);
         }
     }
 }

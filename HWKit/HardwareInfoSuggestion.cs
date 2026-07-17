@@ -31,64 +31,74 @@ public sealed class HardwareInfoSuggestion
         Description = description;
         Category = category;
     }
+    private static void FillSuggestions(HardwareInfoSuggestionContext context, bool isReduced, IList<HardwareInfoSuggestion> result)
+    {
+        string? fn = null;
+        if (context.Expression is HardwareInfoInvokeExpression invoke)
+        {
+            fn = invoke.Function.Name;
+        }
+        if (!isReduced)
+        {
+            if (fn == null || !fn.StartsWith("round", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_roundKey, "Round to a whole number", "Rounds each result of the expression to a whole number", null));
+                result.Add(new HardwareInfoSuggestion(_round1Key, "Round to a x.x", "Rounds each result of the expression to a fractional number", null));
+            }
+            if (fn == null || !fn.Equals("avg", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_averageKey, "Take the average", "Computes the average of the expression", null));
+            }
+            if (fn == null || !fn.Equals("sum", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_sumKey, "Take the sum", "Computes the sum of the expression", null));
+            }
+            if (fn == null || !fn.Equals("first", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_firstKey, "Take the first item", "Gets the first result of the expression", null));
+            }
+            if (fn == null || !fn.Equals("last", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_lastKey, "Take the last item", "Gets the last result of the expression", null));
+            }
+            if (fn == null || !fn.Equals("min", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_minKey, "Take the minimum value", "Gets the minimum value result of the expression", null));
+            }
+            if (fn == null || !fn.Equals("max", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_maxKey, "Take the maximum value", "Gets the maximum value result of the expression", null));
+            }
+        }
+        else
+        {
+            if (fn == null || !fn.StartsWith("round", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_roundKey, "Round to a whole number", "Rounds the result of the expression to a whole number", null));
+                result.Add(new HardwareInfoSuggestion(_round1Key, "Round to a x.x", "Rounds the result of the expression to a fractional number", null));
+            }
+            if (fn == null || !fn.Equals("past", StringComparison.Ordinal))
+            {
+                result.Add(new HardwareInfoSuggestion(_past30SecKey, "30 second history", "Gets the results of the expression for the past 30 seconds", null));
+                result.Add(new HardwareInfoSuggestion(_past1MinKey, "1 minute history", "Gets the results of the expression for the past minute", null));
+                result.Add(new HardwareInfoSuggestion(_past5MinKey, "5 minute history", "Gets the results of the expression for the past 5 minutes", null));
+            }
+        }
+    }
     public static HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
     {
         var result = new List<HardwareInfoSuggestion>();
-        if (context.Expression != null && !context.Expression.IsEmpty && context.ParseException == null)
+        if (context.ParseException == null)
         {
-            string? fn = null;
-            if (context.Expression is HardwareInfoInvokeExpression invoke)
+            if (context.Expression != null && !context.Expression.IsEmpty)
             {
-                fn = invoke.Function.Name;
-            }
-            if (!context.Expression.IsReduced)
-            {
-                if (fn == null || !fn.StartsWith("round",StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_roundKey, "Round to a whole number", "Rounds each result of the expression to a whole number", null));
-                    result.Add(new HardwareInfoSuggestion(_round1Key, "Round to a x.x", "Rounds each result of the expression to a fractional number", null));
-                }
-                if (fn==null || !fn.Equals("avg", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_averageKey, "Take the average", "Computes the average of the expression", null));
-                }
-                if (fn == null || !fn.Equals("sum", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_sumKey, "Take the sum", "Computes the sum of the expression", null));
-                }
-                if (fn == null || !fn.Equals("first", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_firstKey, "Take the first item", "Gets the first result of the expression", null));
-                }
-                if (fn == null || !fn.Equals("last", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_lastKey, "Take the last item", "Gets the last result of the expression", null));
-                }
-                if (fn == null || !fn.Equals("min", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_minKey, "Take the minimum value", "Gets the minimum value result of the expression", null));
-                }
-                if (fn == null || !fn.Equals("max", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_maxKey, "Take the maximum value", "Gets the maximum value result of the expression", null));
-                }
+                FillSuggestions(context, context.Expression.IsReduced, result);
             }
             else
             {
-                if (fn == null || !fn.StartsWith("round", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_roundKey, "Round to a whole number", "Rounds the result of the expression to a whole number", null));
-                    result.Add(new HardwareInfoSuggestion(_round1Key, "Round to a x.x", "Rounds the result of the expression to a fractional number", null));
-                }
-                if (fn == null || !fn.Equals("past", StringComparison.Ordinal))
-                {
-                    result.Add(new HardwareInfoSuggestion(_past30SecKey, "30 second history", "Gets the results of the expression for the past 30 seconds", null));
-                    result.Add(new HardwareInfoSuggestion(_past1MinKey, "1 minute history", "Gets the results of the expression for the past minute", null));
-                    result.Add(new HardwareInfoSuggestion(_past5MinKey, "5 minute history", "Gets the results of the expression for the past 5 minutes", null));
-                }
+                FillSuggestions(context, false, result);
             }
         }
-
         return result.ToArray();
     }
     public static HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)

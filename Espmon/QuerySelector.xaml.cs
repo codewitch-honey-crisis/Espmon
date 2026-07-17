@@ -300,53 +300,67 @@ namespace Espmon
         }
 
         /// <summary>
-        /// The only place evaluation happens: refresh the preview snapshot and the dropdown
-        /// candidates, then notify. The getters never evaluate, so binding re-reads are free.
+        /// One Evaluate per tick. The preview (expression exactly as typed) and the dropdown
+        /// candidates (prefix match) used to be two separate calls because they ask different
+        /// questions. They can share: a PathExpression matches exactly, and any path matches its
+        /// own "path + .*" regex, so the prefix result set contains the preview's. We evaluate the
+        /// wider query and sieve the preview back out of it. Any non-path expression has no
+        /// dropdown at all, so that case is a single call either way.
         /// </summary>
-        private void Refresh()
+        private void EvaluateOnce(out List<HardwareInfoEntry> preview, out List<HardwareInfoEntry> candidates)
         {
-            List<HardwareInfoEntry> fresh;
-            try
+            preview = new List<HardwareInfoEntry>();
+            candidates = new List<HardwareInfoEntry>();
+
+            if (Session == null) return;
+
+            if (Expression is not HardwareInfoPathExpression path)
             {
                 // 51, so we can tell "exactly 50" from "50 and then some".
-                fresh = Run().Take(51).ToList();
+                preview = Session.Parent.Evaluate(Expression ?? new HardwareInfoEmptyExpression())
+                                        .Take(51).ToList();
+                return;
+            }
+
+            var exact = path.Path ?? string.Empty;
+
+            // Single pass over one enumerable. Note we don't stop at 50: the dropdown caps there,
+            // but the exact entry can sit past the cap and the preview still needs it.
+            foreach (var entry in Session.Parent.Evaluate(ToPrefixMatch(path)))
+            {
+                if (candidates.Count < 50) candidates.Add(entry);
+
+                if (preview.Count < 51 && string.Equals(entry.Path, exact, StringComparison.Ordinal))
+                    preview.Add(entry);
+            }
+        }
+
+        private void Refresh()
+        {
+            List<HardwareInfoEntry> fresh, candidates;
+            try
+            {
+                // ToPrefixMatch throws on a path carrying regex syntax; that lands here now too,
+                // which degrades to an empty preview + empty dropdown rather than a crash.
+                EvaluateOnce(out fresh, out candidates);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Evaluate failed: {ex.Message}");
                 fresh = new List<HardwareInfoEntry>();
+                candidates = new List<HardwareInfoEntry>();
             }
 
             _hasMoreResults = fresh.Count > 50;
             if (_hasMoreResults) fresh.RemoveAt(50);
 
             _results = fresh;
-            RefreshSuggestions();
+            SyncProjections(candidates);
 
             OnPropertyChanged(nameof(MatchCountText));
             OnPropertyChanged(nameof(EvaluatedText));
         }
-
-        /// <summary>
-        /// A second evaluation, separate from the preview because it asks a different question.
-        /// Runs on the poll too, so an open dropdown keeps showing live values rather than the
-        /// numbers from whenever the user last pressed a key.
-        /// </summary>
-        private void RefreshSuggestions()
-        {
-            List<HardwareInfoEntry> candidates;
-            try
-            {
-                candidates = RunSuggestions().Take(50).ToList();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Suggestion evaluate failed: {ex.Message}");
-                candidates = new List<HardwareInfoEntry>();
-            }
-
-            SyncProjections(candidates);
-        }
+       
 
         /// <summary>
         /// Starts or stops the poll, and clears the preview when there's nothing to poll.
@@ -633,11 +647,10 @@ namespace Espmon
             };
         }
 
-
         private MenuFlyoutItem MakeSuggestionItem(
-    IHardwareInfoProvider? provider,
+    IHardwareInfoProvider provider,
     HardwareInfoSuggestionContext context,
-    HardwareInfoSuggestion suggestion)   // whatever your suggestion type is
+    HardwareInfoSuggestion suggestion)
         {
             var item = new MenuFlyoutItem
             {
@@ -647,84 +660,204 @@ namespace Espmon
 
             item.Click += (s, clickArgs) =>
             {
-                if (provider != null)
-                {
-                    var expr = provider.ApplySuggestion(context, item.Tag);
-                    SuggestBox.Text = expr?.ToString() ?? "";
-                    SuggestBox.Focus(FocusState.Programmatic);
-                } else
-                {
-                    var expr = HardwareInfoSuggestion.ApplySuggestion(context, item.Tag);
-                    SuggestBox.Text = expr?.ToString() ?? "";
-                    SuggestBox.Focus(FocusState.Programmatic);
-                }
+                var expr = provider.ApplySuggestion(context, item.Tag);
+                SuggestBox.Text = expr?.ToString() ?? "";
+                SuggestBox.Focus(FocusState.Programmatic);
             };
 
             return item;
+        }
+        /// <summary>
+        /// The provider-independent transforms (round/avg/past/…). These come from the static
+        /// HardwareInfoSuggestion, not from any provider — HardwareInfoProviderBase deliberately
+        /// returns nothing, so routing them through a provider would just duplicate them per header.
+        /// </summary>
+        private MenuFlyoutItem? MakeExpressionItem(
+            HardwareInfoSuggestionContext context,
+            HardwareInfoSuggestion suggestion)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Tag = suggestion.Key,
+                Text = suggestion.Action
+            };
+
+            item.Click += (s, clickArgs) =>
+            {
+                var expr = HardwareInfoSuggestion.ApplySuggestion(context, item.Tag);
+                if (expr == null) return;   // unrecognized key: leave their text alone, don't blank it
+                SuggestBox.Text = expr.ToString();
+                SuggestBox.Focus(FocusState.Programmatic);
+            };
+
+            return item;
+        }
+
+        /// <summary>
+        /// An item that unions the provider's answer-for-a-blank-box onto the current expression
+        /// instead of replacing it. Returns null when the suggestion doesn't survive the probe —
+        /// see the ContainsEmpty note below.
+        /// </summary>
+        private MenuFlyoutItem? MakeUnionItem(
+            IHardwareInfoProvider provider,
+            HardwareInfoSuggestionContext probeContext,
+            HardwareInfoSuggestion suggestion,
+            HardwareInfoExpression current)
+        {
+            var addition = provider.ApplySuggestion(probeContext, suggestion.Key);
+
+            // The probe's Expression is empty, so anything the provider built *around* it (avg(),
+            // round(), past(30 sec, )) comes back with an empty node still in it. Those are the
+            // generic base-class suggestions, not a self-contained query — drop them.
+            if (addition == null || ContainsEmpty(addition)) return null;
+
+            // Union is lowest-precedence and left-associative, and its ToString parenthesizes a
+            // nested union on the right, so building it here needs no bracketing of our own.
+            var text = new HardwareInfoUnionExpression(current.Clone(), addition).ToString();
+
+            var item = new MenuFlyoutItem
+            {
+                Tag = suggestion.Key,
+                Text = suggestion.Action
+            };
+
+            // Resolved at open time on purpose: the expression can't change while the flyout is up.
+            item.Click += (s, clickArgs) =>
+            {
+                SuggestBox.Text = text;
+                SuggestBox.Focus(FocusState.Programmatic);
+            };
+
+            return item;
+        }
+
+        private static bool ContainsEmpty(HardwareInfoExpression? expr) => expr switch
+        {
+            null => true,
+            HardwareInfoEmptyExpression => true,
+            HardwareInfoUnaryExpression u => ContainsEmpty(u.Expression),
+            HardwareInfoBinaryExpression b => ContainsEmpty(b.Left) || ContainsEmpty(b.Right),
+            HardwareInfoNAryExpression n => n.Children.Any(ContainsEmpty),
+            _ => false
+        };
+
+        /// <summary>
+        /// Uncategorized items first in provider order, then one submenu per category, alphabetical.
+        /// The factory may return null to reject a suggestion; a category whose every member is
+        /// rejected produces no submenu.
+        /// </summary>
+        private List<MenuFlyoutItemBase> BuildGroupItems(
+            IEnumerable<HardwareInfoSuggestion> suggestions,
+            Func<HardwareInfoSuggestion, MenuFlyoutItem?> factory)
+        {
+            var all = suggestions.ToList();
+            var groupItems = new List<MenuFlyoutItemBase>();
+
+            foreach (var suggestion in all.Where(s => string.IsNullOrWhiteSpace(s.Category)))
+            {
+                var item = factory(suggestion);
+                if (item != null) groupItems.Add(item);
+            }
+
+            var categorized = all
+                .Where(s => !string.IsNullOrWhiteSpace(s.Category))
+                .GroupBy(s => s.Category!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase);
+
+            foreach (var categoryGroup in categorized)
+            {
+                var subMenu = new MenuFlyoutSubItem { Text = categoryGroup.Key };
+
+                foreach (var suggestion in categoryGroup)
+                {
+                    var item = factory(suggestion);
+                    if (item != null) subMenu.Items.Add(item);
+                }
+
+                if (subMenu.Items.Count == 0) continue;
+                groupItems.Add(subMenu);
+            }
+
+            return groupItems;
+        }
+
+        /// <summary>Header + items, with a rule between groups but never above the first one.</summary>
+        private void AddGroup(string? header, List<MenuFlyoutItemBase> groupItems)
+        {
+            if (groupItems.Count == 0) return;   // a provider that yields nothing leaves no dangling header
+
+            if (ChevronFlyout.Items.Count > 0)
+            {
+                ChevronFlyout.Items.Add(new MenuFlyoutSeparator());
+            }
+            if (!string.IsNullOrEmpty(header))
+            {
+                ChevronFlyout.Items.Add(MakeHeader(header));
+            }
+            foreach (var item in groupItems)
+            {
+                ChevronFlyout.Items.Add(item);
+            }
         }
 
         private void ChevronFlyout_Opening(object sender, object e)
         {
             ChevronFlyout.Items.Clear();
 
-            // Matches is the snapshot itself now and is never null, so the old null check went away.
-            if (Session != null && Session.Parent is LocalPortController controller)
+            if (Session != null && Matches != null && Session.Parent is LocalPortController controller)
             {
                 var providers = controller.GetHardwareProviders();
-                var context = new HardwareInfoSuggestionContext(
-                    Expression,
-                    Matches.ToList(),
-                    ValidationException as HardwareInfoParseException,
-                    providers);
-                var suggestions = HardwareInfoSuggestion.GetSuggestions(context);
-                foreach(var suggestion in suggestions)
-                {
-                    ChevronFlyout.Items.Add(MakeSuggestionItem(null, context, suggestion));
-                }
+                var matches = Matches.ToList();
+                var parseException = ValidationException as HardwareInfoParseException;
+
+                var context = new HardwareInfoSuggestionContext(Expression, matches, parseException, providers);
+
+                var current = Expression;
+                var hasExpression = current != null && !current.IsEmpty && parseException == null;
+
+                // Normal pass: whatever the providers offer for the expression as it actually stands.
+                // With a non-empty expression most of these come back empty (HardwareInfoProviderBase
+                // returns nothing by default), which is fine — AddGroup drops headerless groups.
                 foreach (var provider in providers)
                 {
-                    // Buffer first: a provider that yields nothing must not leave a dangling header.
-                    var groupItems = new List<MenuFlyoutItemBase>();
+                    AddGroup(
+                        provider.DisplayName,
+                        BuildGroupItems(
+                            provider.GetSuggestions(context),
+                            s => MakeSuggestionItem(provider, context, s)));
+                }
 
-                    suggestions = provider.GetSuggestions(context);
+                // Expression-level transforms (round/avg/past/…). Provider-independent, so they get one
+                // group of their own rather than being repeated under every provider header.
+                //
+                // Gated on a real expression: with an empty box FillSuggestions still offers "Take the
+                // average", but ApplySuggestion would wrap the empty expression and hand back avg().
+                if (hasExpression)
+                {
+                    AddGroup(
+                        null,
+                        BuildGroupItems(
+                            HardwareInfoSuggestion.GetSuggestions(context),
+                            s => MakeExpressionItem(context, s)));
+                }
 
-                    // Uncategorized go straight to the group root, in provider order.
-                    foreach (var suggestion in suggestions.Where(s => string.IsNullOrWhiteSpace(s.Category)))
+                // Union pass. Only meaningful when there's something to union WITH and it parsed —
+                // otherwise the normal pass already surfaced these same root suggestions.
+                if (hasExpression)
+                {
+                    // The lie that makes this work: providers key off IsEmpty, so an empty-expression
+                    // context gets us their root suggestions verbatim. We keep the real matches and a
+                    // null ParseException so nothing else in the provider reads as inconsistent.
+                    var probe = new HardwareInfoSuggestionContext(
+                        new HardwareInfoEmptyExpression(), matches, null, providers);
+
+                    foreach (var provider in providers)
                     {
-                        groupItems.Add(MakeSuggestionItem(provider, context, suggestion));
-                    }
-
-                    // Then one submenu per category, alphabetical, case-insensitive grouping.
-                    var categorized = suggestions
-                        .Where(s => !string.IsNullOrWhiteSpace(s.Category))
-                        .GroupBy(s => s.Category!.Trim(), StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase);
-
-                    foreach (var categoryGroup in categorized)
-                    {
-                        // g.Key is the first spelling encountered; that's the display name.
-                        var subMenu = new MenuFlyoutSubItem { Text = categoryGroup.Key };
-
-                        foreach (var suggestion in categoryGroup)
-                        {
-                            subMenu.Items.Add(MakeSuggestionItem(provider, context, suggestion));
-                        }
-
-                        groupItems.Add(subMenu);
-                    }
-
-                    if (groupItems.Count == 0) continue;
-
-                    // Rule between groups, but never above the first one.
-                    if (ChevronFlyout.Items.Count > 0)
-                    {
-                        ChevronFlyout.Items.Add(new MenuFlyoutSeparator());
-                    }
-
-                    ChevronFlyout.Items.Add(MakeHeader(provider.DisplayName));
-                    foreach (var item in groupItems)
-                    {
-                        ChevronFlyout.Items.Add(item);
+                        AddGroup(
+                            $"Union w/ {provider.DisplayName}",
+                            BuildGroupItems(
+                                provider.GetSuggestions(probe),
+                                s => MakeUnionItem(provider, probe, s, current!)));
                     }
                 }
             }
@@ -734,7 +867,6 @@ namespace Espmon
                 ChevronFlyout.Items.Add(new MenuFlyoutItem { Text = "No suggestions available", IsEnabled = false });
             }
         }
-
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

@@ -570,7 +570,7 @@ namespace HWKit
         private static readonly object _maxRenderKey = new object();
         public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
             {
                 HardwareInfoSuggestion[] result = [
                     new HardwareInfoSuggestion(_frameRateKey,"Frame rate", "Gets the active frame rate in frames per second",null),
@@ -585,7 +585,7 @@ namespace HWKit
         }
         public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
             {
                 if (key == _frameRateKey)
                 {

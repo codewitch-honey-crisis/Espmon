@@ -342,7 +342,7 @@ namespace HWKit
         private static readonly object _maxSafeCpuTempsKey = new object();
         public override HardwareInfoSuggestion[] GetSuggestions(HardwareInfoSuggestionContext context)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
             {
                 HardwareInfoSuggestion[] result = [
                     new HardwareInfoSuggestion(_allCoreTempsKey,"All core temperatures","Retrieves the temperatures for every core across all CPUs in degrees Celsius","Core"),
@@ -357,7 +357,7 @@ namespace HWKit
         }
         public override HardwareInfoExpression? ApplySuggestion(HardwareInfoSuggestionContext context, object key)
         {
-            if (context.Expression == null && context.ParseException == null)
+            if ((context.Expression == null || context.Expression.IsEmpty) && context.ParseException == null)
             {
                 if (key == _allCoreTempsKey)
                 {
