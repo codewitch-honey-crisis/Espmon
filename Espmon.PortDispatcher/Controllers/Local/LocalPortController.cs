@@ -57,7 +57,28 @@ public class LocalPortController : PortController
             arr = (JsonArray?)JsonArray.ReadFrom(reader);
         }
         if (arr == null) throw new NullReferenceException(); // shouldn't happen
-        var entries = LocalProviderController.FromJson(this, arr);
+        LocalProviderEntry[]? entries = null;
+        try
+        {
+            entries = LocalProviderController.FromJson(this, arr);
+        }
+        catch
+        {
+            // recover from bad providers file
+            try
+            {
+                File.Delete(filePath);
+            }
+            catch { }
+            EnsureDefaultProviders();
+            using (var reader = new StreamReader(filePath, Encoding.UTF8))
+            {
+                arr = (JsonArray?)JsonArray.ReadFrom(reader);
+            }
+            if (arr == null) throw new NullReferenceException(); // shouldn't happen
+            entries = LocalProviderController.FromJson(this, arr);
+        }
+
         var result = new ProviderController[entries.Length];
         for(var i = 0;i<result.Length;++i)
         {
