@@ -6,10 +6,10 @@
 #include <gfx_positioning.hpp>
 namespace gfx {
 namespace helpers {
-bool draw_translate(spoint16 in, point16 *out);
-bool draw_translate(size16 in, ssize16 *out);
-bool draw_translate(const srect16 &in, rect16 *out);
-bool draw_translate_adjust(const srect16 &in, rect16 *out);
+bool draw_translate(spoint16 in, point16* out);
+bool draw_translate(size16 in, ssize16* out);
+bool draw_translate(const srect16& in, rect16* out);
+bool draw_translate_adjust(const srect16& in, rect16* out);
 }
 }
 #include <gfx_draw_point.hpp>
@@ -19,8 +19,8 @@ namespace helpers {
 template <typename Source, typename Destination>
 struct blend_helper {
     static constexpr gfx_result do_blend(
-        const Source &src, typename Source::pixel_type spx, Destination &dst,
-        point16 dstpnt, typename Destination::pixel_type *out_px) {
+        const Source& src, typename Source::pixel_type spx, Destination& dst,
+        point16 dstpnt, typename Destination::pixel_type* out_px) {
         gfx_result r = gfx_result::success;
         typename Destination::pixel_type bgpx;
         r = dst.point(point16(dstpnt), &bgpx);
@@ -36,9 +36,10 @@ struct blend_helper {
 };
 template <typename Destination, typename Source, bool HasAlpha>
 struct blender {
-    static gfx_result point(Destination &destination, point16 pt,
-                            Source &source, point16 spt,
+    static gfx_result point(Destination& destination, point16 pt,
+                            Source& source, point16 spt,
                             typename Source::pixel_type pixel) {
+        (void)spt;
         typename Destination::pixel_type px;
         gfx_result r = convert_palette(destination, source, pixel, &px);
         if (gfx_result::success != r) {
@@ -49,12 +50,12 @@ struct blender {
 };
 template <typename Destination, typename Source>
 struct blender<Destination, Source, true> {
-    static gfx_result point(Destination &destination, point16 pt,
-                            Source &source, point16 spt,
+    static gfx_result point(Destination& destination, point16 pt,
+                            Source& source, point16 spt,
                             typename Source::pixel_type pixel) {
-        auto alpha = pixel.template channelr<channel_name::A>();
-        if (0.0 == alpha) return gfx_result::success;
-        if (1.0 == alpha)
+        auto alpha = pixel.opacity8();
+        if (0 == alpha) return gfx_result::success;
+        if (255 == alpha)
             return blender<Destination, Source, false>::point(
                 destination, pt, source, spt, pixel);
         typename Source::pixel_type spx;
@@ -72,7 +73,7 @@ struct blender<Destination, Source, true> {
         if (gfx_result::success != r) {
             return r;
         }
-        r = fg.blend(bg, alpha, &fg);
+        r = fg.blend8(bg, alpha, &fg);
         if (gfx_result::success != r) {
             return r;
         }
@@ -88,23 +89,23 @@ template <typename Destination, typename Source, bool Async>
 struct copy_to_helper {};
 template <typename Destination, typename Source>
 struct copy_to_helper<Destination, Source, false> {
-    static gfx_result do_draw(const Source &src, const rect16 &rct,
-                              Destination &dst, point16 loc) {
+    static gfx_result do_draw(const Source& src, const rect16& rct,
+                              Destination& dst, point16 loc) {
         return src.copy_to(rct, dst, loc);
     }
 };
 template <typename Destination, typename Source>
 struct copy_to_helper<Destination, Source, true> {
-    static gfx_result do_draw(const Source &src, const rect16 &rct,
-                              Destination &dst, point16 loc) {
+    static gfx_result do_draw(const Source& src, const rect16& rct,
+                              Destination& dst, point16 loc) {
         return src.copy_to_async(rct, dst, loc);
     }
 };
 
 template <typename Destination, typename Source>
 struct copy_from_impl_helper {
-    static gfx_result do_draw(Destination &destination, const rect16 &src_rect,
-                              const Source &src, point16 location) {
+    static gfx_result do_draw(Destination& destination, const rect16& src_rect,
+                              const Source& src, point16 location) {
         gfx_result r;
         rect16 srcr = src_rect.normalize().crop(src.bounds());
         rect16 dstr(location, src_rect.dimensions());
@@ -140,26 +141,26 @@ template <typename Destination, typename Source, bool CopyTo>
 struct copy_to_fast {};
 template <typename Destination, typename Source>
 struct copy_to_fast<Destination, Source, false> {
-    static gfx_result do_copy(Destination &dst, const Source &src,
-                              const rect16 &src_rect, point16 location) {
+    static gfx_result do_copy(Destination& dst, const Source& src,
+                              const rect16& src_rect, point16 location) {
         return copy_from_impl_helper<Destination, Source>::do_draw(
             dst, src_rect, src, location);
     }
 };
 template <typename Destination, typename Source>
 struct copy_to_fast<Destination, Source, true> {
-    static gfx_result do_copy(Destination &dst, const Source &src,
-                              const rect16 &src_rect, point16 location) {
+    static gfx_result do_copy(Destination& dst, const Source& src,
+                              const rect16& src_rect, point16 location) {
         return src.copy_to(src_rect, dst, location);
     }
 };
 float cubic_hermite(float A, float B, float C, float D, float t);
 
-bool clamp_point16(point16 &pt, const rect16 &bounds);
+bool clamp_point16(point16& pt, const rect16& bounds);
 
 template <typename Source>
-gfx_result sample_nearest(const Source &source, const rect16 &src_rect, float u,
-                          float v, typename Source::pixel_type *out_pixel) {
+gfx_result sample_nearest(const Source& source, const rect16& src_rect, float u,
+                          float v, typename Source::pixel_type* out_pixel) {
     // calculate coordinates
 
     point16 pt(uint16_t(u * src_rect.width() + src_rect.left()),
@@ -170,27 +171,27 @@ gfx_result sample_nearest(const Source &source, const rect16 &src_rect, float u,
     return source.point(pt, out_pixel);
 }
 template <typename Source>
-gfx_result sample_bilinear(const Source &source, const rect16 &src_rect,
+gfx_result sample_bilinear(const Source& source, const rect16& src_rect,
                            float u, float v,
-                           typename Source::pixel_type *out_pixel) {
+                           typename Source::pixel_type* out_pixel) {
     using pixel_type = typename Source::pixel_type;
     using rgba_type = rgba_pixel<HTCW_MAX_WORD>;
     // calculate coordinates -> also need to offset by half a pixel to keep
     // image from shifting down and left half a pixel
     float x = (u * src_rect.width()) - 0.5f + src_rect.left();
     int xint = int(x);
-    float xfract = x - floor(x);
+    float xfract = x - floorf(x);
 
     float y = (v * src_rect.height()) - 0.5f + src_rect.top();
     int yint = int(y);
-    float yfract = y - floor(y);
+    float yfract = y - floorf(y);
     gfx_result r;
     // get pixels
 
-    point16 pt00(xint + 0, yint + 0);
-    point16 pt10(xint + 1, yint + 0);
-    point16 pt01(xint + 0, yint + 1);
-    point16 pt11(xint + 1, yint + 1);
+    point16 pt00(uint16_t(xint + 0), uint16_t(yint + 0));
+    point16 pt10(uint16_t(xint + 1), uint16_t(yint + 0));
+    point16 pt01(uint16_t(xint + 0), uint16_t(yint + 1));
+    point16 pt11(uint16_t(xint + 1), uint16_t(yint + 1));
     pixel_type px00, px10, px01, px11;
     rgba_type cpx00, cpx10, cpx01, cpx11;
     clamp_point16(pt00, src_rect);
@@ -249,30 +250,30 @@ gfx_result sample_bilinear(const Source &source, const rect16 &src_rect,
     return gfx_result::success;
 }
 template <typename Source>
-gfx_result sample_bicubic(const Source &source, const rect16 &src_rect, float u,
-                          float v, typename Source::pixel_type *out_pixel) {
+gfx_result sample_bicubic(const Source& source, const rect16& src_rect, float u,
+                          float v, typename Source::pixel_type* out_pixel) {
     using pixel_type = typename Source::pixel_type;
     using rgba_type = rgba_pixel<HTCW_MAX_WORD>;
     // calculate coordinates -> also need to offset by half a pixel to keep
     // image from shifting down and left half a pixel
-    float x = (u * src_rect.width()) - 0.5 + src_rect.left();
+    float x = (u * src_rect.width()) - 0.5f + src_rect.left();
     int xint = int(x);
-    float xfract = x - floor(x);
+    float xfract = x - floorf(x);
 
-    float y = (v * src_rect.height()) - 0.5 + src_rect.top();
+    float y = (v * src_rect.height()) - 0.5f + src_rect.top();
     int yint = int(y);
-    float yfract = y - floor(y);
+    float yfract = y - floorf(y);
 
     gfx_result r;
 
-    point16 pt00(xint - 1, yint - 1), pt10(xint + 0, yint - 1),
-        pt20(xint + 1, yint - 1), pt30(xint + 2, yint - 1),
-        pt01(xint - 1, yint + 0), pt11(xint + 0, yint + 0),
-        pt21(xint + 1, yint + 0), pt31(xint + 2, yint + 0),
-        pt02(xint - 1, yint + 1), pt12(xint + 0, yint + 1),
-        pt22(xint + 1, yint + 1), pt32(xint + 2, yint + 1),
-        pt03(xint - 1, yint + 2), pt13(xint + 0, yint + 2),
-        pt23(xint + 1, yint + 2), pt33(xint + 2, yint + 2);
+    point16 pt00(uint16_t(xint - 1), uint16_t(yint - 1)), pt10(uint16_t(xint + 0), uint16_t(yint - 1)),
+        pt20(uint16_t(xint + 1), uint16_t(yint - 1)), pt30(uint16_t(xint + 2), uint16_t(yint - 1)),
+        pt01(uint16_t(xint - 1), uint16_t(yint + 0)), pt11(uint16_t(xint + 0), uint16_t(yint + 0)),
+        pt21(uint16_t(xint + 1), uint16_t(yint + 0)), pt31(uint16_t(xint + 2), uint16_t(yint + 0)),
+        pt02(uint16_t(xint - 1), uint16_t(yint + 1)), pt12(uint16_t(xint + 0), uint16_t(yint + 1)),
+        pt22(uint16_t(xint + 1), uint16_t(yint + 1)), pt32(uint16_t(xint + 2), uint16_t(yint + 1)),
+        pt03(uint16_t(xint - 1), uint16_t(yint + 2)), pt13(uint16_t(xint + 0), uint16_t(yint + 2)),
+        pt23(uint16_t(xint + 1), uint16_t(yint + 2)), pt33(uint16_t(xint + 2), uint16_t(yint + 2));
 
     pixel_type px00, px10, px20, px30, px01, px11, px21, px31, px02, px12, px22,
         px32, px03, px13, px23, px33;
@@ -376,70 +377,68 @@ gfx_result sample_bicubic(const Source &source, const rect16 &src_rect, float u,
 
     // Clamp the values since the curve can put the value below 0 or above 1
     const int chiR = rgba_type::channel_index_by_name<channel_name::R>::value;
-    d0 = cubic_hermite(cpx00.template channelr_unchecked<chiR>(),
-                       cpx10.template channelr_unchecked<chiR>(),
-                       cpx20.template channelr_unchecked<chiR>(),
-                       cpx30.template channelr_unchecked<chiR>(), xfract);
-    d1 = cubic_hermite(cpx01.template channelr_unchecked<chiR>(),
-                       cpx11.template channelr_unchecked<chiR>(),
-                       cpx21.template channelr_unchecked<chiR>(),
-                       cpx31.template channelr_unchecked<chiR>(), xfract);
-    d2 = cubic_hermite(cpx02.template channelr_unchecked<chiR>(),
-                       cpx12.template channelr_unchecked<chiR>(),
-                       cpx22.template channelr_unchecked<chiR>(),
-                       cpx32.template channelr_unchecked<chiR>(), xfract);
-    d3 = cubic_hermite(cpx03.template channelr_unchecked<chiR>(),
-                       cpx13.template channelr_unchecked<chiR>(),
-                       cpx23.template channelr_unchecked<chiR>(),
-                       cpx33.template channelr_unchecked<chiR>(), xfract);
+    d0 = cubic_hermite((float)cpx00.template channelr_unchecked<chiR>(),
+                       (float)cpx10.template channelr_unchecked<chiR>(),
+                       (float)cpx20.template channelr_unchecked<chiR>(),
+                       (float)cpx30.template channelr_unchecked<chiR>(), xfract);
+    d1 = cubic_hermite((float)cpx01.template channelr_unchecked<chiR>(),
+                       (float)cpx11.template channelr_unchecked<chiR>(),
+                       (float)cpx21.template channelr_unchecked<chiR>(),
+                       (float)cpx31.template channelr_unchecked<chiR>(), xfract);
+    d2 = cubic_hermite((float)cpx02.template channelr_unchecked<chiR>(),
+                       (float)cpx12.template channelr_unchecked<chiR>(),
+                       (float)cpx22.template channelr_unchecked<chiR>(),
+                       (float)cpx32.template channelr_unchecked<chiR>(), xfract);
+    d3 = cubic_hermite((float)cpx03.template channelr_unchecked<chiR>(),
+                       (float)cpx13.template channelr_unchecked<chiR>(),
+                       (float)cpx23.template channelr_unchecked<chiR>(),
+                       (float)cpx33.template channelr_unchecked<chiR>(), xfract);
     rpx.channelr<channel_name::R>(helpers::clamp(
         cubic_hermite(d0, d1, d2, d3, yfract), 0.0f, 1.0f));
 
     const size_t chiG =
         rgba_type::channel_index_by_name<channel_name::G>::value;
-    d0 = cubic_hermite(cpx00.template channelr_unchecked<chiG>(),
-                       cpx10.template channelr_unchecked<chiG>(),
-                       cpx20.template channelr_unchecked<chiG>(),
-                       cpx30.template channelr_unchecked<chiG>(), xfract);
-    d1 = cubic_hermite(cpx01.template channelr_unchecked<chiG>(),
-                       cpx11.template channelr_unchecked<chiG>(),
-                       cpx21.template channelr_unchecked<chiG>(),
-                       cpx31.template channelr_unchecked<chiG>(), xfract);
-    d2 = cubic_hermite(cpx02.template channelr_unchecked<chiG>(),
-                       cpx12.template channelr_unchecked<chiG>(),
-                       cpx22.template channelr_unchecked<chiG>(),
-                       cpx32.template channelr_unchecked<chiG>(), xfract);
-    d3 = cubic_hermite(cpx03.template channelr_unchecked<chiG>(),
-                       cpx13.template channelr_unchecked<chiG>(),
-                       cpx23.template channelr_unchecked<chiG>(),
-                       cpx33.template channelr_unchecked<chiG>(), xfract);
+    d0 = cubic_hermite((float)cpx00.template channelr_unchecked<chiG>(),
+                       (float)cpx10.template channelr_unchecked<chiG>(),
+                       (float)cpx20.template channelr_unchecked<chiG>(),
+                       (float)cpx30.template channelr_unchecked<chiG>(), xfract);
+    d1 = cubic_hermite((float)cpx01.template channelr_unchecked<chiG>(),
+                       (float)cpx11.template channelr_unchecked<chiG>(),
+                       (float)cpx21.template channelr_unchecked<chiG>(),
+                       (float)cpx31.template channelr_unchecked<chiG>(), xfract);
+    d2 = cubic_hermite((float)cpx02.template channelr_unchecked<chiG>(),
+                       (float)cpx12.template channelr_unchecked<chiG>(),
+                       (float)cpx22.template channelr_unchecked<chiG>(),
+                       (float)cpx32.template channelr_unchecked<chiG>(), xfract);
+    d3 = cubic_hermite((float)cpx03.template channelr_unchecked<chiG>(),
+                       (float)cpx13.template channelr_unchecked<chiG>(),
+                       (float)cpx23.template channelr_unchecked<chiG>(),
+                       (float)cpx33.template channelr_unchecked<chiG>(), xfract);
     rpx.channelr<channel_name::G>(helpers::clamp(
         cubic_hermite(d0, d1, d2, d3, yfract), 0.0f, 1.0f));
 
     const int chiB = rgba_type::channel_index_by_name<channel_name::B>::value;
-    d0 = cubic_hermite(cpx00.template channelr_unchecked<chiB>(),
-                       cpx10.template channelr_unchecked<chiB>(),
-                       cpx20.template channelr_unchecked<chiB>(),
-                       cpx30.template channelr_unchecked<chiB>(), xfract);
-    d1 = cubic_hermite(cpx01.template channelr_unchecked<chiB>(),
-                       cpx11.template channelr_unchecked<chiB>(),
-                       cpx21.template channelr_unchecked<chiB>(),
-                       cpx31.template channelr_unchecked<chiB>(), xfract);
-    d2 = cubic_hermite(cpx02.template channelr_unchecked<chiB>(),
-                       cpx12.template channelr_unchecked<chiB>(),
-                       cpx22.template channelr_unchecked<chiB>(),
-                       cpx32.template channelr_unchecked<chiB>(), xfract);
-    d3 = cubic_hermite(cpx03.template channelr_unchecked<chiB>(),
-                       cpx13.template channelr_unchecked<chiB>(),
-                       cpx23.template channelr_unchecked<chiB>(),
-                       cpx33.template channelr_unchecked<chiB>(), xfract);
+    d0 = cubic_hermite((float)cpx00.template channelr_unchecked<chiB>(),
+                       (float)cpx10.template channelr_unchecked<chiB>(),
+                       (float)cpx20.template channelr_unchecked<chiB>(),
+                       (float)cpx30.template channelr_unchecked<chiB>(), xfract);
+    d1 = cubic_hermite((float)cpx01.template channelr_unchecked<chiB>(),
+                       (float)cpx11.template channelr_unchecked<chiB>(),
+                       (float)cpx21.template channelr_unchecked<chiB>(),
+                       (float)cpx31.template channelr_unchecked<chiB>(), xfract);
+    d2 = cubic_hermite((float)cpx02.template channelr_unchecked<chiB>(),
+                       (float)cpx12.template channelr_unchecked<chiB>(),
+                       (float)cpx22.template channelr_unchecked<chiB>(),
+                       (float)cpx32.template channelr_unchecked<chiB>(), xfract);
+    d3 = cubic_hermite((float)cpx03.template channelr_unchecked<chiB>(),
+                       (float)cpx13.template channelr_unchecked<chiB>(),
+                       (float)cpx23.template channelr_unchecked<chiB>(),
+                       (float)cpx33.template channelr_unchecked<chiB>(), xfract);
     rpx.channelr<channel_name::B>(helpers::clamp(
         cubic_hermite(d0, d1, d2, d3, yfract), 0.0f, 1.0f));
 
-    const int chiA = rgba_type::channel_index_by_name<channel_name::A>::value;
-    if (-1 < chiA) {
-        const size_t chiA =
-            rgba_type::channel_index_by_name<channel_name::A>::value;
+    const size_t chiA = rgba_type::channel_index_by_name<channel_name::A>::value;
+    if constexpr (-1 < chiA) {
         d0 = cubic_hermite(cpx00.template channelr_unchecked<chiA>(),
                            cpx10.template channelr_unchecked<chiA>(),
                            cpx20.template channelr_unchecked<chiA>(),
@@ -466,7 +465,7 @@ gfx_result sample_bicubic(const Source &source, const rect16 &src_rect, float u,
 // changes the target's pixel type to an intermediary pixel type and back again.
 // Useful for downsampling or converting to grayscale
 template <typename TargetType, typename PixelType>
-gfx_result resample(TargetType &target) {
+gfx_result resample(TargetType& target) {
     size16 dim = target.dimensions();
     point16 pt;
     gfx_result r;
@@ -494,5 +493,227 @@ gfx_result resample(TargetType &target) {
     }
     return gfx_result::success;
 }
+static inline uint32_t pixel_byte_mul32(uint32_t x, uint32_t a) {
+    uint32_t t = (x & 0xff00ff) * a;
+    t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
+    t &= 0xff00ff;
+    x = ((x >> 8) & 0xff00ff) * a;
+    x = (x + ((x >> 8) & 0xff00ff) + 0x800080);
+    x &= 0xff00ff00;
+    x |= t;
+    return x;
+}
+
+namespace helpers {
+
+// one empty tag type per fast path, plus a generic fallback tag
+struct aa_row_565 {};
+struct aa_row_rgb24 {};
+struct aa_row_rgba32 {};
+struct aa_row_indexed {};
+struct aa_row_generic {};
+
+// default now categorizes: indexed pixels -> indexed tag, everything else -> generic
+template <typename PixelType,
+          bool Indexed = PixelType::template has_channel_names<channel_name::index>::value>
+struct aa_row_tag { typedef aa_row_generic type; };
+
+template <typename PixelType>
+struct aa_row_tag<PixelType, true> { typedef aa_row_indexed type; };
+
+// fast-path overrides — all non-indexed, so the bool defaults to false
+template <> struct aa_row_tag<rgb_pixel<16>,  false> { typedef aa_row_565    type; };
+template <> struct aa_row_tag<rgb_pixel<24>,  false> { typedef aa_row_rgb24  type; };
+template <> struct aa_row_tag<rgba_pixel<32>, false> { typedef aa_row_rgba32 type; };
+
+// --- one overload per tag; each sees only its own code ---
+
+template <typename Destination>
+gfx_result aa_row_impl(aa_row_565, Destination& destination, spoint16 location,
+                       const uint8_t* cov, size_t width,
+                       typename Destination::pixel_type color) {
+    const int16_t minx = location.x, py = location.y;
+    int16_t row_w = (int16_t)width;
+    rgb_pixel<16> rgb = color;
+    const uint16_t fg = rgb.native_value;
+    const uint32_t fg_s = (uint32_t)(fg & 0xF81F) | ((uint32_t)(fg & 0x07E0) << 16);
+    gfx_span span = destination.span(point16(minx, py));
+    if(span.length==0) return gfx_result::success;
+    int16_t max_width = span.length>>1;
+    if(row_w>max_width) {
+        row_w = max_width;
+    }
+    uint8_t* d = span.data;
+    for (int i = 0; i < row_w; ++i) {
+        const uint8_t a = cov[i];
+        if (0 == a) continue;
+        const int j = i << 1;
+        if (a >= 255) {
+#ifndef HTCW_GFX_NO_SWAP
+            d[j] = (uint8_t)(fg >> 8); d[j+1] = (uint8_t)fg;
+#else
+            d[j] = (uint8_t)fg;        d[j+1] = (uint8_t)(fg >> 8);
+#endif
+            continue;
+        }
+#ifndef HTCW_GFX_NO_SWAP
+        const uint16_t bg = ((uint16_t)d[j] << 8) | (uint16_t)d[j+1];
+#else
+        const uint16_t bg = (uint16_t)d[j] | ((uint16_t)d[j+1] << 8);
+#endif
+        const uint32_t bg_s = (uint32_t)(bg & 0xF81F) | ((uint32_t)(bg & 0x07E0) << 16);
+        uint32_t a5 = (uint32_t)(a + 4) >> 3; if (a5 > 31) a5 = 31;
+        const uint32_t bl = (bg_s + (((fg_s - bg_s) * a5) >> 5)) & 0x07E0F81F;
+        const uint16_t out = (uint16_t)((bl & 0xFFFF) | (bl >> 16));
+#ifndef HTCW_GFX_NO_SWAP
+        d[j] = (uint8_t)(out >> 8); d[j+1] = (uint8_t)out;
+#else
+        d[j] = (uint8_t)out;        d[j+1] = (uint8_t)(out >> 8);
+#endif
+    }
+    return gfx_result::success;
+}
+
+template <typename Destination>
+gfx_result aa_row_impl(aa_row_rgb24, Destination& destination, spoint16 location,
+                       const uint8_t* cov, size_t width,
+                       typename Destination::pixel_type color) {
+    const int16_t minx = location.x, py = location.y;
+    int16_t row_w = (int16_t)width;
+    rgb_pixel<24> rgb = color;
+    const uint32_t fg = rgb.native_value;
+    gfx_span span = destination.span(point16(minx, py));
+    if(span.length==0) return gfx_result::success;
+    int16_t max_width = span.length/3;
+    if(row_w>max_width) {
+        row_w = max_width;
+    }
+    uint8_t* d = span.data;
+    for (int i = 0; i < row_w; ++i) {
+        const uint8_t a = cov[i];
+        if (0 == a) continue;
+        const int j = i * 3;
+        uint32_t out;
+        if (a >= 255) out = fg;
+        else {
+#ifndef HTCW_GFX_NO_SWAP
+            const uint32_t bg = ((uint32_t)d[j] << 24) | ((uint32_t)d[j+1] << 16) | ((uint32_t)d[j+2] << 8);
+#else
+            const uint32_t bg = ((uint32_t)d[j] << 8) | ((uint32_t)d[j+1] << 16) | ((uint32_t)d[j+2] << 24);
+#endif
+            out = pixel_byte_mul32(bg, 255 - a) + pixel_byte_mul32(fg, a);
+        }
+#ifndef HTCW_GFX_NO_SWAP
+        d[j] = (uint8_t)(out >> 24); d[j+1] = (uint8_t)(out >> 16); d[j+2] = (uint8_t)(out >> 8);
+#else
+        d[j] = (uint8_t)(out >> 8);  d[j+1] = (uint8_t)(out >> 16); d[j+2] = (uint8_t)(out >> 24);
+#endif
+    }
+    return gfx_result::success;
+}
+
+template <typename Destination>
+gfx_result aa_row_impl(aa_row_rgba32, Destination& destination, spoint16 location,
+                       const uint8_t* cov, size_t width,
+                       typename Destination::pixel_type color) {
+    const int16_t minx = location.x, py = location.y;
+    int16_t row_w = (int16_t)width;
+    rgba_pixel<32> rgba = color;
+    rgba.template channel<channel_name::A>(255);
+    const uint32_t fg = rgba.native_value;
+    gfx_span span = destination.span(point16(minx, py));
+    if(span.length==0) return gfx_result::success;
+    int16_t max_width = span.length>>2;
+    if(row_w>max_width) {
+        row_w = max_width;
+    }
+    uint8_t* d = span.data;
+    for (int i = 0; i < row_w; ++i) {
+        const uint8_t a = cov[i];
+        if (0 == a) continue;
+        const int j = i << 2;
+        uint32_t out;
+        if (a >= 255) out = fg;
+        else {
+#ifndef HTCW_GFX_NO_SWAP
+            const uint32_t bg = ((uint32_t)d[j] << 24) | ((uint32_t)d[j+1] << 16) | ((uint32_t)d[j+2] << 8) | d[j+3];
+#else
+            const uint32_t bg = (uint32_t)d[j] | ((uint32_t)d[j+1] << 8) | ((uint32_t)d[j+2] << 16) | ((uint32_t)d[j+3] << 24);
+#endif
+            out = pixel_byte_mul32(bg, 255 - a) + pixel_byte_mul32(fg, a);
+        }
+#ifndef HTCW_GFX_NO_SWAP
+        d[j] = (uint8_t)(out >> 24); d[j+1] = (uint8_t)(out >> 16); d[j+2] = (uint8_t)(out >> 8); d[j+3] = (uint8_t)out;
+#else
+        d[j] = (uint8_t)out; d[j+1] = (uint8_t)(out >> 8); d[j+2] = (uint8_t)(out >> 16); d[j+3] = (uint8_t)(out >> 24);
+#endif
+    }
+    return gfx_result::success;
+}
+template <typename Destination>
+gfx_result aa_row_impl(aa_row_generic, Destination& destination, spoint16 location,
+                       const uint8_t* cov, size_t width,
+                       typename Destination::pixel_type color) {
+    const int16_t minx = location.x, py = location.y;
+    const int16_t row_w = (int16_t)width;
+    typename Destination::pixel_type bgpx, dpx;
+    gfx_result r;
+    for (int i = 0; i < row_w; ++i) {
+        const uint8_t c8 = cov[i];
+        if (0 == c8) continue;
+        const point16 p((uint16_t)(minx + i), (uint16_t)py);
+        if (c8 < 255) {
+            r = destination.point(p, &bgpx);
+            if (gfx_result::success != r) return r;
+            dpx = color.blend8(bgpx, c8);
+        } else {
+            dpx = color;
+        }
+        r = destination.point(p, dpx);
+        if (gfx_result::success != r) return r;
+    }
+    return gfx_result::success;
+}
+
+template <typename Destination>
+gfx_result aa_row_impl(aa_row_indexed, Destination& destination, spoint16 location,
+                       const uint8_t* cov, size_t width,
+                       typename Destination::pixel_type color) {
+    const int16_t minx = location.x, py = location.y;
+    const int16_t row_w = (int16_t)width;
+    rgba_pixel<32> fgcol, bgcol;
+    convert_palette_to(destination, color, &fgcol);   // resolve fg once
+    typename Destination::pixel_type bgpx, dpx;
+    gfx_result r;
+    for (int i = 0; i < row_w; ++i) {
+        const uint8_t c8 = cov[i];
+        if (0 == c8) continue;
+        const point16 p((uint16_t)(minx + i), (uint16_t)py);
+        if (c8 < 255) {
+            r = destination.point(p, &bgpx);
+            if (gfx_result::success != r) return r;
+            convert_palette_to(destination, bgpx, &bgcol);   // palette -> rgba
+            bgcol = fgcol.blend8(bgcol, c8);                 // blend in rgba space
+            convert_palette_from(destination, bgcol, &dpx);  // rgba -> nearest index
+        } else {
+            dpx = color;
+        }
+        r = destination.point(p, dpx);
+        if (gfx_result::success != r) return r;
+    }
+    return gfx_result::success;
+}
+
+} // namespace helpers
+
+// public entry: picks the tag at compile time, dispatches to the one live overload
+template <typename Destination>
+gfx_result aa_rasterize_row(Destination& destination, spoint16 location,
+                            const uint8_t* cov, size_t width,
+                            typename Destination::pixel_type color) {
+    typename helpers::aa_row_tag<typename Destination::pixel_type>::type tag;
+    return helpers::aa_row_impl(tag, destination, location, cov, width, color);
+}
+
 }  // namespace gfx
 #endif

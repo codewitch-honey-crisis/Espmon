@@ -36,7 +36,7 @@ internal static unsafe partial class Program
     // one may not surface until reboot -- so these drive the end-of-install reboot prompt
     // (_serviceDeleted) and the config-file write (_serviceRecreated).
     private static bool _rebootNeeded;
-    private static bool _serviceRecreated;
+    //private static bool _serviceRecreated;
 
     private const int ID_EDIT = 101, ID_BROWSE = 102, ID_DESKTOP = 103,
                       ID_STARTMENU = 104, ID_INSTALL = 105;
@@ -178,7 +178,7 @@ internal static unsafe partial class Program
     {
         bool weStoppedService = false;
         _rebootNeeded = false;
-        _serviceRecreated = false;
+        //_serviceRecreated = false;
         try
         {
             string target = GetText(_hEdit);
@@ -400,7 +400,7 @@ internal static unsafe partial class Program
                 nint created = CreateServiceWithRetry(
                     scm, ServiceName, ServiceDisplayName, serviceType, startType, errorControl,
                     newBinaryPath, cfg->lpLoadOrderGroup, cfg->lpDependencies, account);
-                _serviceRecreated = true; // the installer now owns this registration -> write its config
+                //_serviceRecreated = true; // the installer now owns this registration -> write its config
                 try { SetServiceDescription(created, ServiceDescription); }
                 finally { CloseServiceHandle(created); }
             }

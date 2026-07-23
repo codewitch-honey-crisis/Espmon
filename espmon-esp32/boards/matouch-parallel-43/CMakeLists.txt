@@ -7,6 +7,7 @@ add_compile_definitions(BUILD_TIMESTAMP_UTC=${BUILD_TIMESTAMP_UTC})
 
 # Board-specific defines
 add_compile_definitions(MATOUCH_ESP_DISPLAY_PARALLEL_43)
+add_compile_definitions(LCD_TRANSFER_SIZE=0)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

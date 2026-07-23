@@ -14,4 +14,5 @@ idf_component_register(
         esp_driver_uart
         htcw_esp_panel
         htcw_uix
+        esp_mm
 )

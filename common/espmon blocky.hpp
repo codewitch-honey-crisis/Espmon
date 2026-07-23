@@ -4,7 +4,6 @@
 #include <memory.h>
 #include <stdint.h>
 #include <string.h>
-
 #include <gfx.hpp>
 #include <monoxbold.hpp>
 #include <uix.hpp>
@@ -146,8 +145,6 @@ class graph : public uix::control<ControlSurfaceType> {
         buffer_type* buffer;
         data_line* next;
     };
-    gfx::mask_draw_cache* m_draw_cache;
-    gfx::spoint16* m_point_buffer;
     data_line* m_first;
     void clear_lines() {
         data_line* entry = m_first;
@@ -160,7 +157,7 @@ class graph : public uix::control<ControlSurfaceType> {
     }
 
    public:
-    graph() : base_type(), m_draw_cache(nullptr), m_point_buffer(nullptr), m_first(nullptr) {
+    graph() : base_type(), m_first(nullptr) {
     }
     virtual ~graph() {
         clear_lines();
@@ -267,46 +264,6 @@ class graph : public uix::control<ControlSurfaceType> {
         }
         return nullptr;
     }
-    gfx::mask_draw_cache* draw_cache() {
-        return m_draw_cache;
-    }
-    void draw_cache(gfx::mask_draw_cache* value) {
-        m_draw_cache = value;
-    }
-    gfx::spoint16* point_buffer() {
-        return m_point_buffer;
-    }
-    void point_buffer(gfx::spoint16* value) {
-        m_point_buffer = value;
-    }
-
-   private:  // draw helpers
-    // round-to-nearest of span*k/10 (span, k >= 0)
-    static int grid_offset(int span, int k) {
-        return (span * k + 5) / 10;
-    }
-    // floor of j*(aw-1)/(cap-1): x offset from ax1 (non-negative)
-    static int sample_x_floor(int j, int aw, int cap) {
-        if (cap <= 1) return 0;
-        return (j * (aw - 1)) / (cap - 1);
-    }
-    // ceil of j*(aw-1)/(cap-1)
-    static int sample_x_ceil(int j, int aw, int cap) {
-        if (cap <= 1) return 0;
-        return (j * (aw - 1) + (cap - 2)) / (cap - 1);
-    }
-    // floor of (255-v)*(ah-1)/255: y offset from ay1 (non-negative)
-    static int value_y_floor(uint8_t v, int ah) {
-        return ((255 - (int)v) * (ah - 1)) / 255;
-    }
-    // ceil of (255-v)*(ah-1)/255
-    static int value_y_ceil(uint8_t v, int ah) {
-        return ((255 - (int)v) * (ah - 1) + 254) / 255;
-    }
-    // round-to-nearest of (255-v)*(ah-1)/255
-    static int value_y_round(uint8_t v, int ah) {
-        return ((255 - (int)v) * (ah - 1) + 127) / 255;
-    }
 
    protected:
     void on_paint(control_surface_type& destination, const gfx::srect16& clip) {
@@ -323,100 +280,72 @@ class graph : public uix::control<ControlSurfaceType> {
         if (aw <= 0 || ah <= 0) return;
 
         for (int k = 0; k <= 10; ++k) {
-            int x = ax1 + grid_offset(aw - 1, k);
+            int x = ax1 + (int)roundf(((float)(aw - 1)) * k / 10.f);
             gfx::draw::line(destination, gfx::srect16(x, ay1, x, ay2), px);
         }
         for (int k = 0; k <= 10; ++k) {
-            int y = ay1 + grid_offset(ah - 1, k);
+            int y = ay1 + (int)roundf(((float)(ah - 1)) * k / 10.f);
             gfx::draw::line(destination, gfx::srect16(ax1, y, ax2, y), px);
         }
 
         // Fixed step so a full buffer spans ax1..ax2 with the last sample on ax2.
         const int cap = (int)buffer_type::capacity;
+        const float step = (cap > 1) ? ((float)(aw - 1) / (float)(cap - 1)) : 0.f;
+
+        auto value_to_y = [&](uint8_t v) -> float {
+            float fv = v / 255.f;
+            return (float)ay1 + (1.f - fv) * (float)(ah - 1);
+        };
 
         for (data_line* entry = m_first; entry != nullptr; entry = entry->next) {
             const size_t n = entry->buffer->size();
             if (!n) continue;
 
             // peek(0) = oldest at ax1; index grows rightward. When size == capacity
-            // the newest (peek(n-1)) lands on ax2. x offset for sample j is
-            // j*(aw-1)/(cap-1); y offset for value v is (255-v)*(ah-1)/255.
-            // blocky lines
-            if (m_point_buffer == nullptr) {
-                if (n == 1) {
-                    int yi = ay1 + value_y_round(*entry->buffer->peek(0), ah);
-                    gfx::draw::filled_rectangle(destination,
-                                                gfx::srect16(ax1, yi, ax1, yi), entry->color);
-                    continue;
-                }
+            // the newest (peek(n-1)) lands on ax2.
+            auto sample_x = [&](size_t j) -> float {
+                return (float)ax1 + (float)j * step;
+            };
 
-                for (size_t j = 1; j < n; ++j) {
-                    uint8_t pv = *entry->buffer->peek(j - 1);
-                    uint8_t cv = *entry->buffer->peek(j);
+            if (n == 1) {
+                int yi = (int)roundf(value_to_y(*entry->buffer->peek(0)));
+                gfx::draw::filled_rectangle(destination,
+                                            gfx::srect16(ax1, yi, ax1, yi), entry->color);
+                continue;
+            }
 
-                    // Main rect: floor left corner, ceil right (point -> next), so a
-                    // small diagonal is still a whole rect. Clamp into the area.
-                    int mx0 = ax1 + sample_x_floor((int)(j - 1), aw, cap);
-                    if (mx0 < ax1) mx0 = ax1;
-                    int my0 = ay1 + value_y_floor(pv, ah);
-                    int mx1 = ax1 + sample_x_ceil((int)j, aw, cap);
-                    if (mx1 > ax2) mx1 = ax2;
-                    int my1 = ay1 + value_y_ceil(cv, ah);
-                    gfx::draw::filled_rectangle(destination,
-                                                gfx::srect16(mx0, my0, mx1, my1), entry->color);
+            float prev_x = sample_x(0);
+            float prev_y = value_to_y(*entry->buffer->peek(0));
 
-                    // (1,1) offset copy so a flat run is 2px; clamped off the border.
-                    int ox0 = mx0 + 1;
-                    if (ox0 > ax2) ox0 = ax2;
-                    int oy0 = my0 + 1;
-                    if (oy0 > ay2) oy0 = ay2;
-                    int ox1 = mx1 + 1;
-                    if (ox1 > ax2) ox1 = ax2;
-                    int oy1 = my1 + 1;
-                    if (oy1 > ay2) oy1 = ay2;
-                    gfx::draw::filled_rectangle(destination,
-                                                gfx::srect16(ox0, oy0, ox1, oy1), entry->color);
-                }
-            } else {
-                // smooth lines
-                if (n < 2) continue;
+            for (size_t j = 1; j < n; ++j) {
+                float x = sample_x(j);
+                float y = value_to_y(*entry->buffer->peek(j));
 
-                const int bx2 = (int)destination.bounds().x2;
-                const int by2 = (int)destination.bounds().y2;
-
-                uint8_t pv = *entry->buffer->peek(0);
-                int mx0 = ax1 + sample_x_floor(0, aw, cap);
+                // Main rect: floor left corner, ceil right (point -> next), so a
+                // small diagonal is still a whole rect. Clamp into the area.
+                int mx0 = (int)floorf(prev_x);
                 if (mx0 < ax1) mx0 = ax1;
-                int my0 = ay1 + value_y_floor(pv, ah);
-                m_point_buffer[0] = gfx::spoint16(gfx::math::clamp(mx0, 0, bx2),
-                                                  gfx::math::clamp(my0, 0, by2));
-                size_t k = 1;  // number of points kept
+                int my0 = (int)floorf(prev_y);
+                int mx1 = (int)ceilf(x);
+                if (mx1 > ax2) mx1 = ax2;
+                int my1 = (int)ceilf(y);
+                gfx::draw::filled_rectangle(destination,
+                                            gfx::srect16(mx0, my0, mx1, my1), entry->color);
 
-                for (size_t j = 1; j < n; ++j) {
-                    uint8_t cv = *entry->buffer->peek(j);
-                    int mx1 = ax1 + sample_x_ceil((int)j, aw, cap);
-                    if (mx1 > ax2) mx1 = ax2;
-                    int my1 = ay1 + value_y_ceil(cv, ah);
-                    const gfx::spoint16 p(gfx::math::clamp(mx1, 0, bx2),
-                                          gfx::math::clamp(my1, 0, by2));
+                // (1,1) offset copy so a flat run is 2px; clamped off the border.
+                int ox0 = mx0 + 1;
+                if (ox0 > ax2) ox0 = ax2;
+                int oy0 = my0 + 1;
+                if (oy0 > ay2) oy0 = ay2;
+                int ox1 = mx1 + 1;
+                if (ox1 > ax2) ox1 = ax2;
+                int oy1 = my1 + 1;
+                if (oy1 > ay2) oy1 = ay2;
+                gfx::draw::filled_rectangle(destination,
+                                            gfx::srect16(ox0, oy0, ox1, oy1), entry->color);
 
-                    // exact duplicate (can happen when aw < cap): drop it
-                    if (p.x == m_point_buffer[k - 1].x && p.y == m_point_buffer[k - 1].y) continue;
-
-                    // interior of a horizontal run: extend the run rather than adding a vertex
-                    if (k >= 2 && m_point_buffer[k - 1].y == p.y && m_point_buffer[k - 2].y == p.y) {
-                        m_point_buffer[k - 1] = p;
-                    } else {
-                        m_point_buffer[k++] = p;
-                    }
-                }
-
-                if (k < 2) continue;
-                gfx::spath16 path(k, m_point_buffer);
-                gfx::draw::aa_polyline(destination, path, entry->color,
-                                       this->dimensions().height / 30,
-                                       gfx::line_cap::round, gfx::line_join::round,
-                                       4, m_draw_cache);
+                prev_x = x;
+                prev_y = y;
             }
         }
     }
@@ -472,7 +401,7 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_is_gradient;
     }
     void is_gradient(bool value) {
-        if (value != m_is_gradient) {
+        if(value!=m_is_gradient) {
             m_is_gradient = value;
             this->invalidate();
         }
@@ -481,7 +410,7 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_dark_mode;
     }
     void is_dark_mode(bool value) {
-        if (m_dark_mode != value) {
+        if(m_dark_mode!=value) {
             m_dark_mode = value;
             this->invalidate();
         }
@@ -499,7 +428,7 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_color;
     }
     void color(uix::uix_pixel value) {
-        if (value != m_color) {
+        if(value!=m_color) {
             m_color = value;
             this->invalidate();
         }
@@ -508,7 +437,7 @@ class bar : public uix::control<ControlSurfaceType> {
         return m_back_color;
     }
     void back_color(uix::uix_pixel value) {
-        if (m_back_color != value) {
+        if(m_back_color!=value) {
             m_back_color = value;
             this->invalidate();
         }
@@ -527,7 +456,7 @@ class bar : public uix::control<ControlSurfaceType> {
             gfx::hsva_pixel<32> px2 = gfx::color<gfx::hsva_pixel<32>>::green;
             auto h1 = px.channel<gfx::channel_name::H>();
             auto h2 = px2.channel<gfx::channel_name::H>();
-            h2 -= 24;
+            h2-=24;
             // the actual range we're drawing
             auto range = abs(h2 - h1) + 1;
             // the width of each gradient segment
@@ -668,8 +597,6 @@ class espmon {
     label_t m_disconnected_label;
     int8_t m_screen_index = -1;
     graph_buffer_t m_buffers[4];
-    gfx::spoint16 m_points[graph_buffer_t::capacity];
-    gfx::mask_draw_cache m_draw_cache;
     graph_t m_graph;
 
     void refresh_display(bool full = true) {
@@ -698,8 +625,6 @@ class espmon {
             uix::srect16 b = m_screen.bounds();
             b.y1 = m_screen.dimensions().height / 2 + 1;
             m_graph.bounds(b);
-            m_graph.point_buffer(m_points);
-            m_graph.draw_cache(&m_draw_cache);
             m_hit_boxes[(size_t)espmon_hit::graph] = m_graph.bounds();
             if (!m_graph.has_lines()) {
                 m_graph.add_line(uix_color_t::green, &m_buffers[0]);
@@ -950,16 +875,16 @@ class espmon {
         m_bottom.value2.bar.is_gradient((rscr.header.flags & (1 << 3)));
     }
     void set_screen_entry(screen_entry_t& entry, const response_screen_entry_t& rentry) {
-        if (0 != strcmp(entry.text, rentry.label)) {
+        if(0!=strcmp(entry.text,rentry.label)) {
             strncpy(entry.text, rentry.label, sizeof(entry.text) - 1);
             entry.label.text(entry.text);
             entry.hlabel.text(entry.text);
         }
         uix::uix_pixel col = to_color(rentry.color);
-        if (col != entry.label.color()) {
+        if(col!=entry.label.color()) {
             entry.label.color(col);
             entry.hlabel.color(col);
-        }
+        }    
     }
 
    public:
@@ -981,7 +906,7 @@ class espmon {
         return m_has_graph;
     }
     void has_graph(bool value) {
-        if (m_has_graph != value) {
+        if(m_has_graph!=value) {
             m_has_graph = value;
             init_screen();
             m_is_screen_populated = false;
@@ -993,7 +918,7 @@ class espmon {
         return m_is_monochrome;
     }
     void is_monochrome(bool value) {
-        if (m_is_monochrome != value) {
+        if(m_is_monochrome!=value) {
             m_is_monochrome = value;
             m_is_screen_populated = false;
             m_screen.validate_all();
@@ -1009,11 +934,9 @@ class espmon {
         return espmon_hit::none;
     }
     void dimensions(gfx::size16 dimensions) {
-        if (dimensions != m_display_size) {
-            m_draw_cache.release();
+        if(dimensions!=m_display_size) {
             m_screen.unregister_controls();
             m_screen.dimensions((gfx::ssize16)dimensions);
-            m_draw_cache.ensure((size_t)dimensions.width);
             m_display_size = dimensions;
             init_screen();
             m_is_screen_populated = false;

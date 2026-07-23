@@ -13,6 +13,10 @@
 #include "esp_system.h"
 #include "esp_mac.h"
 #include "esp_heap_caps.h"
+#if LCD_BUS == LCD_RGB
+#include "esp_cache.h"
+#include "esp_memory_utils.h"
+#endif
 #include "esp_log.h"
 #include "gfx.hpp"
 #include "uix.hpp"
@@ -35,11 +39,26 @@ static const char* TAG = "app";
 #else
 #define PIXEL rgb_pixel<LCD_BIT_DEPTH>
 #endif
+#if LCD_BUS == PANEL_BUS_MIPI || LCD_BUS == PANEL_BUS_RGB
+#define LCD_BUFFER1 ((uint8_t*)panel_lcd_framebuffer(0))
+#ifdef LCD_FRAMEBUFFER_COUNT
+#if LCD_FRAMEBUFFER_COUNT > 1
+#define LCD_BUFFER2 ((uint8_t*)panel_lcd_framebuffer(1))
+#else
+#define LCD_BUFFER2 nullptr
+#endif
+#else
+#define LCD_BUFFER2 nullptr
+#endif
+#else
+#if LCD_TRANSFER_SIZE>0
 #define LCD_BUFFER1 ((uint8_t*)panel_lcd_transfer_buffer())
 #if LCD_SYNC_TRANSFER == 0
 #define LCD_BUFFER2 ((uint8_t*)panel_lcd_transfer_buffer2())
 #else
 #define LCD_BUFFER2 nullptr
+#endif
+#endif
 #endif
 #define INCHES_TO_MM(x) ((x)*25.4f)
 
@@ -50,7 +69,6 @@ static const char* TAG = "app";
 
 #if defined(TOUCH_BUS) || defined(BUTTON)
 #define HAS_INPUT
-static TickType_t pressed = 0;
 #endif
 
 using uix_color_t = color<uix_pixel>;
@@ -304,13 +322,75 @@ static void process_frame(port_t* pt, uint8_t cmd, void* p, size_t len) {
         
     }
 }
-extern "C" void panel_lcd_flush_complete() {
+// called when the pixel transfer from a single flush is complete
+extern "C" IRAM_ATTR void panel_lcd_flush_complete() {
+#if !(LCD_BUS == PANEL_BUS_MIPI || LCD_BUS == PANEL_BUS_RGB)
+    app.transfer_complete();
+#endif
+}
+// called when a frame is done being sent via DMA
+#if LCD_BUS == PANEL_BUS_MIPI || LCD_BUS == PANEL_BUS_RGB
+extern "C" IRAM_ATTR void panel_lcd_on_vsync() {
     app.transfer_complete();
 }
+#endif
+
+#if LCD_BUS == PANEL_BUS_MIPI || LCD_BUS == PANEL_BUS_RGB
+
+// How many framebuffers the driver allocated. 1 == the FB is live/scanned out.
+#if !defined(LCD_FRAMEBUFFER_COUNT)
+#define ESPMON_FB_COUNT 1
+#else
+#define ESPMON_FB_COUNT LCD_FRAMEBUFFER_COUNT
+#endif
+
+// Push dirty cache lines for rows [y1..y2] out to PSRAM so the LCD DMA sees
+// them. C2M (writeback) only - nothing but the CPU ever writes the FB, so no
+// invalidate is ever needed. No-op on targets whose PSRAM cache is write-through.
+static inline void espmon_fb_writeback(const void* fb, int y1, int y2) {
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
+    if (esp_ptr_external_ram(fb)) {
+        const size_t stride = (size_t)LCD_WIDTH * 2;   // RGB565
+        void*  start = (void*)(((uint8_t*)fb) + (size_t)y1 * stride);
+        size_t len   = (size_t)(y2 - y1 + 1) * stride;
+        ESP_ERROR_CHECK(esp_cache_msync(start, len,
+            ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED));
+    }
+#else
+    (void)fb; (void)y1; (void)y2;
+#endif
+}
+#endif  // MIPI || RGB
+
 static void espmon_flush(const rect16& bounds, const void* bmp, void* state) {
-    panel_lcd_flush(bounds.x1,bounds.y1,bounds.x2,bounds.y2,(void*)bmp);;
-#if LCD_SYNC_TRANSFER == 1
+#if LCD_BUS == PANEL_BUS_MIPI || LCD_BUS == PANEL_BUS_RGB
+
+#if ESPMON_FB_COUNT == 1
+    // Single framebuffer: it IS the scanout buffer. Once the writeback lands,
+    // the pixels are on screen. Nothing to recycle, nothing to wait for, so
+    // completion is synchronous.
+    espmon_fb_writeback(bmp, bounds.y1, bounds.y2);
     app.transfer_complete();
+#else
+    // Multiple framebuffers: we rendered into a hidden buffer. Writeback first
+    // (DMA must not read stale lines), then retarget scanout at it. The swap
+    // lands at the next VSYNC, so completion is NOT signalled here - the
+    // on_vsync handler calls app.transfer_complete() once the swap is live.
+    espmon_fb_writeback(bmp, bounds.y1, bounds.y2);
+    panel_lcd_flush(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1, (void*)bmp);
+#endif
+
+#else   // transfer-buffer buses (SPI / I80 / QSPI)
+
+#if LCD_TRANSFER_SIZE > 0
+    panel_lcd_flush(bounds.x1, bounds.y1, bounds.x2, bounds.y2, (void*)bmp);
+#if LCD_SYNC_TRANSFER == 1
+    app.transfer_complete();    // async case completes via panel_lcd_flush_complete()
+#endif
+#else
+#error "LCD_TRANSFER_SIZE == 0 requires an RGB or MIPI panel"
+#endif
+
 #endif
 }
 static void get_pixel_metrics(uint16_t res_x, uint16_t res_y, float diagonal_mm, 
@@ -389,7 +469,16 @@ extern "C" void app_main() {
     active_pinned = false;
     app.dimensions({LCD_WIDTH,LCD_HEIGHT});
     app.set_flush_callback(espmon_flush);
-    app.set_transfer(LCD_FULLSCREEN_TRANSFER?screen_update_mode::direct:screen_update_mode::partial,LCD_BUFFER1,LCD_TRANSFER_SIZE,LCD_BUFFER2);
+#if LCD_FULLSCREEN_TRANSFER > 0
+#define DIRECT_MODE 1
+#else
+#if LCD_BUS == PANEL_BUS_RGB || LCD_BUS == PANEL_BUS_MIPI
+#define DIRECT_MODE 1
+#else
+#define DIRECT_MODE 0
+#endif
+#endif
+    app.set_transfer((DIRECT_MODE)?screen_update_mode::direct:screen_update_mode::partial,LCD_BUFFER1,LCD_TRANSFER_SIZE!=0?LCD_TRANSFER_SIZE:(LCD_HRES*LCD_VRES*LCD_BIT_DEPTH+7)/8,LCD_BUFFER2);
     app.has_graph(LCD_HEIGHT>64);
     app.is_monochrome(LCD_BIT_DEPTH==1);
     app.initialize();

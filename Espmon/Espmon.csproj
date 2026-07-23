@@ -127,6 +127,9 @@
   <PropertyGroup>
     <SolutionDir Condition="'$(SolutionDir)' == '' Or '$(SolutionDir)' == '*Undefined*'">$(MSBuildThisFileDirectory)..\</SolutionDir>
   </PropertyGroup>
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="powershell.exe -ExecutionPolicy Bypass -File &quot;$(SolutionDir)build-lib.ps1&quot;" />
+  </Target>
   <!-- Debug-only: copies the helper/service exes next to Espmon for local F5 debugging.
        Gated to Debug so Release publishes (driven by publish-payload.ps1) stay clean and
        don't drag non-published build outputs into the payload. -->
