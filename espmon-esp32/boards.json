@@ -2,7 +2,7 @@
     "dependencies": [
         {
             "id": "codewitch-honey-crisis/htcw_uix",
-            "version": "1.11.7"
+            "version": "1.11.9"
         },
         {
             "id": "codewitch-honey-crisis/htcw_esp_panel",

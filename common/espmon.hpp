@@ -413,7 +413,7 @@ class graph : public uix::control<ControlSurfaceType> {
 
                 if (k < 2) continue;
                 gfx::spath16 path(k, m_point_buffer);
-                gfx::draw::aa_polyline(destination, path, entry->color,
+                gfx::draw::aa_polyline(destination, path, entry->color.opacity8(192),
                                        this->dimensions().height / 30,
                                        gfx::line_cap::round, gfx::line_join::round,
                                        4, m_draw_cache);
@@ -438,9 +438,11 @@ class bar : public uix::control<ControlSurfaceType> {
     float m_value;
     const data::circular_buffer<uint8_t, 100>* m_buffer;
     bool m_dark_mode;
-
+    gfx::mask_draw_cache* m_draw_cache;
+    gfx::spoint16* m_point_buffer;
+    
    public:
-    bar() : base_type(), m_is_gradient(false), m_value(0), m_buffer(nullptr), m_dark_mode(true) {
+    bar() : base_type(), m_is_gradient(false), m_value(0), m_buffer(nullptr), m_dark_mode(true), m_draw_cache(nullptr),m_point_buffer(nullptr) {
         static constexpr const gfx::rgb_pixel<24> px(0, 255, 0);
         static constexpr const gfx::rgb_pixel<24> black(0, 0, 0);
         convert(px, &m_color);
@@ -512,6 +514,88 @@ class bar : public uix::control<ControlSurfaceType> {
             m_back_color = value;
             this->invalidate();
         }
+    }
+    gfx::mask_draw_cache* draw_cache() {
+        return m_draw_cache;
+    }
+    void draw_cache(gfx::mask_draw_cache* value) {
+        m_draw_cache = value;
+    }
+    gfx::spoint16* point_buffer() {
+        return m_point_buffer;
+    }
+    void point_buffer(gfx::spoint16* value) {
+        m_point_buffer = value;
+    }
+
+   private:  // draw helpers
+    // round-to-nearest of j*(w-1)/(cap-1) - the x for sample j
+    static int spark_x(int j, int w, int cap) {
+        if (cap <= 1 || w <= 1) return 0;
+        return (j * (w - 1) + (cap - 1) / 2) / (cap - 1);
+    }
+    // round-to-nearest of (255-v)*y_end/255 - the y for value v
+    static int spark_y(uint8_t v, int y_end) {
+        return ((255 - (int)v) * y_end + 127) / 255;
+    }
+    // Renders the sparkline as an antialiased polyline, clipped to the
+    // horizontal window [x_from,x_to]. Where the window boundary cuts a
+    // segment, an interpolated vertex is manufactured on the boundary so
+    // that two adjacent windows share an identical endpoint and meet
+    // without a visible gap. Uses the same point reduction as the graph.
+    void render_spark(control_surface_type& destination, int x_from, int x_to, int y_end, uix::uix_pixel color, float thickness) {
+        if (m_buffer == nullptr || m_point_buffer == nullptr) return;
+        if (x_to <= x_from) return;
+        using buffer_t = data::circular_buffer<uint8_t, 100>;
+        const int cap = (int)buffer_t::capacity;
+        const int w = (int)destination.dimensions().width;
+        const int bx2 = (int)destination.bounds().x2;
+        const int by2 = (int)destination.bounds().y2;
+        const size_t n = m_buffer->size();
+        if (n < 2) return;
+        // the shared point buffer is sized to the data capacity
+        const size_t max_points = (size_t)cap;
+        size_t k = 0;  // number of points kept
+        auto emit = [&](int ex, int ey) {
+            const gfx::spoint16 p(gfx::math::clamp(ex, 0, bx2),
+                                  gfx::math::clamp(ey, 0, by2));
+            // exact duplicate (can happen when w < cap): drop it
+            if (k > 0 && p.x == m_point_buffer[k - 1].x && p.y == m_point_buffer[k - 1].y) return;
+            // interior of a horizontal run: extend the run rather than adding a vertex
+            if (k >= 2 && m_point_buffer[k - 1].y == p.y && m_point_buffer[k - 2].y == p.y) {
+                m_point_buffer[k - 1] = p;
+                return;
+            }
+            if (k >= max_points) return;
+            m_point_buffer[k++] = p;
+        };
+        int lx = 0, ly = 0;
+        for (size_t j = 0; j < n; ++j) {
+            const int x = spark_x((int)j, w, cap);
+            const int y = spark_y(*m_buffer->peek(j), y_end);
+            if (j > 0 && x > lx) {
+                // segment enters the window: manufacture the left endpoint
+                if (lx < x_from && x >= x_from) {
+                    emit(x_from, ly + ((y - ly) * (x_from - lx)) / (x - lx));
+                }
+                // segment leaves the window: manufacture the right endpoint
+                if (lx <= x_to && x > x_to) {
+                    emit(x_to, ly + ((y - ly) * (x_to - lx)) / (x - lx));
+                }
+            }
+            if (x >= x_from && x <= x_to) {
+                emit(x, y);
+            }
+            lx = x;
+            ly = y;
+        }
+        if (k < 2) return;
+        gfx::spath16 path(k, m_point_buffer);
+        // butt caps so the two halves abut at the split instead of
+        // overshooting it and bleeding the wrong color past the bar edge
+        gfx::draw::aa_polyline(destination, path, color, thickness,
+                               gfx::line_cap::butt, gfx::line_join::round,
+                               4, m_draw_cache);
     }
 
    protected:
@@ -593,30 +677,56 @@ class bar : public uix::control<ControlSurfaceType> {
             }
         }
         if (m_value > 0) {
+            // bar rectangles
             gfx::draw::filled_rectangle(destination, gfx::srect16(0, 0, x_end, y_end), m_color);
             gfx::draw::filled_rectangle(destination, gfx::srect16(x_end + 1, 0, destination.dimensions().width - 1, y_end), m_back_color);
         } else {
             gfx::draw::filled_rectangle(destination, gfx::srect16(0, 0, destination.dimensions().width - 1, y_end), m_back_color);
         }
         if (m_buffer != nullptr) {
-            if (m_buffer->size() > 0) {
-                float x_step = (destination.dimensions().width - 1) / (float)(data::circular_buffer<uint8_t, 100>::capacity - 1);
-                float x = x_step;
-                uint8_t initial = 255 - *m_buffer->peek(0);
-                gfx::point16 opt(0, initial * (y_end) / 255);
-                size_t i = 1;
-                auto px = (m_value == 0) ? m_color : m_dark_mode ? uix_color_t::black
-                                                                 : uix_color_t::white;
-                while (i < m_buffer->size()) {
-                    uint8_t v = 255 - *m_buffer->peek(i);
-                    gfx::point16 pt(x, v * (y_end) / 255);
-                    gfx::draw::filled_rectangle(destination, gfx::rect16(opt, pt), px);
-                    if (x > x_end) {
-                        px = m_color;
+            if(m_point_buffer==nullptr) {
+                if (m_buffer->size() > 0) {
+                    float x_step = (destination.dimensions().width - 1) / (float)(data::circular_buffer<uint8_t, 100>::capacity - 1);
+                    float x = x_step;
+                    uint8_t initial = 255 - *m_buffer->peek(0);
+                    gfx::point16 opt(0, initial * (y_end) / 255);
+                    size_t i = 1;
+                    auto px = (m_value == 0) ? m_color : m_dark_mode ? uix_color_t::black
+                                                                    : uix_color_t::white;
+                    while (i < m_buffer->size()) {
+                        uint8_t v = 255 - *m_buffer->peek(i);
+                        gfx::point16 pt(x, v * (y_end) / 255);
+                        gfx::draw::filled_rectangle(destination, gfx::rect16(opt, pt), px);
+                        if (x > x_end) {
+                            px = m_color;
+                        }
+                        opt = pt;
+                        x += x_step;
+                        ++i;
                     }
-                    opt = pt;
-                    x += x_step;
-                    ++i;
+                }
+            } else {
+                // smooth lines
+                if (m_buffer->size() > 1) {
+                    const int w = (int)destination.dimensions().width;
+                    // half as thick as the graph lines, scaled the same way,
+                    // but never thinner than a pixel
+                    float thickness = destination.dimensions().height / 20.0f;
+                    if (thickness < 1.0f) thickness = 1.0f;
+                    // where the filled part of the bar ends. -1 means there
+                    // isn't one, so the whole line is drawn in the bar color.
+                    // (computed signed - x_end is unsigned and wraps at 0)
+                    int split = (m_value > 0.f) ? (int)lroundf(m_value * w) - 1 : -1;
+                    if (split > w - 1) split = w - 1;
+                    const uix::uix_pixel over_px = m_dark_mode ? uix_color_t::black : uix_color_t::white;
+                    // over the filled part: inverse of the bar color
+                    if (split > 0) {
+                        render_spark(destination, 0, split, (int)y_end, over_px, thickness);
+                    }
+                    // past it: the bar color, starting on the shared vertex
+                    if (split < w - 1) {
+                        render_spark(destination, split < 0 ? 0 : split, w - 1, (int)y_end, m_color, thickness);
+                    }
                 }
             }
         }
@@ -764,9 +874,13 @@ class espmon {
         b.x2 = m_screen.dimensions().width - 1;
         b.y2 -= 2;
         m_top.value1.bar.bounds(b);
+        m_top.value1.bar.point_buffer(m_points);
+        m_top.value1.bar.draw_cache(&m_draw_cache);
         m_hit_boxes[(size_t)espmon_hit::top_value1_bar] = m_top.value1.bar.bounds();
         m_top.value1.bar.back_color(uix_color_t::black);
-        if (m_has_graph) {
+        if (!m_has_graph) {
+            m_top.value1.bar.point_buffer(m_points);
+            m_top.value1.bar.draw_cache(&m_draw_cache);
             m_top.value1.bar.graph_buffer(&m_buffers[0]);
         }
         m_top.value1.bar.color(m_has_graph ? m_graph.get_line(0) : uix_color_t::green);
@@ -779,7 +893,9 @@ class espmon {
         m_top.value2.bar.bounds(b);
         m_hit_boxes[(size_t)espmon_hit::top_value2_bar] = m_top.value2.bar.bounds();
         auto px = uix_color_t::white;
-        if (m_has_graph) {
+        if (!m_has_graph) {
+            m_top.value2.bar.point_buffer(m_points);
+            m_top.value2.bar.draw_cache(&m_draw_cache);
             m_top.value2.bar.graph_buffer(&m_buffers[1]);
         }
         m_top.value2.bar.color(m_has_graph ? m_graph.get_line(1) : uix_color_t::orange);
@@ -842,9 +958,12 @@ class espmon {
         b.x2 = m_screen.dimensions().width - 1;
         b.y2 -= 2;
         m_bottom.value1.bar.bounds(b);
+        
         m_hit_boxes[(size_t)espmon_hit::bottom_value1_bar] = m_bottom.value1.bar.bounds();
-        if (m_has_graph) {
+        if (!m_has_graph) {
             m_bottom.value1.bar.graph_buffer(&m_buffers[2]);
+            m_bottom.value1.bar.point_buffer(m_points);
+            m_bottom.value1.bar.draw_cache(&m_draw_cache);
         }
         m_bottom.value1.bar.color(m_has_graph ? m_graph.get_line(2) : uix_color_t::white);
         m_bottom.value1.bar.back_color(uix_color_t::black);
@@ -855,11 +974,19 @@ class espmon {
         b.x2 = m_screen.dimensions().width - 1;
         b.y2 -= 2;
         m_bottom.value2.bar.bounds(b);
+        bar_t bb;
+        
+        if(!m_has_graph) {
+            m_bottom.value2.bar.graph_buffer(&m_buffers[3]);
+            m_bottom.value2.bar.point_buffer(m_points);
+            m_bottom.value2.bar.draw_cache(&m_draw_cache);
+        }
+        
         m_hit_boxes[(size_t)espmon_hit::bottom_value2_bar] = m_bottom.value2.bar.bounds();
         px = uix_color_t::white;
         m_bottom.value2.bar.back_color(uix_color_t::black);
-        if (m_has_graph) {
-            m_bottom.value2.bar.graph_buffer(&m_buffers[3]);
+        if (!m_has_graph) {
+            
         }
         m_bottom.value2.bar.color(m_has_graph ? m_graph.get_line(3) : uix_color_t::purple);
         m_bottom.value2.bar.is_gradient(true);
