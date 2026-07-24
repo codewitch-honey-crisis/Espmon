@@ -456,3 +456,6 @@ FodyWeavers.xsd
 /espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_esp_panel/src/source/panel.c
 /espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/
 /espmon-esp32/boards/matouch-parallel-4/managed_components/
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/src/gfx_bitmap.hpp
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/src/gfx_draw_common.hpp
+/espmon-esp32/boards/matouch-parallel-4/managed_components/codewitch-honey-crisis__htcw_gfx/src/gfx_draw_icon.hpp
